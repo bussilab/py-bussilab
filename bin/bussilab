@@ -1,0 +1,28 @@
+#!/usr/bin/env python3.7
+"""Command line script."""
+
+# minimal import not to slow down the command line interface
+import sys
+from bussilab.cli import cli
+
+# list of modules that should not be imported not to slow down the command line interface
+DO_NOT_IMPORT = [
+    "pandas",
+    "mdtraj",
+    "numba",
+    "scipy"
+]
+
+# check that heavy modules are not imported
+for mod in DO_NOT_IMPORT:
+    if mod in sys.modules:
+        import warnings
+        msg = ("\n\nDo not import '" + mod + "' module by default in cli "
+               "since it slows down startup of the application.\n")
+        warnings.warn(msg)
+
+if __name__ == "__main__":
+
+    # process command line arguments:
+    # None implies argv[0]
+    sys.exit(cli(prog=None, arguments=sys.argv[1:], use_argcomplete=True))
