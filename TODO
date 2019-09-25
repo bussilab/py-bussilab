@@ -1,3 +1,0 @@
-DOC using pdoc3 is perfect!!
-
-~/Library/Python/3.7/bin/pdoc3 -o docdir bussilab --html

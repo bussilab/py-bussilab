@@ -8,3 +8,5 @@ env
 .ipynb*
 /doc
 .mypy_cache
+.coverage
+/dist

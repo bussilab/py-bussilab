@@ -1,0 +1,41 @@
+language: python
+
+python:
+  - "3.6"
+  - "3.7"
+
+cache: pip
+
+script:
+# basic install (no requirements)
+  - pip install --no-deps . &&
+    python -c "import bussilab" &&
+    bussilab -h
+  - pip uninstall --yes bussilab
+# full install (with requirements)
+  - pip install . &&
+    bussilab check --import
+# run test suite
+  - pip install pytest pytest-cov &&
+    PYTHONPATH=. py.test --cov=./
+# pyflakes
+  - pip install pyflakes &&
+    pyflakes bussilab
+# mypy 
+  - pip install mypy &&
+    mypy bussilab
+# pylint (ignore, too many false positives)
+  - pip install pylint &&
+    pylint bussilab || echo ignore
+# build doc
+  - pip install pdoc3 &&
+    pdoc3 -f --html -o doc/ bussilab
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
+  - pip install twine
+
+# TODO:
+# - upload tags to pypi
+# - upload doc somewhere
+# - configure LGTM

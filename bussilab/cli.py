@@ -53,14 +53,17 @@ class _Argument():
 # list of registered commands:
 _commands: List[Tuple[str, str, str, _Argument, Dict]] = []
 
+
 class _ExtendedParser():
     """Internal class used to attach subparsers help to parser."""
     def __init__(self,
                  parser: argparse.ArgumentParser,
-                 subparsers_help: Dict[str, str]
+                 subparsers_help: Dict[str, str],
+                 subparsers_doc: Dict[str, str]
                 ):
         self.parser = parser
         self.subparsers_help = subparsers_help
+        self.subparsers_doc = subparsers_doc
 
 def _create_eparser(prog: Optional[str] = None) -> _ExtendedParser:
     """Create a `parser` object."""
@@ -68,9 +71,10 @@ def _create_eparser(prog: Optional[str] = None) -> _ExtendedParser:
     parser.add_argument("--version", action='store_true', dest="_version")
     subparsers = parser.add_subparsers(title="Subcommands")
     subparsers_help = {}
+    subparsers_doc = {}
     for a in _commands:
-        (name, help, description, func, kwargs) = a
-        p = [subparsers.add_parser(name, help=help, description=description, **kwargs)]
+        (name, h, description, func, kwargs) = a
+        p = [subparsers.add_parser(name, help=h, description=description, **kwargs)]
         f = p[0]
         for call in reversed(func.calls):
             p = call(p)
@@ -79,7 +83,11 @@ def _create_eparser(prog: Optional[str] = None) -> _ExtendedParser:
             raise TypeError(msg)
         p[0].set_defaults(_func=func.func)
         subparsers_help[name] = f.format_help()
-    return _ExtendedParser(parser, subparsers_help)
+        if func.func.__doc__ is not None:
+            subparsers_doc[name] = func.func.__doc__
+        else:
+            subparsers_doc[name] = ""
+    return _ExtendedParser(parser, subparsers_help, subparsers_doc)
 
 def command(name: str, help: Optional[str] = None, description: Optional[str] = None, **kwargs):
     """Decorator that registers a function as a subcommand.
@@ -106,7 +114,7 @@ def command(name: str, help: Optional[str] = None, description: Optional[str] = 
 
        Simple command line tool that accepts a single `--out` argument followed by a string
        and call the function `do_something` with that string as an argument.
-       
+
        ```python
        from bussilab.cli import command, arg
 
@@ -225,7 +233,7 @@ def endgroup(f: Optional[Callable] = None):
         if len(p) < 2:
             msg = "Non matching group/endgroup"
             raise TypeError(msg)
-        return p[1:]
+        return p[:-1]
     def end_group(func):
         func = _Argument(func)
         func.calls.append(call)
@@ -328,6 +336,30 @@ def cli(arguments: Union[str, List[str]] = "",
 
     return None
 
+def _main_(prog=None):
+
+    import sys
+
+    # list of modules that should not be imported not to slow down the command line interface
+    DO_NOT_IMPORT = [
+        "pandas",
+        "mdtraj",
+        "numba",
+        "scipy"
+    ]
+
+    # check that heavy modules are not imported
+    for mod in DO_NOT_IMPORT:
+        if mod in sys.modules:
+            import warnings
+            msg = ("\n\nDo not import '" + mod + "' module by default in cli "
+                   "since it slows down startup of the application.\n")
+            warnings.warn(msg)
+
+    # process command line arguments:
+    # prog==None implies argv[0]
+    sys.exit(cli(prog=prog, arguments=sys.argv[1:], use_argcomplete=True))
+
 ################################################################################
 
 # BELOW ARE ALL THE COMMAND LINE TOOLS
@@ -404,6 +436,142 @@ def _wham(**args):
         with open(outfile, "w") as f:
             for i in ret.logW:
                 print("%8.4f"%i, file=f)
+
+@command("jrun", help="Run jupyter server",
+         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+@arg("-d", "--dry-run", action='store_true',
+     help="show command instead of executing it")
+@arg("--port", help="set port", default=0)
+@arg("--screen-cmd", help="screen command", default="screen")
+@arg("--python-exec", help="python executable", default="")
+@arg("-S", "--sockname", help="screen sockname", default="jupyter-server")
+@arg("--no-screen", help="do not run screen", action="store_true")
+@arg("--detach", help="detach screen", action="store_true")
+def _jrun(**kargs):
+    """
+       This is a tool to run a jupyter server within a screen command.
+       The typical usage would be
+       ```bash
+       cd /path/to/your/notebook/dir
+       bussilab jrun
+       ```
+       A free port is identified first (can be overridden with the `--port`
+       option) and a jupyter server is then run  inside a `screen` instance.
+       You will thus have to type `CTRL+aCTRL+d` in order to detach the screen
+       letting it run in the background.
+       To avoid this you can use the `--no-screen` flag. In this case
+       however make sure you do not close the terminal where the server is
+       running.
+    """
+    from . import jremote
+    jremote.run_server(**kargs)
+
+@command("jremote", help="Run jupyter client",
+         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+@arg("server", help="server URL (e.g. giorgione.phys.sissa.it)")
+@arg("-d", "--dry-run", action='store_true',
+     help="show command instead of executing it")
+@arg("-l", "--list-only", action='store_true',
+     help="only report a list or servers")
+@arg("--port", help="set port", default=0)
+@arg("-i", "--index", type=int, help="choose server, by default interactive choice", default=0)
+@arg("--python-exec",
+     help="remote python executable (e.g. module load python3 python-home; python)",
+     default="python")
+@arg("--open-cmd", help="open command (detected automatically by default)", default="")
+def _jremote(**kargs):
+    """
+       This is a tool to connect to a remote running jupyter server.
+       The typical usage would be
+       ```bash
+       bussilab jremote server.url
+       ```
+
+       A list of jupyter servers running on the selected machines will be
+       shown, and one of them can be picked typing its progressive number.
+       In case there is a single server running, it will be opened by default.
+
+       Notice that if the name of the python executable on the server is
+       different from plain `python` you can override it with
+       ``--python-exec``. You can also run other scripts before, for instance
+       loading relevant modules:
+       ```bash
+       bussilab jremote giorgione.phys.sissa.it --python-exec \
+           --python-exec "module load python3 python-home; python3"
+       ```
+
+       If you recurrently connect to the same workstation, it is convenient
+       to write a small script like this one, call it `jremote` and put it in
+       your path:
+       ```bash
+       export PYTHONPATH=/path/to/bussilab/source
+       python -m bussilab jremote giorgione.phys.sissa.it --python-exec "module load python3 python-home ; python3"
+       ```
+       Here replace `python` with the name of your python interpreter (might be
+       `python3.7`).
+
+    """
+    from . import jremote
+    jremote.remote(**kargs)
+
+@command("pip_upgrade_all", help="Upgrade all packages with pip",
+         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+@arg("--user", action='store_true',
+     help="install/upgrade in user location")
+def _pip_upgrade_all(**kargs):
+    """
+       This is a tool to upgrade all your packages with pip.
+       It is a convenient way to upgrade all the packages without
+       the need to list them explicitly.
+
+       Warning: this uses pip, so it might not work as expected
+       if you are working in conda.
+
+       The typical usage would be
+       ```bash
+       bussilab pip_upgrade_all
+       ```
+       If you installed packages in your home you should use
+       ```bash
+       bussilab pip_upgrade_all --user
+       ```
+    """
+    from . import pip
+    pip.upgrade_all(**kargs)
+
+@command("notify", help="Send a notification to Slack",
+         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+@arg("-m", "--message", help="message")
+@group(exclusive=True)
+@arg("-c","--channel", help="channel (check ~/.bussilabrc by default)")
+@arg("-u","--update", help="url of the message to be updated")
+@arg("-d","--delete", help="url of the message to be deleted")
+@endgroup
+@arg("-t","--title", help="url of the message to be deleted")
+@arg("--type", help="'plain_text' or 'mrkdwn'", default='mrkdwn')
+@arg("--token", help="token (check ~/.bussilabrc by default")
+def _notify(**kargs):
+    """
+       This is a tool to send a notification to Slack.
+       See the documentation of `bussilab.notify`.
+    """
+    from . import notify
+    msg=notify.notify(**kargs)
+    print(msg)
+
+@command("cron", help="Run cron",
+          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+@arg("--quick-start", help="run immediately", action="store_true")
+@arg("--cron-file", help="path to cron file")
+@arg("--screen-cmd", help="screen command", default="screen")
+@arg("--no-screen", help="do not run screen", action="store_true")
+@arg("-S", "--sockname", help="screen sockname", default="cron")
+@arg("--python-exec", help="python executable", default="")
+@arg("--detach", help="detach screen", action="store_true")
+@arg("--period", help="detach screen", default=3600, type=int)
+def _cron(**kargs):
+    from . import cron
+    cron.cron(**kargs)
 
 # Here we create a general eparser to be used from cli with prog=""
 _eparser = _create_eparser("")

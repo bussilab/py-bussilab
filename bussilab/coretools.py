@@ -1,13 +1,16 @@
 """
 General purpose tools.
 """
-import re
 from contextlib import contextmanager
+import gzip
 import os
 import unittest
+import pathlib
+import re
 from typing import List, Optional
 
 import numpy as np
+import yaml
 
 def ensure_np_array(arg) -> np.ndarray:
     """Convert arg to np.array if necessary."""
@@ -22,8 +25,6 @@ def file_or_path(arg, mode):
     if isinstance(arg, bytes):
         arg = open(str(arg), mode)
     if re.match(r".*\.gz", arg.name):
-        # only import when needed
-        import gzip
         arg = gzip.open(arg, mode)
     return arg
 
@@ -158,9 +159,16 @@ class TestCase(unittest.TestCase):
            file2: path, optional
                Path to the second file. If not provided, defaults to `file1+".ref"`.
         """
-        import pathlib
         if file2 is None:
             file2 = pathlib.PurePath(str(file1)+".ref")
         with open(file1, "r") as f1:
             with open(file2, "r") as f2:
                 self.assertEqual(f1.read(), f2.read())
+
+
+def config(path: Optional[os.PathLike] = None):
+    if path is None:
+        path = pathlib.PurePath(os.environ["HOME"]+"/.bussilabrc")
+    with open(path) as rc:
+        return yaml.load(rc,Loader=yaml.BaseLoader)
+

@@ -1,28 +1,36 @@
-#!/usr/bin/env python3.7
+#!/usr/bin/env python
+# PYTHON_ARGCOMPLETE_OK
 """Command line script."""
 
-# minimal import not to slow down the command line interface
 import sys
-from bussilab.cli import cli
 
-# list of modules that should not be imported not to slow down the command line interface
-DO_NOT_IMPORT = [
-    "pandas",
-    "mdtraj",
-    "numba",
-    "scipy"
-]
+# First search for a python3 executable.
+# This is required since macports does not provide a python3 executable
+# but rather individual versions
 
-# check that heavy modules are not imported
-for mod in DO_NOT_IMPORT:
-    if mod in sys.modules:
-        import warnings
-        msg = ("\n\nDo not import '" + mod + "' module by default in cli "
-               "since it slows down startup of the application.\n")
-        warnings.warn(msg)
+if (sys.version_info < (3, 6)):
+    import os
+    import subprocess
+    executable=["python3","python3.8","python3.7","python3.6"]
+    for exe in executable:
+        args=[exe,os.path.abspath(__file__)]
+        args.extend(sys.argv[1:])
+        try:
+            sys.stderr.write(sys.argv[0]+": fallback to "+exe+"\n")
+            sys.exit(subprocess.call(args))
+        except OSError as e:
+            pass
+    print("ERROR: could not find python executable >= 3.6")
+    sys.exit(1)
+
+try:
+    from bussilab.cli import _main_
+except ModuleNotFoundError:
+    import os
+    directory=os.path.dirname(os.path.dirname(__file__))
+    sys.stderr.write(sys.argv[0]+": adding '" + directory + "' to path\n")
+    sys.path.append(directory)
+    from bussilab.cli import _main_
 
 if __name__ == "__main__":
-
-    # process command line arguments:
-    # None implies argv[0]
-    sys.exit(cli(prog=None, arguments=sys.argv[1:], use_argcomplete=True))
+    _main_()
