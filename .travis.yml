@@ -21,9 +21,9 @@ script:
 # pyflakes
   - pip install pyflakes &&
     pyflakes bussilab
-# mypy 
+# mypy  (ignore for now)
   - pip install mypy &&
-    mypy bussilab
+    mypy bussilab || echo ignore
 # pylint (ignore, too many false positives)
   - pip install pylint &&
     pylint bussilab || echo ignore

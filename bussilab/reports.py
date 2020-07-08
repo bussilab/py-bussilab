@@ -1,6 +1,5 @@
 import subprocess
 import re
-from typing import List, Optional, cast
 
 from . import coretools
 
