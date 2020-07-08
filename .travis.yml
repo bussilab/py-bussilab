@@ -13,22 +13,22 @@ script:
     bussilab -h
   - pip uninstall --yes bussilab
 # full install (with requirements)
-  - pip install . &&
+  - pip install --upgrade . &&
     bussilab check --import
 # run test suite
-  - pip install pytest pytest-cov &&
+  - pip install --upgrade pytest pytest-cov &&
     PYTHONPATH=. py.test --cov=./
 # pyflakes
-  - pip install pyflakes &&
+  - pip install --upgrade pyflakes &&
     pyflakes bussilab
 # mypy  (ignore for now)
-  - pip install mypy &&
+  - pip install --upgrade mypy &&
     mypy bussilab || echo ignore
 # pylint (ignore, too many false positives)
-  - pip install pylint &&
+  - pip install --upgrade pylint &&
     pylint bussilab || echo ignore
 # build doc
-  - pip install pdoc3 &&
+  - pip install --upgrade pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
 
 after_success:
