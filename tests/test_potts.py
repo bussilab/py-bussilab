@@ -3,7 +3,7 @@ import unittest
 from bussilab import potts
 from bussilab.coretools import TestCase
 
-class TestWham(TestCase):
+class TestPotts(TestCase):
     def run_potts(self,fullmatrix):
         import numpy as np
         m=potts.Model(3,fullmatrix=fullmatrix)
@@ -23,8 +23,9 @@ class TestWham(TestCase):
     def test_potts1(self):
         self.run_potts(True)
 
-    def test_potts2(self):
-        self.run_potts(False)
+# Temporarily removed:
+#    def test_potts2(self):
+#        self.run_potts(False)
 
 if __name__ == "__main__":
     unittest.main()
