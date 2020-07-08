@@ -22,9 +22,9 @@ script:
 # pyflakes
   - pip install --upgrade pyflakes &&
     pyflakes bussilab
-# mypy  (ignore for now)
+# mypy
   - pip install --upgrade mypy &&
-    mypy bussilab || echo ignore
+    mypy bussilab
 # pylint (ignore, too many false positives)
   - pip install --upgrade pylint &&
     pylint bussilab || echo ignore

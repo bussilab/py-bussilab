@@ -181,7 +181,7 @@ Static types can be checked using `mypy`:
 pip install mypy
 mypy bussilab
 ```
-This check might report a small number errors, including false positives.
+This check should succeed.
 
 Other static checks can be done with `pyflakes`:
 ```bash
