@@ -245,7 +245,8 @@ def endgroup(f: Optional[Callable] = None):
 def cli(arguments: Union[str, List[str]] = "",
         *,
         prog: str = "",
-        use_argcomplete: bool = False
+        use_argcomplete: bool = False,
+        throws_on_parser_errors: bool = True
        ) -> Optional[int]:
     """Executes a command line tool from python.
 
@@ -267,12 +268,18 @@ def cli(arguments: Union[str, List[str]] = "",
            If `argcomplete` module is not installed, nothing is done and no failure is reported.
            **Mostly for internal use**.
 
+       throws_on_parser_errors : bool
+           If True, in case of command line error it throws a TypeError
+           exception. **Mostly for internal use**.
+
        Returns
        -------
        None or int
-           If an error happens while parsing, it returns the corresponding error code.
-           Otherwise it returns None.
+           If an error happens while parsing, it throws a TypeError exception,
+           unless throws_on_parser_errors is set to false, in which ase it
+           returns the corresponding error code.
            If an error happens while executing the requested command, an exception is thrown.
+           If everything goes well, it returns None.
     """
 
     # allow passing a single string
@@ -301,7 +308,11 @@ def cli(arguments: Union[str, List[str]] = "",
         args = vars(eparser.parser.parse_args(arguments))
     except SystemExit as e:
         if e.code != 0:
-            return e.code
+            if throws_on_parser_errors:
+                raise TypeError("Error parsing command line arguments," +
+                                " return code is " + str(e.code))
+            else:
+                return e.code
         return None
 
     if '_func' in args:
