@@ -35,7 +35,7 @@ script:
 after_success:
   - bash <(curl -s https://codecov.io/bash)
   - pip install twine
-  - if "${TRAVIS_JOB_NAME#*.}" = 1 ; then .travis/pushdoc ; done
+  - if [ "${TRAVIS_JOB_NAME#*.}" = 1 ] ; then .travis/pushdoc ; fi
 
 # TODO:
 # - upload tags to pypi
