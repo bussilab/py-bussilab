@@ -33,7 +33,7 @@ script:
     pdoc3 -f --html -o doc/ bussilab
 
 after_success:
-  - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 ] ; then .travis/pushdoc ; fi
+  - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 && "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
   - bash <(curl -s https://codecov.io/bash)
   - pip install twine
 
