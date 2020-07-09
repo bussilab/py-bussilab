@@ -27,7 +27,6 @@ touch .nojekyll
 
 git add . --all
 
-git push -f doc master
 git commit -m "Update to bussilab/py-bussilab@$hash" >/dev/null
 # -q and 2> is not to show the BUSSILABBOT_TOKEN on Travis log
 git push -q -f doc master 2> /dev/null
