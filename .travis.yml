@@ -1,9 +1,9 @@
 language: python
 
 python:
-  - "3.6"
-  - "3.7"
   - "3.8"
+  - "3.7"
+  - "3.6"
 
 cache: pip
 
@@ -35,6 +35,7 @@ script:
 after_success:
   - bash <(curl -s https://codecov.io/bash)
   - pip install twine
+  - if "${TRAVIS_JOB_NAME#*.}" = 1 ; then .travis/pushdoc ; done
 
 # TODO:
 # - upload tags to pypi
