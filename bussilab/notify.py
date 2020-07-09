@@ -219,7 +219,7 @@ def notify(message: str = "",
         blocks.append({
                           "type": "context",
                           "elements": [
-                              {
+                              { # type: ignore
                                 "type": "mrkdwn",
                                 "text": h
                               }

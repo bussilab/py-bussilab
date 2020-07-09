@@ -3,6 +3,7 @@ language: python
 python:
   - "3.6"
   - "3.7"
+  - "3.8"
 
 cache: pip
 
@@ -13,22 +14,22 @@ script:
     bussilab -h
   - pip uninstall --yes bussilab
 # full install (with requirements)
-  - pip install . &&
+  - pip install --upgrade . &&
     bussilab check --import
 # run test suite
-  - pip install pytest pytest-cov &&
+  - pip install --upgrade pytest pytest-cov &&
     PYTHONPATH=. py.test --cov=./
 # pyflakes
-  - pip install pyflakes &&
+  - pip install --upgrade pyflakes &&
     pyflakes bussilab
-# mypy  (ignore for now)
-  - pip install mypy &&
-    mypy bussilab || echo ignore
+# mypy
+  - pip install --upgrade mypy &&
+    mypy bussilab
 # pylint (ignore, too many false positives)
-  - pip install pylint &&
+  - pip install --upgrade pylint &&
     pylint bussilab || echo ignore
 # build doc
-  - pip install pdoc3 &&
+  - pip install --upgrade pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
 
 after_success:
