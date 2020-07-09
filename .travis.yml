@@ -33,9 +33,9 @@ script:
     pdoc3 -f --html -o doc/ bussilab
 
 after_success:
+  - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 ] ; then .travis/pushdoc ; fi
   - bash <(curl -s https://codecov.io/bash)
   - pip install twine
-  - if [ "${TRAVIS_JOB_NAME#*.}" = 1 ] ; then .travis/pushdoc ; fi
 
 # TODO:
 # - upload tags to pypi
