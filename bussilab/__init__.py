@@ -101,7 +101,7 @@ import bussilab as bl
 bl.wham.wham()
 ```
 
-You can also have a look at examples in the `examples` directory.
+You can also have a look at the notebooks in the [examples](../examples) directory.
 
 ### Command line
 
