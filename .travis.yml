@@ -31,11 +31,12 @@ script:
 # build doc
   - pip install --upgrade pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
+# fail if tag is inconsistent with version
+  - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 
 after_success:
   - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 ] && [ "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
   - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 ] && [ -n "$TRAVIS_TAG" ] ; then
-        test v$(bussilab --version) == "$TRAVIS_TAG" &&
         pip install twine &&
         python setup.py sdist &&
         python -m twine upload -u bussilabbot -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz ;
