@@ -16,7 +16,7 @@ python dependencies.
 _pip_.
 If you manage your dependencies with pip and install packages in your home, use:
 ```bash
-pip install --user .
+pip install --user bussilab
 ```
 Required packages will be downloaded and installed automatically in your home.
 
@@ -24,7 +24,7 @@ _pip + venv_.
 If you manage your dependencies with pip and work in a [virtual
 environment](https://docs.python.org/3/library/venv.html), use:
 ```bash
-pip install .
+pip install bussilab
 ```
 Required packages will be downloaded and installed automatically in the virtual
 environment.
@@ -35,7 +35,7 @@ If you manage your dependencies with conda you might prefer to install [required
 packages first](https://www.anaconda.com/using-pip-in-a-conda-environment/):
 ```bash
 _conda_install_
-pip install --no-deps .
+pip install --no-deps bussilab
 ```
 
 _macports_.
@@ -43,7 +43,7 @@ If you manage your dependencies with macports you might prefer to install requir
 first:[^macports]
 ```bash
 _macports_install_
-pip-_macports_py_ install --user --no-deps .
+pip-_macports_py_ install --user --no-deps bussilab
 ```
 
 [^macports]:
@@ -122,7 +122,7 @@ If you use conda or macports you might have to adjust the commands.
 
 You might want to ignore dependencies completely:
 ```bash
-pip install --no-deps .
+pip install --no-deps bussilab
 ```
 If you proceed this way, you will still be able to import `bussilab` module and
 to execute the `bussilab` script, but some of the submodules might not be importable.
