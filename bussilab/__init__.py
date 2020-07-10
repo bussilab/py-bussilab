@@ -205,7 +205,7 @@ from typing import List as _List
 import sys as _sys
 
 # version number:
-__version__ = "0.0.2"
+__version__ = "0.0.5"
 
 # required packages:
 _required_ = [
