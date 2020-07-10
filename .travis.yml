@@ -33,6 +33,11 @@ script:
 # build doc
   - pip install --upgrade pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
+# render notebooks
+  - pip install jupyter nbconvert &&
+    ( cd examples ; ./render.sh ) &&
+    mkdir doc/examples &&
+    cp examples/*html doc/examples/
 
 after_success:
   - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 ] && [ "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
