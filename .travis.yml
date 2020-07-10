@@ -8,6 +8,8 @@ python:
 cache: pip
 
 script:
+# fail immediately if tag is inconsistent with version
+  - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 # basic install (no requirements)
   - pip install --no-deps . &&
     python -c "import bussilab" &&
@@ -31,8 +33,6 @@ script:
 # build doc
   - pip install --upgrade pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
-# fail if tag is inconsistent with version
-  - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 
 after_success:
   - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 ] && [ "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
