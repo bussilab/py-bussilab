@@ -8,8 +8,6 @@ python:
 cache: pip
 
 script:
-# fail immediately if tag is inconsistent with version
-  - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 # basic install (no requirements)
   - pip install --no-deps . &&
     python -c "import bussilab" &&
@@ -18,6 +16,8 @@ script:
 # full install (with requirements)
   - pip install --upgrade . &&
     bussilab check --import
+# fail immediately if tag is inconsistent with version
+  - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 # run test suite
   - pip install --upgrade pytest pytest-cov &&
     PYTHONPATH=. py.test --cov=./
