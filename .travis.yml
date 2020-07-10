@@ -38,7 +38,7 @@ script:
     ( cd examples && ./render.sh ) &&
     mkdir doc/examples &&
     cp examples/*html doc/examples/ &&
-    ( cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
+    ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
 
 after_success:
   - if [ "${TRAVIS_JOB_NUMBER#*.}" = 1 ] && [ "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
