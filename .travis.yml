@@ -56,12 +56,12 @@ script:
 # in the following, use either conda or pip
 # within macports, use pip --user
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
-      pip install --upgrade pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert
+      pip install --upgrade pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
-      conda install -c conda-forge pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert
+      conda install -c conda-forge pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
       sudo port install py-pytest py-pytest-cov py-pyflakes py-mypy py-pylint &&
-      pip install --user pdoc3
+      pip install --user pdoc3 ;
     fi
 
 # run test suite
