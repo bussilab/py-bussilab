@@ -220,7 +220,7 @@ _required_ = [
     'numba',
     'numpy',
     'scipy',
-    'slackclient',
+    'slackclient>2',
     'pyyaml'
 ]
 
@@ -230,10 +230,9 @@ def _process_macports(macports: _List[str]) -> _List[str]:
     import re
     l = [ 'py-pip' , 'py-setuptools' ]
     for d in _required_:
-      if d == 'pyyaml':
-        l.append("py-yaml")
-      else:
-        l.append("py-" + d)
+      d=re.sub(">.*$","",d) # remove versions
+      d=re.sub("^pyyaml$","yaml",d) # fix yaml
+      l.append("py-" + d)
     return l
 
 _macports_required_ = _process_macports(_required_)
