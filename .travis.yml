@@ -56,36 +56,31 @@ script:
 # in the following, use either conda or pip
 # within macports, use pip --user
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
-      install="pip install --upgrade" ;
+      pip install --upgrade pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert
     elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
-      install="conda install -c conda-forge" ;
+      conda install -c conda-forge pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
-      install="pip install --user" ;
+      sudo port install py-pytest py-pytest-cov py-pyflakes py-mypy py-pylint &&
+      pip install --user pdoc3
     fi
 
 # run test suite
-  - $install pytest pytest-cov &&
-    PYTHONPATH=. py.test --cov=./
+  - PYTHONPATH=. pytest --cov=./
 
 # pyflakes
-  - $install pyflakes &&
-    pyflakes bussilab
+  - pyflakes bussilab
 
 # mypy
-  - $install mypy &&
-    mypy bussilab
+  - mypy bussilab
 
 # pylint (ignore, too many false positives)
-  - $install pylint &&
-    pylint bussilab || echo ignore
+  - pylint bussilab || echo ignore
 
 # build doc
-  - $install pdoc3 &&
-    pdoc3 -f --html -o doc/ bussilab
+  - pdoc3 -f --html -o doc/ bussilab
 
 # render notebooks (only on linux, so as to use apt-get install tree)
   - if [ "$TRAVIS_OS_NAME" = linux ] ; then
-      $install jupyter nbconvert &&
       ( cd examples && ./render.sh ) &&
       mkdir doc/examples &&
       cp examples/*html doc/examples/ &&
