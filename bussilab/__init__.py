@@ -29,14 +29,13 @@ pip install bussilab
 Required packages will be downloaded and installed automatically in the virtual
 environment.
 
-
 _conda_.
-If you manage your dependencies with conda you might prefer to install [required
-packages first](https://www.anaconda.com/using-pip-in-a-conda-environment/):
+If you manage your dependencies with conda, use:
 ```bash
-_conda_install_
-pip install --no-deps bussilab
+conda install -c conda-forge -c bussilab py-bussilab
 ```
+Required packages will be downloaded and installed automatically in active
+conda environment.
 
 _macports_.
 If you manage your dependencies with macports you might prefer to install required packages
@@ -220,7 +219,6 @@ _macports_py_ = "3.7"
 # process documentation in order to update variables in a single point.
 def _process_doc(doc: str) -> str:
     import re
-    _conda_install_ = "conda install "+" ".join(_required_)
     _macports_py_not_dot = _macports_py_[0] + _macports_py_[2]
     _macports_install_ = (
         "sudo port install "
@@ -230,7 +228,6 @@ def _process_doc(doc: str) -> str:
     )
     _macports_install_ = re.sub('-pyyaml', '-yaml', _macports_install_)
     doc = re.sub("__version__", __version__, doc)
-    doc = re.sub("_conda_install_", _conda_install_, doc)
     doc = re.sub("_macports_install_", _macports_install_, doc)
     doc = re.sub("_macports_py_", _macports_py_, doc)
     return doc
