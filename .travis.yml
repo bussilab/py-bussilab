@@ -23,7 +23,7 @@ script:
 # full install (with requirements)
   - if [ "$TRAVIS_JOB_NAME" != conda ] ; then
       pip install --upgrade . ;
-  - else
+    else
        curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci &&
        source ./conda-ci install &&
        source ./conda-ci install-conda-build &&
