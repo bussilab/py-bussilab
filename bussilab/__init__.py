@@ -141,6 +141,7 @@ and the `bin` directory to `PATH`:
 export PATH="/path/to/bussilab/bin:$PATH"
 export PYTHONPATH="/path/to/bussilab:$PYTHONPATH"
 ```
+This is convenient if you want to use the development version of this package.
 
 [^pure_python]: This might change in the future.
 
@@ -149,7 +150,7 @@ export PYTHONPATH="/path/to/bussilab:$PYTHONPATH"
 You can run the tests using `pytest`:
 ```bash
 pip install pytest
-py.test
+pytest
 ```
 
 All tests should succeed.
@@ -160,7 +161,16 @@ You can rerun all the jupyter examples from the command line:
 ```bash
 cd examples
 pip install jupyter jupyter_contrib_nbextensions matplotlib
-bash rerun.sh
+./rerun.sh
+```
+
+### Rendering jupyter examples as html from the command line
+
+You can render all the jupyter examples as html from the command line:
+```bash
+cd examples
+pip install jupyter nbconvert
+./render.sh
 ```
 
 ### Building documentation
@@ -314,7 +324,7 @@ def describe_submodule(module: str) -> str:
        str
            The docstring of the module. If the docstring is not present,
            returns an empty string. If an empy string is passed as `module`,
-           the docstring ot the main package is returned.
+           the docstring of the main package is returned.
 
        Raises
        ------
