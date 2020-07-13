@@ -3,7 +3,7 @@
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/bussilab/py-bussilab.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/bussilab/py-bussilab/alerts/)
 [![codecov](https://codecov.io/gh/bussilab/py-bussilab/branch/master/graph/badge.svg)](https://codecov.io/gh/bussilab/py-bussilab)
 [![Anaconda-Server Badge](https://anaconda.org/bussilab/py-bussilab/badges/version.svg)](https://anaconda.org/bussilab/py-bussilab)
-![PyPI](https://img.shields.io/pypi/v/bussilab)
+[![PyPI](https://img.shields.io/pypi/v/bussilab)](https://pypi.org/project/bussilab/)
 
 A package collecting a heterogeneous set of tools.
 
