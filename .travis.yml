@@ -19,25 +19,25 @@ script:
       bussilab -h &&
       pip uninstall --yes bussilab ;
     fi
+
 # full install (with requirements)
   - if [ "$TRAVIS_JOB_NAME" != conda ] ; then
-      pip install --upgrade . &&
-      bussilab check --import ;
-    fi
-
-  - if [ "$TRAVIS_JOB_NAME" = conda ] ; then
+      pip install --upgrade . ;
+  - else
        curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci &&
        source ./conda-ci install &&
        source ./conda-ci install-conda-build &&
        export CPU_COUNT=4 &&
        conda-build -c conda-forge conda &&
-       ls -l $CONDA_PREFIX/conda-bld/ &&
-       ls -l $CONDA_PREFIX/conda-bld/$TRAVIS_OS_NAME-64 ;
+       conda install -c conda-forge bussilab
     fi
+
+# check if module can be imported
+  - bussilab check --import ;
 
 # in the following, use either conda or pip
   - if [ "$TRAVIS_JOB_NAME" = conda ] ; then
-      install="conda install" ;
+      install="conda install -c conda-forge" ;
     else
       install="pip install --upgrade" ;
     fi
@@ -63,6 +63,7 @@ script:
     mkdir doc/examples &&
     cp examples/*html doc/examples/ &&
     ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
+
 # fail if tag is inconsistent with version
   - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 
