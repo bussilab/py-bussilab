@@ -203,9 +203,7 @@ This check might report a number of false positives.
 
 from typing import List as _List
 import sys as _sys
-
-# version number:
-__version__ = "0.0.6"
+from ._version import __version__
 
 # required packages:
 _required_ = [
