@@ -48,7 +48,7 @@ script:
   - $install pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
 # render notebooks
-  - $installbconvert &&
+  - $install jupyter nbconvert &&
     ( cd examples && ./render.sh ) &&
     mkdir doc/examples &&
     cp examples/*html doc/examples/ &&
