@@ -25,6 +25,12 @@ script:
       bussilab check --import ;
     fi
 
+  - if [ "$TRAVIS_JOB_NAME" = conda ] ; then
+       curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci &&
+       source ./conda-ci install &&
+       source ./conda-ci install-conda-build ;
+    fi
+
 # in the following, use either conda or pip
   - if [ "$TRAVIS_JOB_NAME" = conda ] ; then
       install="conda install" ;
