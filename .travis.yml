@@ -44,11 +44,9 @@ script:
         source ./macports-ci install &&
         sudo port install python38 &&
         sudo port select --set python python38 &&
-        sudo port install py-pip py-setuptools py-argcomplete py-numba py-numpy py-scipy py-slackclient py-yaml &&
+        sudo port install py-pip py-setuptools &&
+        sudo port install py-argcomplete py-numba py-numpy py-scipy py-slackclient py-yaml &&
         sudo port select --set pip pip38 &&
-        sudo port select --set pyflakes py38-pyflakes &&
-        sudo port select --set pylint pylint38 &&
-        sudo port select --set pytest pytest38 &&
         pip install --user --no-deps . &&
         PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" ;
     fi
@@ -57,13 +55,16 @@ script:
   - bussilab check --import ;
 
 # in the following, use either conda or pip
-# within macports, use pip --user
+# within macports, use pip --user for pdoc3
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
       pip install --upgrade pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
       conda install -c conda-forge pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
       sudo port install py-pytest py-pytest-cov py-pyflakes py-mypy py-pylint &&
+      sudo port select --set pytest pytest38 &&
+      sudo port select --set pyflakes py38-pyflakes &&
+      sudo port select --set pylint pylint38 &&
       pip install --user pdoc3 ;
     fi
 
