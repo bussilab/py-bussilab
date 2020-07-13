@@ -1,0 +1,3 @@
+ignore:
+  - tests
+  - next_release.py
