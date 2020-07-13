@@ -29,7 +29,7 @@ script:
        source ./conda-ci install-conda-build &&
        export CPU_COUNT=4 &&
        conda-build -c conda-forge conda &&
-       conda install -c conda-forge bussilab
+       conda install -c conda-forge bussilab ;
     fi
 
 # check if module can be imported
