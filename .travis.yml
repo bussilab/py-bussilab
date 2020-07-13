@@ -89,6 +89,6 @@ after_success:
         python -m twine upload -u bussilabbot -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz ;
     fi
   - if [[ "${TRAVIS_JOB_NAME}" =~ ~conda ]] && [ -n "$TRAVIS_TAG" ] ; then
-        anaconda -t $CONDA_UPLOAD_TOKEN upload -u bussilab -l main $CONDA_PREFIX/conda-bld/$TRAVIS_OS_NAME-64/py-bussilab*.tar.bz2 --force
+        anaconda -t $CONDA_UPLOAD_TOKEN upload -u bussilab -l main $CONDA_PREFIX/conda-bld/$TRAVIS_OS_NAME-64/py-bussilab*.tar.bz2 --force ;
     fi
   - bash <(curl -s https://codecov.io/bash)
