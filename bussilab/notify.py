@@ -246,9 +246,7 @@ def notify(message: str = "",
                    blocks=blocks,
                    ts=ts)
     elif delete:
-        response = client.chat_delete(
-                   channel=channel,
-                   ts=ts)
+        client.chat_delete(channel=channel, ts=ts)
         return ""
     else:
         response = client.chat_postMessage(
