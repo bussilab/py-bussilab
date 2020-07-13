@@ -77,7 +77,7 @@ script:
 
 # pyflakes
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
-        pyflakes bussilab
+        pyflakes bussilab ;
     fi
 
 # mypy
