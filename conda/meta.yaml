@@ -19,7 +19,7 @@ requirements:
     - numba
     - numpy
     - scipy
-    - slackclient
+    - slackclient>=2
     - pyyaml
     - python
 
