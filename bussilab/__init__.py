@@ -34,7 +34,7 @@ If you manage your dependencies with conda, use:
 ```bash
 conda install -c conda-forge -c bussilab py-bussilab
 ```
-Required packages will be downloaded and installed automatically in active
+Required packages will be downloaded and installed automatically in the active
 conda environment.
 
 _macports_.
@@ -224,19 +224,28 @@ _required_ = [
     'pyyaml'
 ]
 
-_macports_py_ = "3.7"
+_macports_py_ = "3.8"
+
+def _process_macports(macports: _List[str]) -> _List[str]:
+    import re
+    l = [ 'py-pip' , 'py-setuptools' ]
+    for d in _required_:
+      if d == 'pyyaml':
+        l.append("py-yaml")
+      else:
+        l.append("py-" + d)
+    return l
+
+_macports_required_ = _process_macports(_required_)
 
 # process documentation in order to update variables in a single point.
 def _process_doc(doc: str) -> str:
     import re
-    _macports_py_not_dot = _macports_py_[0] + _macports_py_[2]
+    _macports_py_not_dot = "py" + _macports_py_[0] + _macports_py_[2]
     _macports_install_ = (
         "sudo port install "
-        + "py" + _macports_py_not_dot + "-pip "
-        + "py" + _macports_py_not_dot + "-setuptools "
-        +" ".join(["py" + _macports_py_not_dot + "-" + mod for mod in _required_])
+        + re.sub("py-", _macports_py_not_dot + '-', ' '.join(_macports_required_))
     )
-    _macports_install_ = re.sub('-pyyaml', '-yaml', _macports_install_)
     doc = re.sub("__version__", __version__, doc)
     doc = re.sub("_macports_install_", _macports_install_, doc)
     doc = re.sub("_macports_py_", _macports_py_, doc)

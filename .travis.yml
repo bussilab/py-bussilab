@@ -44,8 +44,7 @@ script:
         source ./macports-ci install &&
         sudo port install python38 &&
         sudo port select --set python python38 &&
-        sudo port install py-pip py-setuptools &&
-        sudo port install py-argcomplete py-numba py-numpy py-scipy py-slackclient py-yaml &&
+        sudo port install $(python -c "import bussilab; print(' '.join(bussilab._macports_required_));") &&
         sudo port select --set pip pip38 &&
         pip install --user --no-deps . &&
         PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" ;
