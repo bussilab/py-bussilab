@@ -351,22 +351,6 @@ def _main_(prog=None):
 
     import sys
 
-    # list of modules that should not be imported not to slow down the command line interface
-    DO_NOT_IMPORT = [
-        "pandas",
-        "mdtraj",
-        "numba",
-        "scipy"
-    ]
-
-    # check that heavy modules are not imported
-    for mod in DO_NOT_IMPORT:
-        if mod in sys.modules:
-            import warnings
-            msg = ("\n\nDo not import '" + mod + "' module by default in cli "
-                   "since it slows down startup of the application.\n")
-            warnings.warn(msg)
-
     # process command line arguments:
     # prog==None implies argv[0]
     sys.exit(cli(prog=prog, arguments=sys.argv[1:], use_argcomplete=True))
