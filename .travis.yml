@@ -29,7 +29,7 @@ script:
        source ./conda-ci install-conda-build &&
        export CPU_COUNT=4 &&
        conda-build -c conda-forge conda &&
-       conda install --use-local -c conda-forge bussilab ;
+       conda install -c local -c conda-forge py-bussilab ;
     fi
 
 # check if module can be imported
