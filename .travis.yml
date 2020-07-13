@@ -54,41 +54,49 @@ script:
 # check if module can be imported
   - bussilab check --import ;
 
-# in the following, use either conda or pip
-# within macports, use pip --user for pdoc3
+# install packages needed for testing
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
-      pip install --upgrade pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert ;
+      pip install --upgrade pytest pytest-cov ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
-      conda install -c conda-forge pytest pytest-cov pyflakes mypy pylint pdoc3 jupyter nbconvert ;
+      conda install -c conda-forge pytest pytest-cov ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
-      sudo port install py-pytest py-pytest-cov py-pyflakes py-mypy py-pylint &&
-      sudo port select --set pytest pytest38 &&
-      sudo port select --set pyflakes py38-pyflakes &&
-      sudo port select --set pylint pylint38 &&
-      pip install --user pdoc3 ;
+      sudo port install py-pytest py-pytest-cov &&
+      sudo port select --set pytest pytest38 ;
     fi
 
 # run test suite
+  - pytest
+
+# run test suite with coverage
   - PYTHONPATH=. pytest --cov=./
 
+# the following checks and the manual building are only done in the python jobs on linux
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
+      pip install --upgrade pyflakes mypy pylint pdoc3 jupyter nbconvert ;
+    fi
+
 # pyflakes
-  - pyflakes bussilab
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
+        pyflakes bussilab
+    fi
 
 # mypy
-  - mypy bussilab
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
+        mypy bussilab ;
+    fi
 
 # pylint (ignore, too many false positives)
-  - pylint bussilab || echo ignore
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
+        pylint bussilab || echo ignore ;
+    fi
 
 # build doc
-  - pdoc3 -f --html -o doc/ bussilab
-
-# render notebooks (only on linux, so as to use apt-get install tree)
-  - if [ "$TRAVIS_OS_NAME" = linux ] ; then
-      ( cd examples && ./render.sh ) &&
-      mkdir doc/examples &&
-      cp examples/*html doc/examples/ &&
-      ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html ) ;
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
+        pdoc3 -f --html -o doc/ bussilab &&
+        ( cd examples && ./render.sh ) &&
+        mkdir doc/examples &&
+        cp examples/*html doc/examples/ &&
+        ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html ) ;
     fi
 
 # fail if tag is inconsistent with version
