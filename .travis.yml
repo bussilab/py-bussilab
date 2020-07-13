@@ -12,6 +12,8 @@ jobs:
     - name: conda
     - name: conda-osx
       os: osx
+    - name: macports
+      os: osx
 
 script:
 # basic install (no requirements)
@@ -37,16 +39,27 @@ script:
        fi &&
        conda-build -c conda-forge conda &&
        conda install -c conda-forge -c local py-bussilab ;
+    elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
+        curl -LO https://raw.githubusercontent.com/GiovanniBussi/macports-ci/master/macports-ci &&
+        source ./macports-ci install &&
+        sudo port install python38 &&
+        sudo port select --set python python38 &&
+        sudo port install py-pip py-setuptools py-argcomplete py-numba py-numpy py-scipy py-slackclient py-yaml &&
+        pip install --user . &&
+        PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" ;
     fi
 
 # check if module can be imported
   - bussilab check --import ;
 
 # in the following, use either conda or pip
+# within macports, use pip --user
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
       install="pip install --upgrade" ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
       install="conda install -c conda-forge" ;
+    elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
+      install="pip install --user" ;
     fi
 
 # run test suite
