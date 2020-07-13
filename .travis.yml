@@ -46,6 +46,9 @@ script:
         sudo port select --set python python38 &&
         sudo port install py-pip py-setuptools py-argcomplete py-numba py-numpy py-scipy py-slackclient py-yaml &&
         sudo port select --set pip pip38 &&
+        sudo port select --set pyflakes py38-pyflakes &&
+        sudo port select --set pylint pylint38 &&
+        sudo port select --set pytest pytest38 &&
         pip install --user --no-deps . &&
         PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" ;
     fi
