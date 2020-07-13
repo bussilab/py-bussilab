@@ -1,0 +1,44 @@
+
+package:
+  name: py-bussilab
+  version: 0.0.6
+
+source:
+  path: ../..
+
+build:
+  number: 0
+  skip: True  # [win or py2k]
+
+requirements:
+  host:
+    - python
+    - pip
+  run:
+    - argcomplete
+    - numba
+    - numpy
+    - scipy
+    - slackclient
+    - pyyaml
+    - python
+
+test:
+  imports:
+    - bussilab
+  commands:
+    - bussilab check --import
+
+about:
+  home: https://github.com/bussilab/py-bussilab
+  license: LGPL-2.1
+  license_family: GPL
+  summary: 'xx'
+  description: |
+    yy
+  doc_url: https://bussilab.github.io/doc-py-bussilab
+  dev_url: https://github.com/bussilab/py-bussilab
+
+extra:
+  recipe-maintainers:
+    - GiovanniBussi
