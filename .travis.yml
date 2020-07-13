@@ -9,33 +9,46 @@ jobs:
     - name: python3.6
       language: python
       python: "3.6"
+    - name: conda
 
 script:
 # basic install (no requirements)
-  - pip install --no-deps . &&
-    python -c "import bussilab" &&
-    bussilab -h &&
-    pip uninstall --yes bussilab
+  - if [ "$TRAVIS_JOB_NAME" != conda ] ; then
+      pip install --no-deps . &&
+      python -c "import bussilab" &&
+      bussilab -h &&
+      pip uninstall --yes bussilab ;
+    fi
 # full install (with requirements)
-  - pip install --upgrade . &&
-    bussilab check --import
+  - if [ "$TRAVIS_JOB_NAME" != conda ] ; then
+      pip install --upgrade . &&
+      bussilab check --import ;
+    fi
+
+# in the following, use either conda or pip
+  - if [ "$TRAVIS_JOB_NAME" = conda ] ; then
+      install="conda install" ;
+    else
+      install="pip install --upgrade" ;
+    fi
+
 # run test suite
-  - pip install --upgrade pytest pytest-cov &&
+  - $install pytest pytest-cov &&
     PYTHONPATH=. py.test --cov=./
 # pyflakes
-  - pip install --upgrade pyflakes &&
+  - $install pyflakes &&
     pyflakes bussilab
 # mypy
-  - pip install --upgrade mypy &&
+  - $install mypy &&
     mypy bussilab
 # pylint (ignore, too many false positives)
-  - pip install --upgrade pylint &&
+  - $install pylint &&
     pylint bussilab || echo ignore
 # build doc
-  - pip install --upgrade pdoc3 &&
+  - $install pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
 # render notebooks
-  - pip install jupyter nbconvert &&
+  - $installbconvert &&
     ( cd examples && ./render.sh ) &&
     mkdir doc/examples &&
     cp examples/*html doc/examples/ &&
