@@ -10,10 +10,12 @@ jobs:
       language: python
       python: "3.6"
     - name: conda
+    - name: conda-osx
+      os: osx
 
 script:
 # basic install (no requirements)
-  - if [ "$TRAVIS_JOB_NAME" != conda ] ; then
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
       pip install --no-deps . &&
       python -c "import bussilab" &&
       bussilab -h &&
@@ -21,9 +23,9 @@ script:
     fi
 
 # full install (with requirements)
-  - if [ "$TRAVIS_JOB_NAME" != conda ] ; then
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
       pip install --upgrade . ;
-    else
+    elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
        curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci &&
        source ./conda-ci install &&
        source ./conda-ci install-conda-build &&
@@ -36,33 +38,40 @@ script:
   - bussilab check --import ;
 
 # in the following, use either conda or pip
-  - if [ "$TRAVIS_JOB_NAME" = conda ] ; then
-      install="conda install -c conda-forge" ;
-    else
+  - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
       install="pip install --upgrade" ;
+    elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
+      install="conda install -c conda-forge" ;
     fi
 
 # run test suite
   - $install pytest pytest-cov &&
     PYTHONPATH=. py.test --cov=./
+
 # pyflakes
   - $install pyflakes &&
     pyflakes bussilab
+
 # mypy
   - $install mypy &&
     mypy bussilab
+
 # pylint (ignore, too many false positives)
   - $install pylint &&
     pylint bussilab || echo ignore
+
 # build doc
   - $install pdoc3 &&
     pdoc3 -f --html -o doc/ bussilab
-# render notebooks
-  - $install jupyter nbconvert &&
-    ( cd examples && ./render.sh ) &&
-    mkdir doc/examples &&
-    cp examples/*html doc/examples/ &&
-    ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
+
+# render notebooks (only on linux, so as to use apt-get install tree)
+  - if [ "$TRAVIS_OS_NAME" = linux ] ; then
+      $install jupyter nbconvert &&
+      ( cd examples && ./render.sh ) &&
+      mkdir doc/examples &&
+      cp examples/*html doc/examples/ &&
+      ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html ) ;
+    fi
 
 # fail if tag is inconsistent with version
   - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
