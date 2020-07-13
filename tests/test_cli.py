@@ -6,6 +6,9 @@ class Test(unittest.TestCase):
         self.assertIsNone(cli.cli("check"))
         self.assertIsNone(cli.cli("check --import"))
         self.assertIsNone(cli.cli(["check", "--import"]))
+        self.assertIsNone(cli.cli("--version"))
+        self.assertIsNone(cli.cli("list"))
+        self.assertIsNone(cli.cli(""))
 
         self.assertEqual(cli.cli("not_existing_command",throws_on_parser_errors=False), 2)
         self.assertEqual(cli.cli(["check","not_existing_option"],throws_on_parser_errors=False), 2)
