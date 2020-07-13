@@ -1,3 +1,4 @@
 ignore:
-  - tests
+  - setup.py
   - next_release.py
+  - tests
