@@ -36,7 +36,8 @@ with open("bussilab/_version.py","w") as f:
     for line in lines:
        print(line,file=f,end='')
 cmd=[
-  'git commit --allow-empty -m "Version ' + new_version + '"',
+  'git add bussilab/_version.py',
+  'git commit -m "Version ' + new_version + '"',
   'git tag v' + new_version,
   'git push origin master v' + new_version
   ]
