@@ -84,9 +84,9 @@ script:
         mypy bussilab ;
     fi
 
-# pylint (ignore, too many false positives)
+# pylint -E
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
-        pylint bussilab || echo ignore ;
+        pylint -E bussilab ;
     fi
 
 # build doc

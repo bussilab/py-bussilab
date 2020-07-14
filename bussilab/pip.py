@@ -58,5 +58,5 @@ def upgrade_all(user: bool = False):
         raise ModuleNotFoundError(
             "pkg_resources not found, you should install setuptools"
             )
-    packages = [dist.project_name for dist in pkg_resources.working_set]
+    packages = [dist.project_name for dist in pkg_resources.working_set] # pylint: disable=not-an-iterable
     install(packages, user=user, upgrade=True)

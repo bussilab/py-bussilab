@@ -202,9 +202,9 @@ This check should succeed.
 Correct code formatting can be checked using `pylint`:
 ```bash
 pip install pylint
-pylint bussilab
+pylint -E bussilab
 ```
-This check might report a number of false positives.
+This check should succeed.
 
 """
 
