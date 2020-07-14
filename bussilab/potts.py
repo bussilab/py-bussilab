@@ -141,7 +141,7 @@ class Model:
                 c=(c[0]+r[0],c[1]+r[1])
             return (c[0],c[1].flatten())
         res = minimize(function, x0, args=(self,averages),
-              method="L-BFGS-B",jac=True,tol=1e-20)
+              method="L-BFGS-B",jac=True,tol=1e-10)
         h=np.diag(res.x.reshape((self.size*self.colors,self.size*self.colors)))
         J=self.fixJ(res.x.reshape((self.size*self.colors,self.size*self.colors)))
         return InferResult(
