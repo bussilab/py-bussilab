@@ -20,13 +20,13 @@ class TestCron(TestCase):
     def  test_cron_screen(self):
         with cd(os.path.dirname(os.path.abspath(__file__))):
             try:
-                os.remove("cron.out")
+                os.remove("cron_screen.out")
             except FileNotFoundError:
                 pass
-            cli("cron --cron-file cron.yml --period 2 --max-times 2 --detach")
+            cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach")
             time.sleep(6)
-            self.assertEqualFile("cron.out")
-            os.remove("cron.out")
+            self.assertEqualFile("cron_screen.out")
+            os.remove("cron_screen.out")
 
 if __name__ == "__main__":
     unittest.main()
