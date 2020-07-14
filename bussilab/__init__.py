@@ -363,7 +363,7 @@ def describe_submodule(module: str) -> str:
 
 # See this https://www.python.org/dev/peps/pep-0562/
 # Also notice that this solution only works with python>=3.7
-if _sys.version_info >= (3, 6):
+if _sys.version_info >= (3, 7):
     def __getattr__(name):
         if name in list_submodules(_hidden=True):
             import importlib
