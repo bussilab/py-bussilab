@@ -1,0 +1,7 @@
+cron:
+  - |
+    with open("cron_screen.out","a") as f:
+        print("test cron screen",file=f)
+  - |
+    with open("cron_screen2.out","a") as f:
+        print("test cron screen2",file=f)
