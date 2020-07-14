@@ -3,6 +3,7 @@ import time
 import sys
 import datetime
 import subprocess
+from typing import Optional
 import yaml
 from . import coretools
 
@@ -42,17 +43,27 @@ def cron(*,
          sockname: str = "cron",
          python_exec: str = "",
          detach: bool = False,
-         period: int = 3600
+         period: int = 3600,
+         max_times: Optional[int] = None
          ):
     if no_screen:
         print(_now(),"start")
+        counter=0
         if quick_start:
             _run(cron_file,period)
+            counter += 1
+            if max_times is not None:
+                if counter >= max_times:
+                    return
         while True:
             s=_time_to_next_event(period)
             print(_now(),"Waiting " +str(s)+ " seconds for next scheduled event")
             time.sleep(s)
             _run(cron_file,period)
+            counter += 1
+            if max_times is not None:
+                if counter >= max_times:
+                    return
     else:
         if python_exec == "":
             python_exec = sys.executable
@@ -67,5 +78,7 @@ def cron(*,
             cmd += " --cron-file " + cron_file
         if quick_start:
             cmd += " --quick-start"
+        if max_times is not None:
+            cmd += " --max-times " + str(max_times)
         print(cmd)
         os.system(cmd)

@@ -1,0 +1,4 @@
+cron:
+  - |
+    with open("cron.out","a") as f:
+        print("test cron",file=f)

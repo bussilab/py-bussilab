@@ -563,7 +563,8 @@ def _notify(**kargs):
 @arg("-S", "--sockname", help="screen sockname", default="cron")
 @arg("--python-exec", help="python executable", default="")
 @arg("--detach", help="detach screen", action="store_true")
-@arg("--period", help="detach screen", default=3600, type=int)
+@arg("--period", help="period (seconds)", default=3600, type=int)
+@arg("--max-times", help="maximum number of calls", default=None, type=int)
 def _cron(**kargs):
     from . import cron
     cron.cron(**kargs)
