@@ -8,7 +8,6 @@ def confirm():
         response=input("Confirm (yes/no)?")
         if re.match("[Yy][Ee][Ss]",response) :
             cont=False
-            response='yes'
         elif re.match("[Nn][Oo]",response) :
             quit()
         else:
