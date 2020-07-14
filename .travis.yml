@@ -67,7 +67,7 @@ script:
   - pytest
 
 # run test suite with coverage
-  - PYTHONPATH=. pytest --cov=./
+  - PYTHONPATH=. pytest --cov=bussilab
 
 # the following checks and the manual building are only done in the python jobs on linux
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then

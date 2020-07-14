@@ -1,4 +1,0 @@
-ignore:
-  - setup.py
-  - next_release.py
-  - tests
