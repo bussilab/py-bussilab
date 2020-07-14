@@ -21,7 +21,7 @@ jobs:
     - uses: actions/checkout@v2
 
     # Runs a single command using the runners shell
-    - name: Install
+    - name: Run
       run: |
         curl -LO https://raw.githubusercontent.com/GiovanniBussi/macports-ci/master/macports-ci
         source ./macports-ci install
@@ -31,11 +31,8 @@ jobs:
         sudo port select --set pip pip38
         pip install --user --no-deps .
         PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
-        sudo port install py-pytest py-pytest-cov &&
-        sudo port select --set pytest pytest38 ;
-
-    - name: Test
-      run: |
+        sudo port install py-pytest py-pytest-cov
+        sudo port select --set pytest pytest38
         bussilab check --import
         pytest -v
         PYTHONPATH=$PWD pytest -v --cov=bussilab
