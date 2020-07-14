@@ -35,9 +35,11 @@ setup(
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)",
-        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
         "Topic :: Scientific/Engineering"
-        ],    
+        ],
     install_requires=deps(),
     python_requires='>=3.6',
     scripts=['bin/bussilab']
