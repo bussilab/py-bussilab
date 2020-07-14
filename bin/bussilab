@@ -27,7 +27,7 @@ try:
     from bussilab.cli import _main_
 except ModuleNotFoundError:
     import os
-    directory=os.path.dirname(os.path.dirname(__file__))
+    directory=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.stderr.write(sys.argv[0]+": adding '" + directory + "' to path\n")
     sys.path.append(directory)
     from bussilab.cli import _main_
