@@ -17,6 +17,8 @@ _pip_.
 If you manage your dependencies with pip and install packages in your home, use:
 ```bash
 pip install --user bussilab
+# make sure the bussilab script is in the path
+PATH="$PATH:$(python -c 'import site; print(site.USER_BASE + "/bin")')"
 ```
 Required packages will be downloaded and installed automatically in your home.
 
@@ -39,11 +41,23 @@ conda environment.
 
 _macports_.
 If you manage your dependencies with macports you might prefer to install required packages
-first:[^macports]
+first. Since the list of requirements might change, it is recommended to use
+the bussilab package itself to obtain the list of requirements.
+You can do it as follows:
+[^macports]
 ```bash
-_macports_install_
+# install pip and setuptools first
+sudo port install py_macports_pynd_-pip py_macports_pynd_-setuptools
+# install a bare version of the package, without dependencies
 pip-_macports_py_ install --user --no-deps bussilab
+# make sure the bussilab script is in the path
+PATH="$PATH:$(python_macports_py_ -c 'import site; print(site.USER_BASE + "/bin")')"
+# install the dependencies
+sudo port install $(bussilab required --macports --pyver _macports_pynd_)
 ```
+Notice that the list of required packages might change. It is
+thus recommended to run the commands above every time you update the bussilab
+package.
 
 [^macports]:
 Notice that on macports the name of the python executable is `python_macports_py_`
@@ -228,7 +242,7 @@ _macports_py_ = "3.8"
 
 def _process_macports(macports: _List[str]) -> _List[str]:
     import re
-    l = [ 'py-pip' , 'py-setuptools' ]
+    l = []
     for d in _required_:
       d=re.sub(">.*$","",d) # remove versions
       d=re.sub("^pyyaml$","yaml",d) # fix yaml
@@ -240,14 +254,15 @@ _macports_required_ = _process_macports(_required_)
 # process documentation in order to update variables in a single point.
 def _process_doc(doc: str) -> str:
     import re
-    _macports_py_not_dot = "py" + _macports_py_[0] + _macports_py_[2]
+    _macports_py_not_dot = _macports_py_[0] + _macports_py_[2]
     _macports_install_ = (
         "sudo port install "
-        + re.sub("py-", _macports_py_not_dot + '-', ' '.join(_macports_required_))
+        + re.sub("py-", "py" + _macports_py_not_dot + '-', ' '.join(_macports_required_))
     )
     doc = re.sub("__version__", __version__, doc)
     doc = re.sub("_macports_install_", _macports_install_, doc)
     doc = re.sub("_macports_py_", _macports_py_, doc)
+    doc = re.sub("_macports_pynd_", _macports_py_not_dot, doc)
     return doc
 
 __doc__ = _process_doc(__doc__)
@@ -360,6 +375,16 @@ def describe_submodule(module: str) -> str:
         return ""
     # grab first line
     return d.partition('\n')[0]
+
+def required_macports(pyver="") -> str:
+    import re
+    return re.sub("py-", "py" + pyver + '-', ' '.join(_macports_required_))
+
+def required_conda() -> str:
+    return str(_required_)
+
+def required_pip() -> str:
+    return str(' '.join(_required_))
 
 # See this https://www.python.org/dev/peps/pep-0562/
 # Also notice that this solution only works with python>=3.7

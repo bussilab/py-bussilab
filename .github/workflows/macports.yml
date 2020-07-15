@@ -25,14 +25,10 @@ jobs:
       run: |
         curl -LO https://raw.githubusercontent.com/GiovanniBussi/macports-ci/master/macports-ci
         source ./macports-ci install
-        sudo port install python38
-        sudo port select --set python python38
-        sudo port install $(python -c "import bussilab; print(' '.join(bussilab._macports_required_));")
-        sudo port select --set pip pip38
-        pip install --user --no-deps .
-        PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
-        sudo port install py-pytest py-pytest-cov
-        sudo port select --set pytest pytest38
+        sudo port install python38 py38-pip py38-setuptools
+        pip-3.8 install --user --no-deps .
+        PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
+        sudo port install $(bussilab required --macports --pyver 38)
         bussilab check --import
-        pytest -v
-        PYTHONPATH=$PWD pytest -v --cov=bussilab
+        sudo port install py38-pytest
+        pytest-3.8 -v
