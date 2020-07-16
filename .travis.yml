@@ -37,7 +37,7 @@ script:
        else
          export VERSION="0.0" ; 
        fi &&
-       export REQUIRED="$(bin/bussilab required --conda)" &&
+       export REQUIRED="\"$(bin/bussilab required --conda)\"" &&
        conda-build -c conda-forge conda &&
        conda install -c conda-forge -c local py-bussilab ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
