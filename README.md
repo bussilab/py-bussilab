@@ -10,6 +10,7 @@
 A package collecting a heterogeneous set of tools.
 
 This package collects a number of tools that are useful enough to be distributed but too small to deserve being published as separate packages.
+Source code is on [GitHub](https://github.com/bussilab/py-bussilab).
 Documentation can be browsed at [this page](https://bussilab.github.io/doc-py-bussilab).
 
 To install package and dependencies with pip:
