@@ -1,8 +1,6 @@
-{% set version = environ['VERSION'] %}
-
 package:
   name: py-bussilab
-  version: {{ version }}
+  version: __VERSION__
 
 source:
   path: ..
@@ -16,12 +14,7 @@ requirements:
     - python
     - pip
   run:
-    - argcomplete
-    - numba
-    - numpy
-    - scipy
-    - slackclient>=2
-    - pyyaml
+    __REQUIRED__
     - python
 
 test:

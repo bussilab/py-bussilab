@@ -31,12 +31,8 @@ script:
        curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci &&
        source ./conda-ci install &&
        source ./conda-ci install-conda-build &&
+       python make_conda_recipe.py &&
        export CPU_COUNT=4 &&
-       if [ -n "$TRAVIS_TAG" ] ; then
-         export VERSION="${TRAVIS_TAG#v}" ; 
-       else
-         export VERSION="0.0" ; 
-       fi &&
        conda-build -c conda-forge conda &&
        conda install -c conda-forge -c local py-bussilab ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
