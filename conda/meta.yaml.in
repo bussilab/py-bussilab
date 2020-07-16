@@ -27,10 +27,8 @@ about:
   home: https://github.com/bussilab/py-bussilab
   license: LGPL-2.1
   license_family: GPL
-  summary: 'A package collecting a heterogeneous set of tools.'
-  description: |
-    This package collects a number of tools that are useful enough to be distributed
-    but too small to deserve being published as separate packages.
+  summary: '__SUMMARY__'
+  description: '__DESCRIPTION__'
   doc_url: https://bussilab.github.io/doc-py-bussilab
   dev_url: https://github.com/bussilab/py-bussilab
 
