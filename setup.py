@@ -5,21 +5,16 @@ def readme():
         return f.read()
 
 def version():
-    from bussilab import __version__
-    return __version__
+    from bussilab import __version__ as version
+    return version
 
 def deps():
-    from bussilab import _required_
-    return _required_
+    from bussilab import _required_ as required
+    return required
 
 def description():
-    import ast
-    M = ast.parse(''.join(open("bussilab/__init__.py")))
-    d = ast.get_docstring(M)
-    if d is None:
-        return ""
-    # grab first line
-    return d.partition('\n')[0]
+    from bussilab import __doc__ as doc
+    return doc.partition('\n')[0]
 
 setup(
     name="bussilab",
