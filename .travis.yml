@@ -37,7 +37,7 @@ script:
        else
          export VERSION="0.0" ; 
        fi &&
-       export REQUIRED="$(python -c "import bussilab; print(bussilab.required_conda())")" &&
+       export REQUIRED="$(bin/bussilab required --conda)" &&
        conda-build -c conda-forge conda &&
        conda install -c conda-forge -c local py-bussilab ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
@@ -45,8 +45,8 @@ script:
         source ./macports-ci install &&
         sudo port install python38 py38-pip py38-setuptools &&
         pip-3.8 install --user --no-deps . &&
-        sudo port install $(python3.8 -c "import bussilab; print(bussilab.required_macports('38'))") &&
-        PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" ;
+        PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" &&
+        sudo port install $(bussilab required --macports --pyver 38) ;
     fi
 
 # check if module can be imported

@@ -373,6 +373,9 @@ def required_macports(pyver="") -> str:
 def required_conda() -> str:
     return str(_required_)
 
+def required_pip() -> str:
+    return str(' '.join(_required_))
+
 # See this https://www.python.org/dev/peps/pep-0562/
 # Also notice that this solution only works with python>=3.7
 if _sys.version_info >= (3, 7):

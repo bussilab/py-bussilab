@@ -569,5 +569,24 @@ def _cron(**kargs):
     from . import cron
     cron.cron(**kargs)
 
+@command("required", help="print requirements",
+         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+@group(exclusive=True)
+@arg("--macports", help="conda syntax", action="store_true")
+@arg("--conda", help="macports syntax", action="store_true")
+@endgroup
+@arg("--pyver", help="pyversion (e.g. 38), for macports only", default="")
+def _required(macports: bool = False, conda: bool = False, pyver: str = ""):
+    if conda:
+        from . import required_conda
+        print(required_conda())
+    elif macports:
+        from . import required_macports
+        print(required_macports(pyver))
+    else:
+        from . import required_pip
+        print(required_pip())
+
+
 # Here we create a general eparser to be used from cli with prog=""
 _eparser = _create_eparser("")
