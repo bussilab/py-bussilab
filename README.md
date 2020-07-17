@@ -26,4 +26,3 @@ conda install -c conda-forge -c bussilab py-bussilab
 ```
 
 To install dependencies with macports, see [documentation](https://bussilab.github.io/doc-py-bussilab).
-

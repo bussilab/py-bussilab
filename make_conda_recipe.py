@@ -3,6 +3,10 @@ import re
 from bussilab import required_conda
 from bussilab import __version__
 
+def readme():
+    with open('README.md') as f:
+        return f.read()
+
 def description():
     from bussilab import __doc__ as doc
     return doc.partition('\n')[0]
@@ -22,7 +26,15 @@ for r in ast.literal_eval(required_conda()):
 recipe=re.sub("( *)(__REQUIRED__)\n",requirements,recipe)
 
 recipe=re.sub("__SUMMARY__",description(),recipe)
-recipe=re.sub("__DESCRIPTION__",description(),recipe)
+
+match=re.search("( *)(__DESCRIPTION__)",recipe)
+
+description=""
+
+for r in readme().split("\n"):
+    description+=match.group(1)+r+"\n"
+
+recipe=re.sub("( *)(__DESCRIPTION__)",description,recipe)
 
 with open('conda/meta.yaml',"w") as f:
     f.write(recipe)
