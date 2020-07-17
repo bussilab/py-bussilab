@@ -1,8 +1,9 @@
-[![Build Status](https://travis-ci.com/bussilab/py-bussilab.svg?branch=master)](https://travis-ci.com/bussilab/py-bussilab)
 [![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/bussilab/py-bussilab)](https://github.com/bussilab/py-bussilab/tags)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/bussilab)](https://pypi.org/project/bussilab/)
 [![PyPI](https://img.shields.io/pypi/v/bussilab)](https://pypi.org/project/bussilab/)
 [![Conda](https://img.shields.io/conda/v/bussilab/py-bussilab)](https://anaconda.org/bussilab/py-bussilab)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/bussilab)](https://pypi.org/project/bussilab/)
+
+[![Build Status](https://travis-ci.com/bussilab/py-bussilab.svg?branch=master)](https://travis-ci.com/bussilab/py-bussilab)
 [![Language grade: Python](https://img.shields.io/lgtm/grade/python/g/bussilab/py-bussilab.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/bussilab/py-bussilab/context:python)
 [![Total alerts](https://img.shields.io/lgtm/alerts/g/bussilab/py-bussilab.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/bussilab/py-bussilab/alerts/)
 [![codecov](https://codecov.io/gh/bussilab/py-bussilab/branch/master/graph/badge.svg)](https://codecov.io/gh/bussilab/py-bussilab)
