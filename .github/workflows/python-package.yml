@@ -1,14 +1,12 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: Python package
+name: CI
 
 on:
   push:
   pull_request:
 
 jobs:
-  build:
+  python:
 
     runs-on: ubuntu-latest
     strategy:
@@ -35,3 +33,25 @@ jobs:
     - name: Test with pytest
       run: |
         pytest -v
+
+  macports:
+    # The type of runner that the job will run on
+    runs-on: macos-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    # Runs a single command using the runners shell
+    - name: Run
+      run: |
+        curl -LO https://raw.githubusercontent.com/GiovanniBussi/macports-ci/master/macports-ci
+        source ./macports-ci install
+        sudo port install python38 py38-pip py38-setuptools
+        pip-3.8 install --user --no-deps .
+        PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
+        sudo port install $(bussilab required --macports --pyver 38)
+        bussilab check --import
+        sudo port install py38-pytest
+        pytest-3.8 -v
