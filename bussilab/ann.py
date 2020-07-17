@@ -53,7 +53,7 @@ class ANN:
         if random_weights:
             # see Deep Learning, Eq. 8.23
             for i in range(len(self.W)):
-                self.W[i]+=np.random.uniform(size=self.W[i].shape)*np.sqrt(6/(np.sum(self.W[i].shape)))
+                self.W[i]+=np.random.uniform(-1.0,1.0,size=self.W[i].shape)*np.sqrt(6/(np.sum(self.W[i].shape)))
 
     # set array of parameters
     def setpar(self,par):
