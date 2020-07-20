@@ -92,7 +92,7 @@ class ANN:
           raise TypeError("Incorrectly shaped x")
 
         assert x.shape[1]==self.narg
-        f,df_dW,df_db=self.derivVec(x)
+        f,df_dW,df_db=self.deriv(x)
         der=np.zeros((x.shape[0],self.npar))
         n=0
         for i in range(len(self.W)):
