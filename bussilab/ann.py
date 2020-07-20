@@ -4,6 +4,8 @@ Module with artificial neural networks.
 
 import numpy as np
 
+from .coretools import ensure_np_array
+
 def _softplus(x):
     return np.log(1 + np.exp(-np.abs(x))) + np.maximum(x,0)
 
@@ -79,13 +81,16 @@ class ANN:
             n+=m
         return par
 
-    # compute function and derivative wrt flatten parameters for a single sample
-    def derpar(self,x):
-        f, der = self.derparVec(x.reshape((-1,len(x))))
-        return f[0],der[0]
-
     # compute function and derivative wrt flatten parameters for a vector of samples
-    def derparVec(self,x):
+    def derpar(self,x):
+        x = ensure_np_array(x)
+
+        if len(x.shape)==1:
+          f, der = self.derpar(x.reshape((-1,len(x))))
+          return f[0], der[0]
+        elif len(x.shape)>2:
+          raise TypeError("Incorrectly shaped x")
+
         assert x.shape[1]==self.narg
         f,df_dW,df_db=self.derivVec(x)
         der=np.zeros((x.shape[0],self.npar))
@@ -100,13 +105,13 @@ class ANN:
             n+=m
         return f,der
 
-    # evaluate the NN on a single point
+    # evaluate the NN on a single point or on an array of points
     def apply(self,x):
-        f = self.applyVec(x.reshape((-1,len(x))))
-        return f[0]
-
-    # evaluate the NN on an array of points
-    def applyVec(self,x):
+        x = ensure_np_array(x)
+        if len(x.shape)==1:
+            return self.apply(x.reshape((1,len(x))))[0]
+        elif len(x.shape)>2:
+            raise TypeError("Incorrectly shaped x")
         assert x.shape[1]==self.narg
         for i in range(len(self.W)):
             x=np.matmul(x,self.W[i])+self.b[i]
@@ -117,36 +122,13 @@ class ANN:
     # compute derivatives with respect to parameters
     def deriv(self,x):
 
-        # allocate hidden nodes
-        h=[None]*len(self.layers) # hidden nodes
-        ht=[None]*len(self.layers) # non-linear functions of hidden nodes
+        x = ensure_np_array(x)
 
-        # allocate derivatives
-        df_dW=[None]*len(self.layers)
-        df_db=[None]*len(self.layers)
-
-        # forward propagation
-        ht[0]=+x
-
-        for i in range(len(self.layers)-1):
-            h[i+1]=np.matmul(ht[i],self.W[i])+self.b[i]
-            ht[i+1] = self._activation(h[i+1])
-
-        f=(np.matmul(self.W[-1].T,ht[-1])+self.b[-1])[0]
-
-        # backward propagation
-
-        df_db[-1]=np.ones(1)
-        df_dW[-1]=ht[-1]
-
-        for i in reversed(range(len(self.layers)-1)):
-            df_db[i]=np.matmul(self.W[i+1],df_db[i+1]) * self._dactivation(h[i+1])
-            df_dW[i]=np.outer(ht[i],df_db[i])
-
-        return f,df_dW,df_db
-
-    # compute derivatives with respect to parameters for a vector of examples
-    def derivVec(self,x):
+        if len(x.shape)==1:
+            f,df_dW,df_db = self.deriv(x.reshape((1,len(x))))
+            return f[0], df_dW[0], df_db[0]
+        elif len(x.shape)>2:
+            raise TypeError("Incorrectly shaped x")
 
         assert x.shape[1]==self.narg
 
@@ -180,3 +162,10 @@ class ANN:
 
         return f,df_dW,df_db
 
+    # these are aliases for backward compatibility
+    def applyVec(self,x):
+        return self.apply(x)
+    def derivVec(self,x):
+        return self.deriv(x)
+    def derparVec(self,x):
+        return self.derpar(x)
