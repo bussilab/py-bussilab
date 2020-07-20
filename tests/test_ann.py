@@ -9,6 +9,8 @@ def derivatives(ann,n=100,prefactor=1e-10,vector=True):
     x=np.random.normal(size=ann.narg)
     start=np.random.normal(size=ann.npar)
     ann.setpar(start)
+    gp=ann.getpar()
+    assert np.all(np.equal(gp,start))
     if vector:
         v0,deriv=ann.derparVec(x.reshape((1,-1)))
     else:
