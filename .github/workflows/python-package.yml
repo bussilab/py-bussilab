@@ -44,14 +44,19 @@ jobs:
     - uses: actions/checkout@v2
 
     # Runs a single command using the runners shell
-    - name: Run
+    - name: Install MacPorts
       run: |
         curl -LO https://raw.githubusercontent.com/GiovanniBussi/macports-ci/master/macports-ci
         source ./macports-ci install
+    - name: Install package
+      run: |
         sudo port install python38 py38-pip py38-setuptools
         pip-3.8 install --user --no-deps .
         PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
         sudo port install $(bussilab required --macports --pyver 38)
+    - name : Run tests
+      run: |
+        PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
         bussilab check --import
         sudo port install py38-pytest
         pytest-3.8 -v
