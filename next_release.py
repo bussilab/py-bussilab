@@ -13,6 +13,10 @@ def confirm():
         else:
             pass
 
+print("Changing to master branch")
+
+os.system("git checkout master")
+
 print("Current version:",__version__)
 new_version=re.sub("[0-9]*$","",__version__) + str(int(re.sub("^.*\.","",__version__))+1)
 
