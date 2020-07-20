@@ -50,5 +50,15 @@ class TestANN(unittest.TestCase):
         np.random.seed(1977)
         self.assertLess(derivatives(ANN([10,8,6,4,2],activation='relu')),1e-8)
 
+    def test_small(self):
+        ann=ANN([2,1])
+        ann.setpar(np.array([1.0]*ann.npar))
+        d=ann.deriv(np.array([1.0]*2))
+        self.assertAlmostEqual(d[0],4.048587351573742)
+        self.assertAlmostEqual(d[1][0][0,0],0.9525741268224333)
+        self.assertAlmostEqual(d[1][1][0],3.048587351573742)
+        self.assertAlmostEqual(d[2][0][0],0.9525741268224333)
+        self.assertAlmostEqual(d[2][1][0],1.0)
+
 if __name__ == "__main__":
     unittest.main()

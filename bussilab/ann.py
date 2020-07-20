@@ -126,7 +126,10 @@ class ANN:
 
         if len(x.shape)==1:
             f,df_dW,df_db = self.deriv(x.reshape((1,len(x))))
-            return f[0], df_dW[0], df_db[0]
+            for i in range(len(df_dW)):
+                df_dW[i]=df_dW[i][0]
+                df_db[i]=df_db[i][0]
+            return f[0], df_dW, df_db
         elif len(x.shape)>2:
             raise TypeError("Incorrectly shaped x")
 
