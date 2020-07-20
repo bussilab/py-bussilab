@@ -18,7 +18,7 @@ def ensure_np_array(arg) -> np.ndarray:
         return np.array(arg)
     return arg
 
-def file_or_path(arg, mode):
+def file_or_path(arg, mode: str):
     """Convert a path to an open file object if necessary."""
     if isinstance(arg, str):
         arg = open(arg, mode)

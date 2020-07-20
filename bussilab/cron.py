@@ -7,7 +7,7 @@ from typing import Optional
 import yaml
 from . import coretools
 
-def _time_to_next_event(period):
+def _time_to_next_event(period: int):
     now=time.localtime()
     seconds=now.tm_hour*3600 + now.tm_min*60 + now.tm_sec
     seconds = seconds%period
@@ -16,7 +16,8 @@ def _time_to_next_event(period):
 def _now():
     return '{}'.format(datetime.datetime.now()) + ":"
 
-def _run(cron_file,period):
+def _run(cron_file: str,
+         period: int):
     try:
         print(_now(),"Running now")
         if len(cron_file) > 0:

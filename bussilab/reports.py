@@ -20,7 +20,7 @@ def _parse_cpu(line: str):
                 result[f]=float(line[i-1])
     return result
 
-def workstations(wks = None, emoticons=True, short=True):
+def workstations(wks = None, short=True):
     msg=""
 
     if not wks:
@@ -101,14 +101,12 @@ def workstations(wks = None, emoticons=True, short=True):
           if not short:
               msg+="\n".join(out)+"\n\n"
        except subprocess.TimeoutExpired:
-          if emoticons:
-              msg += " :skull_and_crossbones:"
+          msg += " :skull_and_crossbones:"
           msg += "\n"
           msg += "Timeout"
           msg +="\n\n"
        except Exception:
-          if emoticons:
-              msg += " :skull_and_crossbones:"
+          msg += " :skull_and_crossbones:"
           msg += "\n"
           msg +="Error connecting"
           msg += "\n\n"

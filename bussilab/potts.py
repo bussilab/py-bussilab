@@ -7,13 +7,18 @@ See `bussilab.potts.Model()`.
 
 import numpy as np
 from scipy.optimize import minimize
+from typing import Optional, Callable
 import numba
 import warnings
 
 from . import coretools
 
 @numba.jit
-def _make_lists(size,colors=1,start=0,stop=-1,shifted=False):
+def _make_lists(size: int,
+                colors: int = 1,
+                start: int = 0,
+                stop: int = -1,
+                shifted: bool = False):
     N=(colors+1)**size
     if(stop==-1):
         stop=N
@@ -31,7 +36,16 @@ def _make_lists(size,colors=1,start=0,stop=-1,shifted=False):
 
 class InferResult(coretools.Result):
     """Result of a `bussilab.potts.Model.infer` calculation."""
-    def __init__(self, *, h, J, averages, loglike, success, message, nfev, nit):
+    def __init__(self,
+                 *,
+                 h: np.ndarray,
+                 J: np.ndarray,
+                 averages: np.ndarray,
+                 loglike: float,
+                 success: bool,
+                 message: str,
+                 nfev: int,
+                 nit: int):
         super().__init__()
         self.h = h
         """`np.ndarray`, optimized h."""
@@ -51,7 +65,11 @@ class InferResult(coretools.Result):
         """`int` reporting the number of iterations in the minimization procedure."""
 
 class Model:
-    def __init__(self,size,colors=1,shifted=False,fullmatrix=True):
+    def __init__(self,
+                 size: int,
+                 colors: int = 1,
+                 shifted: bool = False,
+                 fullmatrix: bool = True):
         """Init model.
            size: number of spins
            colors: number of colors
@@ -73,7 +91,9 @@ class Model:
             self.allseq_matrix=np.einsum('ki,kj->kij',self.allseq,self.allseq)
         else:
             self.allseq_matrix=None
-    def compute(self,h,J):
+    def compute(self,
+                h: np.ndarray,
+                J: np.ndarray):
         """Compute averages <sigma_i,sigma_j> for a coupling matrix J.
            Returns (a,b) with a=free energy and b=averages
         """
@@ -92,7 +112,10 @@ class Model:
         else:
             average=np.einsum("ki,kj,k->ij",self.allseq,self.allseq,prob)/Z
         return (-np.log(Z)+shift,average)
-    def loglike(self,h,J,ave):
+    def loglike(self,
+                h: np.ndarray,
+                J: np.ndarray,
+                ave: np.ndarray):
         """Compute -log likelihood for a coupling matrix J with averages ave.
            Returns (a,b) with a=-log likelihood and b=derivatives
         """
@@ -102,7 +125,10 @@ class Model:
             l+=np.sum(h*np.diag(ave))
         der=-c[1]+ave
         return (l-c[0],der)
-    def draw(self,h,J,n):
+    def draw(self,
+             h: np.ndarray,
+             J: np.ndarray,
+             n: int):
         """Compute averages for a coupling matrix J sampling n states.
         """
         if not self.allseq_matrix is None:
@@ -124,12 +150,16 @@ class Model:
             else:
                 ret+=np.outer(self.allseq[j],self.allseq[j])
         return ret/n
-    def fixJ(self,J):
+    def fixJ(self,
+             J: np.ndarray):
         newJ=0.5*(J+J.T)
         for i in range(self.size):
             newJ[self.colors*i:self.colors*(i+1),self.colors*i:self.colors*(i+1)]=0.0
         return newJ
-    def infer(self,averages,nseq=1,reg=None):
+    def infer(self,
+              averages: np.ndarray,
+              nseq: int = 1,
+              reg: Optional[Callable] = None):
         x0=np.zeros(self.size*self.size*self.colors*self.colors)
         def function(par,m,a):
             J=m.fixJ(par.reshape((self.size*self.colors,self.size*self.colors)))
@@ -154,7 +184,8 @@ class Model:
             nfev=res.nfev,
             nit=res.nit
             )
-    def random_couplings(self,seed=None):
+    def random_couplings(self,
+                         seed: Optional[int] = None):
         if seed is not None:
             np.random.seed(seed)
         J=np.triu(np.random.normal(0,1.0,(self.size*self.colors,self.size*self.colors)))

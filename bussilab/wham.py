@@ -5,12 +5,18 @@ See `bussilab.wham.wham()`.
 
 """
 import sys
+from typing import Optional
 import numpy as np
 from . import coretools
 
 class WhamResult(coretools.Result):
     """Result of a `bussilab.wham.wham` calculation."""
-    def __init__(self, *, logW, logZ, nit, eps):
+    def __init__(self,
+                 *,
+                 logW: np.ndarray,
+                 logZ: np.ndarray,
+                 nit: int,
+                 eps: float):
         super().__init__()
         self.logW = logW
         """`numpy.ndarray` containing the logarithm of the weight of the frames."""
@@ -21,8 +27,16 @@ class WhamResult(coretools.Result):
         self.eps = eps
         """The final error in the iterative solution."""
 
-def wham(bias, *, frame_weight=None, traj_weight=None, T=1.0, maxiter=1000,
-         threshold=1e-40, verbose=False, logZ=None, logW=None):
+def wham(bias,
+        *,
+        frame_weight=None,
+        traj_weight=None,
+        T: float = 1.0,
+        maxiter: int = 1000,
+        threshold: float = 1e-40,
+        verbose: bool = False,
+        logZ: Optional[np.ndarray] = None,
+        logW: Optional[np.ndarray] = None):
     """Compute weights according to binless WHAM.
 
        The main input for this calculation is in the 2D array `bias`.

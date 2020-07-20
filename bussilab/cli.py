@@ -244,7 +244,7 @@ def endgroup(f: Optional[Callable] = None):
 
 def cli(arguments: Union[str, List[str]] = "",
         *,
-        prog: str = "",
+        prog: Optional[str] = "", # None is used to imply sys.argv[0]
         use_argcomplete: bool = False,
         throws_on_parser_errors: bool = True
        ) -> Optional[int]:
@@ -347,7 +347,7 @@ def cli(arguments: Union[str, List[str]] = "",
 
     return None
 
-def _main_(prog=None):
+def _main_(prog: Optional[str] = None):
 
     import sys
 

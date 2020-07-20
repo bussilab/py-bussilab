@@ -2,13 +2,23 @@
 Tools to perform reweighting using MaxEnt.
 """
 import sys
+from typing import Optional, Callable
 import numpy as np
 from scipy.optimize import minimize
 from . import coretools
 
 class MaxentResult(coretools.Result):
     """Result of a `bussilab.maxent.maxent` calculation."""
-    def __init__(self, *, logW_ME, lambdas, averages, gamma, success, message, nfev, nit):
+    def __init__(self,
+                 *,
+                 logW_ME: np.ndarray,
+                 lambdas: np.ndarray,
+                 averages: np.ndarray,
+                 gamma: float,
+                 success: bool,
+                 message: str,
+                 nfev: int,
+                 nit: int):
         super().__init__()
         self.logW_ME = logW_ME
         """`np.ndarray` with `traj.shape[0]` elements, logarithms of the optimized weights."""
@@ -31,7 +41,10 @@ class MaxentResult(coretools.Result):
 # Internal tool to compute averages over trajectory.
 # Does not access external data.
 # Might be optimized on GPU or to access traj from disk.
-def _heavy_part(logW, traj, l, weights=False):
+def _heavy_part(logW: np.ndarray,
+                traj: np.ndarray,
+                l: np.ndarray,
+                weights: bool = False):
     logW_ME = logW-np.dot(traj, l) # maxent correction
     shift_ME = np.max(logW_ME) # shift to avoid overflow
     W_ME = np.exp(logW_ME - shift_ME)
@@ -51,14 +64,14 @@ def maxent(
         reference,
         *,
         logW=None,
-        maxiter=1000,
-        verbose=False,
+        maxiter: int = 1000,
+        verbose: bool =False,
         lambdas=None,
         l2=None,
         l1=None,
-        method="L-BFGS-B",
-        regularization=None,
-        tol=None,
+        method: str = "L-BFGS-B",
+        regularization: Optional[Callable] = None,
+        tol: Optional[float] = None,
         options=None):
     """Tool that computes new weights to enforce reference values.
 
@@ -212,17 +225,18 @@ def maxent(
     bounds = np.array(bounds)
     box_const = np.array(box_const)
 
+    nit = 0
+    def _callback(par):
+        nonlocal nit # needed to access outer scope
+        nit += 1
+        if verbose:
+            sys.stderr.write("MAXENT: iteration "+str(nit)+"\n")
+
+    callback: Optional[Callable] = None
     # verbose logging
     if verbose:
         sys.stderr.write("MAXENT: start\n")
-        nit = 0
-        def callback(par):
-            nonlocal nit # needed to access outer scope
-            nit += 1
-            if verbose:
-                sys.stderr.write("MAXENT: iteration "+str(nit)+"\n")
-    else:
-        callback = None
+        callback = _callback
 
     # logZ0 is not changing during minimization and is computed once.
     # it is only needed to compute Gamma
