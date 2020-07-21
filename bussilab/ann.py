@@ -157,7 +157,7 @@ class ANN:
         # backward propagation
 
         df_db[-1]=np.ones((vec,1))
-        df_dW[-1]=ht[-1]
+        df_dW[-1]=ht[-1][:,:,np.newaxis]
 
         for i in reversed(range(len(self.layers)-1)):
             df_db[i]=np.matmul(df_db[i+1],self.W[i+1].T) * self._dactivation(h[i+1])
