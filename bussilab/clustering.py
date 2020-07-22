@@ -20,7 +20,7 @@ class ClusteringResult(Result):
         self.clusters = clusters
         self.weights = weights
 
-def max_clique(adj,weights=None,fast=False):
+def max_clique(adj,weights=None):
     """Same algorithm as in Reisser, et al, NAR (2020)."""
     # weights: optional weights
     if isinstance(adj, networkx.Graph):
