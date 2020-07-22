@@ -26,6 +26,50 @@ class TestClustering(TestCase):
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
+    def test_daura(self):
+        from bussilab.clustering import daura
+        data=(np.array(range(50))**2).reshape(-1,1)
+        dist=distance.squareform(distance.pdist(data))
+        adj=np.int_(dist<500)
+        cl=daura(adj)
+        self.assertEqual(cl.method,"daura")
+        self.assertEqual(cl.weights,[32, 13, 5])
+        ref=[[31, 30, 28, 29, 27, 25, 26, 23, 24, 22, 20, 21, 18, 19, 16, 17, 13, 14, 15, 10, 11, 12, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4], [38, 39, 40, 41, 42, 43, 44, 37, 35, 36, 34, 33, 32], [45, 48, 49, 46, 47]]
+        # compare sets, since order is irrelevant
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+        data=np.array([0,1,10,10,10]).reshape(-1,1)
+        dist=distance.squareform(distance.pdist(data))
+        adj=np.int_(dist<3)
+        cl=daura(adj)
+        self.assertEqual(cl.method,"daura")
+        self.assertEqual(cl.weights,[3,2])
+        ref=[[2,3,4],[0,1]]
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+        data=np.array([0,1,10]).reshape(-1,1)
+        weights=np.array([1,1,3])
+        dist=distance.squareform(distance.pdist(data))
+        adj=np.int_(dist<3)
+        cl=daura(adj,weights)
+        self.assertEqual(cl.method,"daura")
+        self.assertEqual(cl.weights,[3,2])
+        ref=[[2],[0,1]]
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+        data=np.array([10,0,1]).reshape(-1,1)
+        weights=np.array([3,1,1])
+        dist=distance.squareform(distance.pdist(data))
+        adj=np.int_(dist<3)
+        cl=daura(adj,weights)
+        self.assertEqual(cl.method,"daura")
+        self.assertEqual(cl.weights,[3,2])
+        ref=[[0],[1,2]]
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
 if __name__ == "__main__":
     unittest.main()
