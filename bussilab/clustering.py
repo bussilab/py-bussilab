@@ -10,6 +10,7 @@ import numpy as np
 from .coretools import Result
 
 class ClusteringResult(Result):
+    """Result of a `bussilab.clustering` calculation."""
     def __init__(self,
                 *,
                 method: str,
@@ -17,8 +18,11 @@ class ClusteringResult(Result):
                 weights: Optional[list]
                 ):
         self.method = method
+        """`str` containing the name of the method used."""
         self.clusters = clusters
+        """`list of lists` containing the members of each cluster."""
         self.weights = weights
+        """`list` containing the weights of the clusters."""
 
 def max_clique(adj,weights=None):
     """Same algorithm as in Reisser, et al, NAR (2020)."""
