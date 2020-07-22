@@ -234,6 +234,7 @@ from ._version import __version__
 # required packages:
 _required_ = [
     'argcomplete',
+    'networkx',
     'numba',
     'numpy',
     'scipy',
