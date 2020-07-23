@@ -27,10 +27,8 @@ class ClusteringResult(Result):
 def max_clique(adj,weights=None):
     """Same algorithm as in Reisser, et al, NAR (2020)."""
     # weights: optional weights
-    if isinstance(adj, networkx.Graph):
-        graph=adj
-    else:
-        graph=networkx.Graph(adj)
+    # if adj is a graph, it will be copied
+    graph=networkx.Graph(adj)
     cliques=[]
     ww=[]
     while graph.number_of_nodes()>0:
@@ -50,12 +48,12 @@ def max_clique(adj,weights=None):
 
 def daura(adj,weights=None):
     """Same algorithm as in Daura et al, Angew. Chemie (1999)."""
-    adj=+adj # copy
+    adj=adj.copy() # take a copy (adj is modified while clustering)
     indexes=np.arange(len(adj))
     clusters=[]
     ww=[]
     if weights is not None:
-        weights = weights.copy()
+        weights = weights.copy() # take a copy (weights is modified while clustering)
     while len(indexes)>0:
         if weights is not None:
             d=np.sum(adj*weights,axis=0)
