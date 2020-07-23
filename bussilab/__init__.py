@@ -69,10 +69,14 @@ A different python version should work as well.
 Once the package is installed you should be able to import the module from the python interpreter:
 ```python
 import bussilab
+# this command can be used to check if all dependencies are in place:
+bussilab.import_submodules()
 ```
 You should also have access to an executable script that can be used from the command line:[^path]
 ```bash
 bussilab -h
+# this command can be used to check if all dependencies are in place:
+bussilab check --import
 ```
 
 [^path]:
