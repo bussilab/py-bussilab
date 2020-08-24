@@ -197,7 +197,7 @@ def wham(bias,
     else:
         Z = np.ones(ntraj)
 
-    Zold = np.copy(Z)
+    Zold = Z
 
     if verbose:
         sys.stderr.write("WHAM: start\n")

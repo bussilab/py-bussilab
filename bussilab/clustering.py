@@ -35,7 +35,7 @@ def max_clique(adj,weights=None):
         maxw=0.0
         for i in networkx.algorithms.clique.find_cliques(graph):
             if weights is not None:
-                w=np.sum(weights[np.array(i)])
+                w=np.sum(weights[i])
             else:
                 w=len(i)
             if w > maxw:
