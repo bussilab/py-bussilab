@@ -32,6 +32,8 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
+        export BUSSILAB_TEST_NOTIFY_TOKEN="${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}"
+        export BUSSILAB_TEST_NOTIFY_CHANNEL="${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}"
         pytest -v
 
   macports:
@@ -59,4 +61,6 @@ jobs:
         PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
         bussilab check --import
         sudo port install py38-pytest
+        export BUSSILAB_TEST_NOTIFY_TOKEN="${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}"
+        export BUSSILAB_TEST_NOTIFY_CHANNEL="${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}"
         pytest-3.8 -v
