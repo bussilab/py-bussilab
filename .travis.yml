@@ -48,13 +48,15 @@ script:
   - bussilab check --import ;
 
 # install packages needed for testing
+# ignore BUSSILAB_TEST_NOTIFY_TOKEN since it does not work with macports for some reason
   - if [[ "$TRAVIS_JOB_NAME" =~ ^python ]] ; then
       pip install --upgrade pytest pytest-cov ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^conda ]] ; then
       conda install -c conda-forge pytest pytest-cov ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
       sudo port install py-pytest py-pytest-cov &&
-      sudo port select --set pytest pytest38 ;
+      sudo port select --set pytest pytest38 &&
+      unset BUSSILAB_TEST_NOTIFY_TOKEN ;
     fi
 
 # run test suite
