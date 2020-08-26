@@ -54,7 +54,8 @@ script:
       conda install -c conda-forge pytest pytest-cov ;
     elif [[ "$TRAVIS_JOB_NAME" =~ ^macports ]] ; then
       sudo port install py-pytest py-pytest-cov &&
-      sudo port select --set pytest pytest38 ;
+      sudo port select --set pytest pytest38 &&
+      export PYTHONHTTPSVERIFY=0
     fi
 
 # run test suite
