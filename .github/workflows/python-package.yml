@@ -61,6 +61,5 @@ jobs:
         PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
         bussilab check --import
         sudo port install py38-pytest
-        export BUSSILAB_TEST_NOTIFY_TOKEN="${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}"
-        export BUSSILAB_TEST_NOTIFY_CHANNEL="${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}"
+        # ignore BUSSILAB_TEST_NOTIFY_TOKEN since it does not work with macports for some reason
         pytest-3.8 -v
