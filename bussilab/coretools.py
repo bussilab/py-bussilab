@@ -108,7 +108,7 @@ class Result(dict):
         return self.__class__.__name__ + "()"
 
     def __dir__(self) -> List[str]:
-        return list(self.keys())
+        return list(sorted(self.keys()))
 
 @contextmanager
 def cd(newdir: os.PathLike):
