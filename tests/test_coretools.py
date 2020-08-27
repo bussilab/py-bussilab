@@ -111,6 +111,36 @@ class Test(unittest.TestCase):
         self.assertEqual(res2.c.b, "test")
         self.assertEqual(str(res2.c), " a: 1\n b: 'test'")
 
+    def test_results2(self):
+        class Result(coretools.Result):
+            def __init__(self,*,val1,val2):
+                self.val2=val2
+                self.val1=val1
+        r=Result(val1=1,val2=2)
+        print(r.val1)
+        print(r["val1"])
+        print(r.val2)
+        print(r["val2"])
+        self.assertEqual(str(r)," val1: 1\n val2: 2")
+        self.assertEqual(dir(r),["val1","val2"])
+
+        del r["val1"]
+        self.assertEqual(str(r)," val2: 2")
+        self.assertEqual(dir(r),["val2"])
+
+        with self.assertRaises(KeyError):
+            del r["val1"]
+
+        with self.assertRaises(AttributeError):
+            print(r.attribute)
+        with self.assertRaises(KeyError):
+            print(r['attribute'])
+
+        class Empty(coretools.Result):
+            pass
+        e=Empty()
+        self.assertEqual(str(e),"Empty()")
+
     def test_submodules(self):
         import bussilab
         with self.assertRaises(ModuleNotFoundError):
