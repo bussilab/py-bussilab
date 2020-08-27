@@ -111,5 +111,18 @@ class Test(unittest.TestCase):
         self.assertEqual(res2.c.b, "test")
         self.assertEqual(str(res2.c), " a: 1\n b: 'test'")
 
+    def test_submodules(self):
+        import bussilab
+        with self.assertRaises(ModuleNotFoundError):
+            import bussilab.not_existing_module
+        with self.assertRaises(AttributeError):
+            m = bussilab.not_existing_module
+        self.assertIsInstance(bussilab.describe_submodule(""),str)
+        self.assertIsInstance(bussilab.describe_submodule("coretools"),str)
+        with self.assertRaises(ModuleNotFoundError):
+            bussilab.describe_submodule("not_existing_module")
+
+
+
 if __name__ == "__main__":
     unittest.main()
