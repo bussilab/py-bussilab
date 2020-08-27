@@ -30,5 +30,19 @@ class Test(unittest.TestCase):
         with self.assertRaises(OSError):
             cli.cli(["wham", "-b", ""]) # "" is a file with no name
 
+        with self.assertRaises(NotImplementedError):
+            cli._list_submodules()
+
+        self.assertIsNone(cli.cli("required"))
+        self.assertIsNone(cli.cli("required --conda"))
+        self.assertIsNone(cli.cli("required --macports --pyver 38"))
+
+    def test_decorator(self):
+        @cli.command("x")
+        def _x():
+            pass
+        with self.assertRaises(NotImplementedError):
+            _x()
+
 if __name__ == "__main__":
     unittest.main()

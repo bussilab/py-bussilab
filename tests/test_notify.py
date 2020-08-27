@@ -24,5 +24,16 @@ if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
             with self.assertRaises(Exception):
                 notify(delete=url, token=token)
 
+            with self.assertRaises(TypeError):
+                notify("unittest1", token=token, channel=channel, update=url)
+            with self.assertRaises(TypeError):
+                notify("unittest1", token=token, channel=channel, delete=url)
+            with self.assertRaises(TypeError):
+                notify("unittest1", token=token, update=url , delete=url)
+            with self.assertRaises(TypeError):
+                notify("unittest1", token=token, update="incorrect-url")
+            with self.assertRaises(TypeError):
+                notify("unittest1", token=token, delete="incorrect-url")
+
 if __name__ == "__main__":
     unittest.main()
