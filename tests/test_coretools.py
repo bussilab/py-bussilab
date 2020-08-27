@@ -152,6 +152,8 @@ class Test(unittest.TestCase):
         with self.assertRaises(ModuleNotFoundError):
             bussilab.describe_submodule("not_existing_module")
 
+        self.assertIsInstance(bussilab.list_submodules(),list)
+
 
 
 if __name__ == "__main__":
