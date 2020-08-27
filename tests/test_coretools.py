@@ -124,12 +124,12 @@ class Test(unittest.TestCase):
         self.assertEqual(str(r)," val1: 1\n val2: 2")
         self.assertEqual(dir(r),["val1","val2"])
 
-        del r["val1"]
+        del r.val1
         self.assertEqual(str(r)," val2: 2")
         self.assertEqual(dir(r),["val2"])
 
         with self.assertRaises(KeyError):
-            del r["val1"]
+            del r.val1
 
         with self.assertRaises(AttributeError):
             print(r.attribute)
