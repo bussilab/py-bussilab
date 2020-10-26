@@ -64,8 +64,15 @@ import re
 import os
 import socket
 
-from slack import WebClient
-from slack.web.base_client import SlackResponse
+try:
+# slack client 3
+    from slack_sdk import WebClient
+    from slack_sdk.web.base_client import SlackResponse
+except ModuleNotFoundError:
+# slack client 2
+    from slack import WebClient
+    from slack.web.base_client import SlackResponse
+
 from . import coretools
 
 from typing import cast
