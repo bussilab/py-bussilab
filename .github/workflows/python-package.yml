@@ -19,22 +19,43 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Pre-install
+      run: |
+        pip install --no-deps .
+        python -c "import bussilab"
+        bussilab -h
+        pip uninstall --yes bussilab
     - name: Install
       run: |
         python -m pip install --upgrade pip
-        pip install flake8 pytest
         pip install .
-    - name: Lint with flake8
+    - name: Lint
       run: |
+        pip install --upgrade flake8 pyflakes mypy pylint
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        pyflakes bussilab
+        mypy bussilab
+        pylint -E bussilab
     - name: Test with pytest
       run: |
         export BUSSILAB_TEST_NOTIFY_TOKEN="${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}"
         export BUSSILAB_TEST_NOTIFY_CHANNEL="${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}"
+        bussilab check --import
+        pip install pytest pytest-cov
         pytest -v
+        NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab
+        bash <(curl -s https://codecov.io/bash)
+    - name: Build doc
+      run: |
+        pip install --upgrade pdoc3 jupyter nbconvert
+        pdoc3 -f --html -o doc/ bussilab
+        ( cd examples && ./render.sh )
+        mkdir doc/examples
+        cp examples/*html doc/examples/
+        ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
 
   macports:
     # The type of runner that the job will run on
