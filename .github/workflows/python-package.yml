@@ -94,3 +94,30 @@ jobs:
         sudo port install py38-pytest
         # ignore BUSSILAB_TEST_NOTIFY_TOKEN since it does not work with macports for some reason
         pytest-3.8 -v
+
+  conda:
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+     
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install conda
+      run: |
+        curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci
+        source ./conda-ci install
+        source ./conda-ci install-conda-build
+    - name: Build
+        conda activate
+        python make_conda_recipe.py
+        export CPU_COUNT=2
+        conda-build -c conda-forge conda
+        conda install -c conda-forge -c local py-bussilab ;
+    - name: Test
+        conda activate
+        conda install -c conda-forge pytest pytest-cov
+        pytest -v
+
