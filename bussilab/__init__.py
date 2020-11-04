@@ -243,7 +243,8 @@ _required_ = [
     'numpy',
     'scipy',
     'slackclient>2',
-    'pyyaml'
+    'pyyaml',
+    'typing_extensions'
 ]
 
 _macports_py_ = "3.8"
