@@ -111,12 +111,14 @@ jobs:
         source ./conda-ci install
         source ./conda-ci install-conda-build
     - name: Build
+      run: |
         conda activate
         python make_conda_recipe.py
         export CPU_COUNT=2
         conda-build -c conda-forge conda
         conda install -c conda-forge -c local py-bussilab ;
     - name: Test
+      run: |
         conda activate
         conda install -c conda-forge pytest pytest-cov
         pytest -v
