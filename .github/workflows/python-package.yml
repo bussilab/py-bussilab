@@ -29,20 +29,24 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install .
-    - name: Lint
+    - name: Pyflakes/pylint/mypy
       run: |
-        pip install --upgrade flake8 pyflakes mypy pylint
+        pip install --upgrade pyflakes mypy pylint
+        pyflakes bussilab
+        mypy bussilab
+        pylint -E bussilab
+    - name: Lint with flake8
+      run: |
+        pip install --upgrade flake8
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-        pyflakes bussilab
-        mypy bussilab
-        pylint -E bussilab
     - name: Test with pytest
+      env:
+        BUSSILAB_TEST_NOTIFY_TOKEN: ${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}
+        BUSSILAB_TEST_NOTIFY_CHANNEL: ${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}
       run: |
-        export BUSSILAB_TEST_NOTIFY_TOKEN="${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}"
-        export BUSSILAB_TEST_NOTIFY_CHANNEL="${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}"
         bussilab check --import
         pip install pytest pytest-cov
         pytest -v
