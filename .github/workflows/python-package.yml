@@ -39,20 +39,26 @@ jobs:
         pytest -v
         NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab
         bash <(curl -s https://codecov.io/bash)
-    - name: Pyflakes/pylint/mypy
+    - name: Pyflakes
       run: |
-        pip install --upgrade pyflakes mypy pylint
+        pip install --upgrade pyflakes
         pyflakes bussilab
-        mypy bussilab
+    - name: Pylint
+      run: |
+        pip install --upgrade  pylint
         pylint -E bussilab
-    - name: Lint with flake8
+    - name: Mypy
+      run: |
+        pip install --upgrade  mypy
+        mypy bussilab
+    - name: Flake8
       run: |
         pip install --upgrade flake8
         # stop the build if there are Python syntax errors or undefined names
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Build doc
+    - name: Doc
       run: |
         pip install --upgrade pdoc3 jupyter nbconvert
         pdoc3 -f --html -o doc/ bussilab
@@ -81,7 +87,7 @@ jobs:
         pip-3.8 install --user --no-deps .
         PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
         sudo port install $(bussilab required --macports --pyver 38)
-    - name : Run tests
+    - name: Run tests
       run: |
         PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
         bussilab check --import
