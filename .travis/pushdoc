@@ -8,7 +8,6 @@ cd doc
 git init
 git config user.email giovanni.bussi+bussilabbot@gmail.com
 git config user.name bussilabbot
-echo "git remote add doc https://bussilabbot:$BUSSILABBOT_TOKEN@github.com/bussilab/doc-py-bussilab"
 git remote add doc https://bussilabbot:$BUSSILABBOT_TOKEN@github.com/bussilab/doc-py-bussilab
 
 cat > index.html << EOF
