@@ -3,6 +3,7 @@
 This package collects a number of tools that are useful enough
 to be distributed but too small to deserve being published as
 separate packages.
+Source code is on [GitHub](https://github.com/bussilab/py-bussilab).
 Submodules are listed at the end of the current page.
 Command-line tools are described at [this page](cli_documentation.html).
 This is the documentation for version __version__.
