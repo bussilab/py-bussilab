@@ -98,7 +98,7 @@ script:
   - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 
 after_success:
-  - if [ "${TRAVIS_JOB_NAME}" = python3.8 ] && [ "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
+#  - if [ "${TRAVIS_JOB_NAME}" = python3.8 ] && [ "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
   - if [ "${TRAVIS_JOB_NAME}" = python3.8 ] && [ -n "$TRAVIS_TAG" ] ; then
         pip install twine &&
         python setup.py sdist &&
