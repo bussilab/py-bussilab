@@ -73,6 +73,14 @@ jobs:
         BUSSILABBOT_TOKEN: ${{ secrets.BUSSILABBOT_TOKEN }}
       run: |
         .travis/pushdoc
+    - name: Deploy PyPI
+      if: ${{ matrix.python-version == '3.8' && startsWith(github.ref, 'refs/tags/') }}
+      env:
+        BUSSILABBOT_PYPI: ${{ secrets.BUSSILABBOT_PYPI }}
+      run: |
+        pip install twine
+        python setup.py sdist
+        python -m twine upload -u bussilabbot -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz
 
   macports:
     # The type of runner that the job will run on
@@ -129,4 +137,12 @@ jobs:
         source activate base
         conda install -c conda-forge pytest pytest-cov
         pytest -v
+    - name: Deploy conda
+      if: ${{ matrix.python-version == '3.8' && startsWith(github.ref, 'refs/tags/') }}
+      env: 
+        CONDA_UPLOAD_TOKEN: ${{ secrets.CONDA_UPLOAD_TOKEN }}
+      run: |
+        source activate base
+        anaconda -t $CONDA_UPLOAD_TOKEN upload -u bussilab -l main $CONDA_PREFIX/conda-bld/*-64/py-bussilab*.tar.bz2 --force
+
 

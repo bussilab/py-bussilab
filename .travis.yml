@@ -97,14 +97,14 @@ script:
 # fail if tag is inconsistent with version
   - if [ -n "$TRAVIS_TAG" ] ; then test v$(bussilab --version) == "$TRAVIS_TAG" ; fi
 
-after_success:
+# after_success:
 #  - if [ "${TRAVIS_JOB_NAME}" = python3.8 ] && [ "$TRAVIS_BRANCH" = master ] ; then .travis/pushdoc ; fi
-  - if [ "${TRAVIS_JOB_NAME}" = python3.8 ] && [ -n "$TRAVIS_TAG" ] ; then
-        pip install twine &&
-        python setup.py sdist &&
-        python -m twine upload -u bussilabbot -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz ;
-    fi
-  - if [[ "${TRAVIS_JOB_NAME}" =~ ^conda ]] && [ -n "$TRAVIS_TAG" ] ; then
-        anaconda -t $CONDA_UPLOAD_TOKEN upload -u bussilab -l main $CONDA_PREFIX/conda-bld/$TRAVIS_OS_NAME-64/py-bussilab*.tar.bz2 --force ;
-    fi
-  - bash <(curl -s https://codecov.io/bash)
+#  - if [ "${TRAVIS_JOB_NAME}" = python3.8 ] && [ -n "$TRAVIS_TAG" ] ; then
+#        pip install twine &&
+#        python setup.py sdist &&
+#        python -m twine upload -u bussilabbot -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz ;
+#    fi
+#  - if [[ "${TRAVIS_JOB_NAME}" =~ ^conda ]] && [ -n "$TRAVIS_TAG" ] ; then
+#        anaconda -t $CONDA_UPLOAD_TOKEN upload -u bussilab -l main $CONDA_PREFIX/conda-bld/$TRAVIS_OS_NAME-64/py-bussilab*.tar.bz2 --force ;
+#    fi
+#  - bash <(curl -s https://codecov.io/bash)
