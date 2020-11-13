@@ -68,7 +68,7 @@ jobs:
         cp examples/*html doc/examples/
         ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
     - name: Push doc
-      if: ${{ matrix.python-version == "3.8" && github.ref == "refs/heads/master" }}
+      if: ${{ matrix.python-version == '3.8' && github.ref == "refs/heads/master" }}
       env:
         BUSSILABBOT_TOKEN: ${{ secrets.BUSSILABBOT_TOKEN }}
       run: |
