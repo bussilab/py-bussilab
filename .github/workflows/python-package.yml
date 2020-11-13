@@ -138,7 +138,7 @@ jobs:
         conda install -c conda-forge pytest pytest-cov
         pytest -v
     - name: Deploy conda
-      if: {{ startsWith(github.ref, 'refs/tags/') }}
+      if: ${{ startsWith(github.ref, 'refs/tags/') }}
       env: 
         CONDA_UPLOAD_TOKEN: ${{ secrets.CONDA_UPLOAD_TOKEN }}
       run: |
