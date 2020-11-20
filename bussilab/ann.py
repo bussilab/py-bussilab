@@ -20,7 +20,7 @@ def _drelu(x):
 
 class ANN:
     # constructor, allocate space for parameters
-    def __init__(self,layers,random_weights=False,init_b=0.0,activation="softplus"):
+    def __init__(self,layers,random_weights=False,init_b=0.0,activation="softplus",cuda=True):
         if activation == 'softplus':
             self._activation=_softplus
             self._dactivation=_sigmoid
@@ -29,6 +29,9 @@ class ANN:
             self._dactivation=_drelu
         else:
             raise ValueError("Unknown activation type: "+activation)
+
+        self.cuda=cuda
+
         self.layers=layers
         self.W=[]
         self.b=[]
@@ -56,7 +59,18 @@ class ANN:
             # see Deep Learning, Eq. 8.23
             for i in range(len(self.W)):
                 self.W[i]+=np.random.uniform(-1.0,1.0,size=self.W[i].shape)*np.sqrt(6/(np.sum(self.W[i].shape)))
+        if self.cuda:
+            self.cuda_setup()
 
+    def cuda_setup(self):
+         import cudamat as cm
+         self.cu_W=[]
+         for i in range(len(self.W)):
+             self.cu_W.append(cm.CUDAMatrix(self.W[i]))
+         self.cu_b=[]
+         for i in range(len(self.b)):
+             self.cu_b.append(cm.CUDAMatrix(np.reshape(self.b[i],(1,-1))))
+    
     # set array of parameters
     def setpar(self,par):
         assert len(par)==self.npar
@@ -113,10 +127,21 @@ class ANN:
         elif len(x.shape)>2:
             raise TypeError("Incorrectly shaped x")
         assert x.shape[1]==self.narg
-        for i in range(len(self.W)):
-            x=np.matmul(x,self.W[i])+self.b[i]
-            if i+1<len(self.W):
-                x = self._activation(x)
+
+        if not self.cuda:
+            for i in range(len(self.W)):
+                x=np.matmul(x,self.W[i])+self.b[i]
+                if i+1<len(self.W):
+                    x = self._activation(x)
+        else:
+            import cudamat as cm
+            cu_x=cm.CUDAMatrix(x)
+            for i in range(len(self.cu_W)):
+                cu_x=cm.dot(cu_x,self.cu_W[i])
+                cu_x.add_row_vec(self.cu_b[i])
+                if i+1<len(self.cu_W):
+                    cm.log_1_plus_exp(cu_x)
+            x=cu_x.asarray()
         return x[:,0]
 
     # compute derivatives with respect to parameters
@@ -145,23 +170,64 @@ class ANN:
         df_dW=[None]*len(self.layers)
         df_db=[None]*len(self.layers)
 
-        # forward propagation
-        ht[0]=+x
+        if not self.cuda:
 
-        for i in range(len(self.layers)-1):
-            h[i+1]=np.matmul(ht[i],self.W[i])+self.b[i]
-            ht[i+1] = self._activation(h[i+1])
+            # forward propagation
+            ht[0]=+x
 
-        f=(np.matmul(ht[-1],self.W[-1])+self.b[-1])[:,0]
+            for i in range(len(self.layers)-1):
+                h[i+1]=np.matmul(ht[i],self.W[i])+self.b[i]
+                ht[i+1] = self._activation(h[i+1])
 
-        # backward propagation
+            f=(np.matmul(ht[-1],self.W[-1])+self.b[-1])[:,0]
 
-        df_db[-1]=np.ones((vec,1))
-        df_dW[-1]=ht[-1][:,:,np.newaxis]
+            # backward propagation
 
-        for i in reversed(range(len(self.layers)-1)):
-            df_db[i]=np.matmul(df_db[i+1],self.W[i+1].T) * self._dactivation(h[i+1])
-            df_dW[i]=ht[i][:,:,np.newaxis]*df_db[i][:,np.newaxis,:]
+            df_db[-1]=np.ones((vec,1))
+            df_dW[-1]=ht[-1][:,:,np.newaxis]
+
+            for i in reversed(range(len(self.layers)-1)):
+                df_db[i]=np.matmul(df_db[i+1],self.W[i+1].T) * self._dactivation(h[i+1])
+                df_dW[i]=ht[i][:,:,np.newaxis]*df_db[i][:,np.newaxis,:]
+
+        else:
+
+            import cudamat as cm
+
+            # forward propagation
+            ht[0]=cm.CUDAMatrix(x)
+
+            for i in range(len(self.cu_W)-1):
+                h[i+1]=cm.dot(ht[i],self.cu_W[i])
+                h[i+1].add_row_vec(self.cu_b[i])
+                ht[i+1]=h[i+1].copy()
+                cm.log_1_plus_exp(ht[i+1])
+
+            f=cm.dot(ht[-1],self.cu_W[-1]).asarray()[:,0]+self.b[-1][0]
+
+            # backward propagation
+
+            for i in range(len(self.cu_W)):
+                ht[i]=ht[i].asarray()
+
+            df_db_host=[None]*len(self.layers)
+
+            df_db[-1]=cm.CUDAMatrix(np.ones((vec,1)))
+            df_dW[-1]=ht[-1][:,:,np.newaxis]
+
+            df_db_host[-1]=df_db[-1].asarray()
+
+            for i in reversed(range(len(self.layers)-1)):
+                cm.sigmoid(h[i+1])
+                df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
+                df_db[i].mult(h[i+1])
+                df_db_host[i]=df_db[i].asarray()
+ 
+                # this is still on CPU:
+                df_dW[i]=ht[i][:,:,np.newaxis]*df_db_host[i][:,np.newaxis,:]
+
+            df_db=df_db_host
+            
 
         return f,df_dW,df_db
 
