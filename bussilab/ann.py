@@ -20,7 +20,7 @@ def _drelu(x):
 
 class ANN:
     # constructor, allocate space for parameters
-    def __init__(self,layers,random_weights=False,init_b=0.0,activation="softplus",cuda=True):
+    def __init__(self,layers,random_weights=False,init_b=0.0,activation="softplus",cuda=False):
         if activation == 'softplus':
             self._activation=_softplus
             self._dactivation=_sigmoid
