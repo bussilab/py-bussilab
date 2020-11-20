@@ -63,7 +63,7 @@ class ANN:
             self.cuda_setup()
 
     def cuda_setup(self):
-         import cudamat as cm
+         import cudamat as cm # pylint: disable=import-error
          self.cu_W=[]
          for i in range(len(self.W)):
              self.cu_W.append(cm.CUDAMatrix(self.W[i]))
@@ -134,7 +134,7 @@ class ANN:
                 if i+1<len(self.W):
                     x = self._activation(x)
         else:
-            import cudamat as cm
+            import cudamat as cm # pylint: disable=import-error
             cu_x=cm.CUDAMatrix(x)
             for i in range(len(self.cu_W)):
                 cu_x=cm.dot(cu_x,self.cu_W[i])
@@ -192,7 +192,7 @@ class ANN:
 
         else:
 
-            import cudamat as cm
+            import cudamat as cm # pylint: disable=import-error
 
             # forward propagation
             ht[0]=cm.CUDAMatrix(x)
