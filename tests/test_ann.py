@@ -99,5 +99,71 @@ class TestANN(unittest.TestCase):
         self.assertAlmostEqual(d[2][1][0],1.0)
         self.assertAlmostEqual(d[2][0][1],0.7)
 
+
+try:
+    import cudamat
+    _has_cudamat=True
+except ModuleNotFoundError:
+    _has_cudamat=False
+
+if _has_cudamat:
+    class TestCuda(unittest.TestCase):
+        def _test_layers(self,layers,activation='softplus'):
+            np.random.seed(1977)
+            x=np.random.normal(size=layers[0])
+            a=ANN(layers,activation=activation,random_weights=True)
+            d=a.derpar(x)
+            dc=ANN(layers,cuda=True,activation=activation,random_weights=True).setpar(a.getpar()).derpar(x)
+            self.assertAlmostEqual(d[0],dc[0],places=5)
+            for i in range(len(d[1])):
+                self.assertAlmostEqual(d[1][i],dc[1][i],places=5)
+
+        def _test_layers_vec(self,layers,activation='softplus'):
+            np.random.seed(1977)
+            x=np.random.normal(size=(10,layers[0]))
+            a=ANN(layers,activation=activation,random_weights=True)
+            d=a.derpar(x)
+            dc=ANN(layers,cuda=True,activation=activation,random_weights=True).setpar(a.getpar()).derpar(x)
+            for i in range(len(d[0])):
+                self.assertAlmostEqual(d[0][i],dc[0][i],places=5)
+            for i in range(len(d[1])):
+                for j in range(len(d[1][i])):
+                    self.assertAlmostEqual(d[1][i,j],dc[1][i,j],places=5)
+    
+        def test_ann1(self):
+            self._test_layers([10])
+        def test_ann2(self):
+            self._test_layers([10,10])
+        def test_ann3(self):
+            self._test_layers([10,10,10])
+        def test_ann4(self):
+            self._test_layers([10,8,6,4,2])
+
+        def test_ann1r(self):
+            self._test_layers([10],activation='relu') # might fail due to relu discontinuity
+        def test_ann2r(self):
+            self._test_layers([10,10],activation='relu') # might fail due to relu discontinuity
+        def test_ann3r(self):
+            self._test_layers([10,10,10],activation='relu') # might fail due to relu discontinuity
+        def test_ann4r(self):
+            self._test_layers([10,8,6,4],activation='relu') # might fail due to relu discontinuity
+
+        def test_ann1_vec(self):
+            self._test_layers_vec([10])
+        def test_ann2_vec(self):
+            self._test_layers_vec([10,10])
+        def test_ann3_vec(self):
+            self._test_layers_vec([10,10,10])
+        def test_ann4_vec(self):
+            self._test_layers_vec([10,8,6,4,2])
+
+        def test_ann1r_vec(self):
+            self._test_layers_vec([10],activation='relu') # might fail due to relu discontinuity
+        def test_ann2r_vec(self):
+            self._test_layers_vec([10,10],activation='relu') # might fail due to relu discontinuity
+        def test_ann3r_vec(self):
+            self._test_layers_vec([10,10,10],activation='relu') # might fail due to relu discontinuity
+        def test_ann4r_vec(self):
+            self._test_layers_vec([10,8,6,4],activation='relu') # might fail due to relu discontinuity
 if __name__ == "__main__":
     unittest.main()

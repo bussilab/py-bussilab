@@ -4,6 +4,12 @@ Module with artificial neural networks.
 
 import numpy as np
 
+try:
+    import cudamat as cm # pylint: disable=import-error
+    _HAS_CUDAMAT=True
+except ModuleNotFoundError:
+    _HAS_CUDAMAT=False
+
 from .coretools import ensure_np_array
 
 def _softplus(x):
@@ -18,20 +24,44 @@ def _relu(x):
 def _drelu(x):
     return np.heaviside(x,0.5)
 
+def _sigmoid_cudamat(x):
+    cm.sigmoid(x)
+
+def _relu_cudamat(x):
+    x.maximum(0.0)
+
+def _drelu_cudamat(x):
+    x.greater_than(0.0)
+
 class ANN:
     # constructor, allocate space for parameters
     def __init__(self,layers,random_weights=False,init_b=0.0,activation="softplus",cuda=False):
-        if activation == 'softplus':
-            self._activation=_softplus
-            self._dactivation=_sigmoid
-        elif activation == 'relu':
-            self._activation=_relu
-            self._dactivation=_drelu
-        else:
-            raise ValueError("Unknown activation type: "+activation)
+
+        if cuda is None:
+            cuda = _HAS_CUDAMAT
 
         self.cuda=cuda
 
+        if not self.cuda:
+            if activation == 'softplus':
+                self._activation=_softplus
+                self._dactivation=_sigmoid
+            elif activation == 'relu':
+                self._activation=_relu
+                self._dactivation=_drelu
+            else:
+                raise ValueError("Unknown activation type: "+activation)
+        else:
+            if not _HAS_CUDAMAT:
+                raise ValueError("Cudamat not available, can only run ANN with numpy")
+            if activation == 'softplus':
+                self._activation=cm.log_1_plus_exp
+                self._dactivation=_sigmoid_cudamat
+            elif activation == 'relu':
+                self._activation=_relu_cudamat
+                self._dactivation=_drelu_cudamat
+            else:
+                raise ValueError("Unknown activation type: "+activation)
         self.layers=layers
         self.W=[]
         self.b=[]
@@ -63,7 +93,6 @@ class ANN:
             self.cuda_setup()
 
     def cuda_setup(self):
-         import cudamat as cm # pylint: disable=import-error
          self.cu_W=[]
          for i in range(len(self.W)):
              self.cu_W.append(cm.CUDAMatrix(self.W[i]))
@@ -81,6 +110,9 @@ class ANN:
         for i in range(len(self.b)):
             self.b[i]=np.reshape(par[n:n+np.prod(self.b[i].shape)],self.b[i].shape)
             n+=np.prod(self.b[i].shape)
+        if self.cuda:
+            self.cuda_setup()
+        return self
 
     def getpar(self):
         par=np.zeros(self.npar)
@@ -134,14 +166,14 @@ class ANN:
                 if i+1<len(self.W):
                     x = self._activation(x)
         else:
-            import cudamat as cm # pylint: disable=import-error
             cu_x=cm.CUDAMatrix(x)
             for i in range(len(self.cu_W)):
                 cu_x=cm.dot(cu_x,self.cu_W[i])
                 cu_x.add_row_vec(self.cu_b[i])
                 if i+1<len(self.cu_W):
-                    cm.log_1_plus_exp(cu_x)
-            x=cu_x.asarray()
+                    self._activation(cu_x)
+            x=np.array(cu_x.asarray(),dtype=np.float)
+         
         return x[:,0]
 
     # compute derivatives with respect to parameters
@@ -192,8 +224,6 @@ class ANN:
 
         else:
 
-            import cudamat as cm # pylint: disable=import-error
-
             # forward propagation
             ht[0]=cm.CUDAMatrix(x)
 
@@ -201,7 +231,7 @@ class ANN:
                 h[i+1]=cm.dot(ht[i],self.cu_W[i])
                 h[i+1].add_row_vec(self.cu_b[i])
                 ht[i+1]=h[i+1].copy()
-                cm.log_1_plus_exp(ht[i+1])
+                self._activation(ht[i+1])
 
             f=cm.dot(ht[-1],self.cu_W[-1]).asarray()[:,0]+self.b[-1][0]
 
@@ -218,7 +248,7 @@ class ANN:
             df_db_host[-1]=df_db[-1].asarray()
 
             for i in reversed(range(len(self.layers)-1)):
-                cm.sigmoid(h[i+1])
+                self._dactivation(h[i+1])
                 df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
                 df_db[i].mult(h[i+1])
                 df_db_host[i]=df_db[i].asarray()
@@ -227,6 +257,12 @@ class ANN:
                 df_dW[i]=ht[i][:,:,np.newaxis]*df_db_host[i][:,np.newaxis,:]
 
             df_db=df_db_host
+
+            for i in range(len(df_dW)):
+                df_dW[i]=np.array(df_dW[i],dtype=np.float)
+            for i in range(len(df_db)):
+                df_db[i]=np.array(df_db[i],dtype=np.float)
+            f=np.array(f,dtype=np.float)
             
 
         return f,df_dW,df_db
