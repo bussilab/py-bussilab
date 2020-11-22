@@ -1,5 +1,7 @@
 """
 Module with artificial neural networks.
+
+ANN can be constructed with `cuda=True`, in which case it will use cudamat.
 """
 
 import numpy as np

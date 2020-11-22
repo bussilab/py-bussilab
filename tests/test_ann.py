@@ -26,32 +26,32 @@ def derivatives(ann,n=100,prefactor=1e-10,vector=True):
 class TestANN(unittest.TestCase):
     def test_ann1(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10])),1e-10)
+        self.assertLess(derivatives(ANN([10],cuda=False)),1e-10)
     def test_ann2(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,10])),1e-10)
+        self.assertLess(derivatives(ANN([10,10],cuda=False)),1e-10)
     def test_ann3(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,10,10])),1e-8)
+        self.assertLess(derivatives(ANN([10,10,10],cuda=False)),1e-8)
     def test_ann4(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,8,6,4,2])),1e-8)
+        self.assertLess(derivatives(ANN([10,8,6,4,2],cuda=False)),1e-8)
 
     def test_ann1r(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10],activation='relu')),1e-10)
+        self.assertLess(derivatives(ANN([10],cuda=False,activation='relu')),1e-10)
     def test_ann2r(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,10],activation='relu')),1e-10)
+        self.assertLess(derivatives(ANN([10,10],cuda=False,activation='relu')),1e-10)
     def test_ann3r(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,10,10],activation='relu')),1e-8)
+        self.assertLess(derivatives(ANN([10,10,10],cuda=False,activation='relu')),1e-8)
     def test_ann4r(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,8,6,4,2],activation='relu')),1e-8)
+        self.assertLess(derivatives(ANN([10,8,6,4,2],cuda=False,activation='relu')),1e-8)
 
     def test_small(self):
-        ann=ANN([2,1])
+        ann=ANN([2,1],cuda=False)
         ann.setpar(np.array([1.0]*ann.npar))
         d=ann.deriv(np.array([1.0]*2))
         self.assertAlmostEqual(d[0],4.048587351573742)
@@ -61,7 +61,7 @@ class TestANN(unittest.TestCase):
         self.assertAlmostEqual(d[2][1][0],1.0)
 
     def test_small2(self):
-        ann=ANN([3,2],activation="relu")
+        ann=ANN([3,2],activation="relu",cuda=False)
         ann.setpar(0.1*np.array(range(ann.npar)))
 
         a=ann.apply((1,2,3))
@@ -111,7 +111,7 @@ if _has_cudamat:
         def _test_layers(self,layers,activation='softplus'):
             np.random.seed(1977)
             x=np.random.normal(size=layers[0])
-            a=ANN(layers,activation=activation,random_weights=True)
+            a=ANN(layers,cuda=False,activation=activation,random_weights=True)
             d=a.derpar(x)
             dc=ANN(layers,cuda=True,activation=activation,random_weights=True).setpar(a.getpar()).derpar(x)
             self.assertAlmostEqual(d[0],dc[0],places=5)
@@ -121,7 +121,7 @@ if _has_cudamat:
         def _test_layers_vec(self,layers,activation='softplus'):
             np.random.seed(1977)
             x=np.random.normal(size=(10,layers[0]))
-            a=ANN(layers,activation=activation,random_weights=True)
+            a=ANN(layers,cuda=False,activation=activation,random_weights=True)
             d=a.derpar(x)
             dc=ANN(layers,cuda=True,activation=activation,random_weights=True).setpar(a.getpar()).derpar(x)
             for i in range(len(d[0])):
