@@ -239,13 +239,10 @@ class ANN:
 
             # backward propagation
 
-            for i in range(len(self.cu_W)):
-                ht[i]=ht[i].asarray()
-
             df_db_host=[None]*len(self.layers)
 
             df_db[-1]=cm.CUDAMatrix(np.ones((vec,1)))
-            df_dW[-1]=ht[-1][:,:,np.newaxis]
+            df_dW[-1]=ht[-1].asarray()[:,:,np.newaxis]
 
             df_db_host[-1]=df_db[-1].asarray()
 
@@ -253,19 +250,14 @@ class ANN:
                 self._dactivation(h[i+1])
                 df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
                 df_db[i].mult(h[i+1])
-                df_db_host[i]=df_db[i].asarray()
+                df_db_host[i]=df_db[i].asarray() # should be moved to CPU anyway
  
-                # this is still on CPU:
-                df_dW[i]=ht[i][:,:,np.newaxis]*df_db_host[i][:,np.newaxis,:]
+                # this is still on CPU, but could be done on GPU avoiding the movement of ht[i]
+                df_dW[i]=ht[i].asarray()[:,:,np.newaxis]*df_db_host[i][:,np.newaxis,:]
 
             df_db=df_db_host
 
-            for i in range(len(df_dW)):
-                df_dW[i]=np.array(df_dW[i])
-            for i in range(len(df_db)):
-                df_db[i]=np.array(df_db[i])
             f=np.array(f)
-            
 
         return f,df_dW,df_db
 
