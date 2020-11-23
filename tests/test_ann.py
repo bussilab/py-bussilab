@@ -185,5 +185,28 @@ if _has_cudamat:
             self._test_layers_vec([10,10,10],activation='relu') # might fail due to relu discontinuity
         def test_ann4r_vec(self):
             self._test_layers_vec([10,8,6,4],activation='relu') # might fail due to relu discontinuity
+
+        def backprop(self,layers=None,activation="softplus"):
+            if layers is None:
+                layers=[10,8,6,4,2]
+            np.random.seed(1977)
+            ann=ANN(layers,activation=activation,random_weights=True,cuda=True)
+            traj=np.random.normal(size=(1000,ann.narg))
+            d=ann.derpar(traj)
+            reference=np.matmul(d[0],d[1])
+            state=ann.forward(traj)
+            der=ann.backward_par(state.f.asarray(),state)
+            self.assertAlmostEqual(np.sum((reference-der)**2),0.0,places=5)
+     
+        def test_backprop1(self):
+            self.backprop([10,10,10,10],"softplus")
+        def test_backprop2(self):
+            self.backprop([10,8,6,4,2],"softplus")
+        def test_backprop1r(self):
+            self.backprop([10,10,10,10],"relu")
+        def test_backprop2r(self):
+            self.backprop([10,8,6,4,2],"relu")
+
+
 if __name__ == "__main__":
     unittest.main()

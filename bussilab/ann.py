@@ -204,7 +204,14 @@ class ANN:
                 ht[i+1] = self._activation(h[i+1])
             f=(np.matmul(ht[-1],self.W[-1])+self.b[-1])[:,0]
         else:
-            assert(False)
+            ht[0]=cm.CUDAMatrix(x)
+            for i in range(len(self.cu_W)-1):
+                h[i+1]=cm.dot(ht[i],self.cu_W[i])
+                h[i+1].add_row_vec(self.cu_b[i])
+                ht[i+1]=h[i+1].copy()
+                self._activation(ht[i+1])
+            f=cm.dot(ht[-1],self.cu_W[-1])
+            f.add_row_vec(self.cu_b[-1])
 
         class State(coretools.Result):
             pass
@@ -225,13 +232,36 @@ class ANN:
                 df_db[i]=np.matmul(deriv,df_db[i])
 
         else:
-            assert(False)
+           vec=len(deriv)
+           deriv=deriv.reshape((1,-1))
+           deriv=cm.CUDAMatrix(deriv)
+ 
+           df_db[-1]=cm.CUDAMatrix(np.ones((vec,1)))
+           df_dW[-1]=cm.dot(deriv,hidden.ht[-1]).transpose()
+ 
+           for i in reversed(range(len(self.layers)-1)):
+               self._dactivation(hidden.h[i+1])
+               df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
+               df_db[i].mult(hidden.h[i+1])
+ 
+               hidden.ht[i].mult_by_col(deriv.transpose())
+               df_dW[i]=cm.dot(hidden.ht[i].transpose(),df_db[i])
+ 
+           for i in range(len(self.layers)):
+               df_db[i]=cm.dot(deriv,df_db[i])
+           for i in range(len(df_db)):
+               df_db[i]=df_db[i].asarray()[0,:]
+           for i in range(len(df_db)):
+               df_dW[i]=df_dW[i].asarray()
 
         return df_dW,df_db
 
     def backward_par(self,deriv,hidden):
         df_dW,df_db=self.backward(deriv,hidden)
-        der=np.zeros(self.npar,dtype=hidden.f.dtype)
+        if not self.cuda:
+            der=np.zeros(self.npar,dtype=hidden.f.dtype)
+        else:
+            der=np.zeros(self.npar,dtype=df_dW[0].dtype)
         n=0
         for i in range(len(self.W)):
             m=np.prod(self.W[i].shape)
