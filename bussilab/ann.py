@@ -174,7 +174,7 @@ class ANN:
                 cu_x.add_row_vec(self.cu_b[i])
                 if i+1<len(self.cu_W):
                     self._activation(cu_x)
-            x=np.array(cu_x.asarray(),dtype=np.float)
+            x=np.array(cu_x.asarray())
          
         return x[:,0]
 
@@ -261,10 +261,10 @@ class ANN:
             df_db=df_db_host
 
             for i in range(len(df_dW)):
-                df_dW[i]=np.array(df_dW[i],dtype=np.float)
+                df_dW[i]=np.array(df_dW[i])
             for i in range(len(df_db)):
-                df_db[i]=np.array(df_db[i],dtype=np.float)
-            f=np.array(f,dtype=np.float)
+                df_db[i]=np.array(df_db[i])
+            f=np.array(f)
             
 
         return f,df_dW,df_db
