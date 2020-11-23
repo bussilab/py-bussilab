@@ -141,7 +141,7 @@ class ANN:
 
         assert x.shape[1]==self.narg
         f,df_dW,df_db=self.deriv(x)
-        der=np.zeros((x.shape[0],self.npar))
+        der=np.zeros((x.shape[0],self.npar),dtype=f.dtype)
         n=0
         for i in range(len(self.W)):
             m=np.prod(self.W[i].shape)
