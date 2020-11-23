@@ -99,6 +99,26 @@ class TestANN(unittest.TestCase):
         self.assertAlmostEqual(d[2][1][0],1.0)
         self.assertAlmostEqual(d[2][0][1],0.7)
 
+    def backprop(self,layers=None,activation="softplus"):
+        if layers is None:
+            layers=[10,8,6,4,2]
+        np.random.seed(1977)
+        ann=ANN(layers,activation=activation,random_weights=True)
+        traj=np.random.normal(size=(1000,ann.narg))
+        d=ann.derpar(traj)
+        reference=np.matmul(d[0],d[1])
+        state=ann.forward(traj)
+        der=ann.backward_par(state.f,state)
+        self.assertAlmostEqual(np.sum((reference-der)**2),0.0)
+
+    def test_backprop1(self):
+        self.backprop([10,10,10,10],"softplus")
+    def test_backprop2(self):
+        self.backprop([10,8,6,4,2],"softplus")
+    def test_backprop1r(self):
+        self.backprop([10,10,10,10],"relu")
+    def test_backprop2r(self):
+        self.backprop([10,8,6,4,2],"relu")
 
 try:
     import cudamat

@@ -12,6 +12,7 @@ try:
 except ModuleNotFoundError:
     _HAS_CUDAMAT=False
 
+from . import coretools
 from .coretools import ensure_np_array
 
 def _softplus(x):
@@ -101,7 +102,7 @@ class ANN:
          self.cu_b=[]
          for i in range(len(self.b)):
              self.cu_b.append(cm.CUDAMatrix(np.reshape(self.b[i],(1,-1))))
-    
+
     # set array of parameters
     def setpar(self,par):
         assert len(par)==self.npar
@@ -175,8 +176,74 @@ class ANN:
                 if i+1<len(self.cu_W):
                     self._activation(cu_x)
             x=np.array(cu_x.asarray())
-         
+
         return x[:,0]
+
+
+    def forward(self,x):
+        x = ensure_np_array(x)
+
+        if len(x.shape)==1:
+            f,df_dW,df_db = self.deriv(x.reshape((1,len(x))))
+            for i in range(len(df_dW)):
+                df_dW[i]=df_dW[i][0]
+                df_db[i]=df_db[i][0]
+            return f[0], df_dW, df_db
+        elif len(x.shape)>2:
+            raise TypeError("Incorrectly shaped x")
+
+        # allocate hidden nodes
+        h=[None]*len(self.layers) # hidden nodes
+        ht=[None]*len(self.layers) # non-linear functions of hidden nodes
+
+        if not self.cuda:
+            # forward propagation
+            ht[0]=x.copy()
+            for i in range(len(self.layers)-1):
+                h[i+1]=np.matmul(ht[i],self.W[i])+self.b[i]
+                ht[i+1] = self._activation(h[i+1])
+            f=(np.matmul(ht[-1],self.W[-1])+self.b[-1])[:,0]
+        else:
+            assert(False)
+
+        class State(coretools.Result):
+            pass
+        return State(f=f,h=h,ht=ht)
+
+    def backward(self,deriv,hidden):
+        # allocate derivatives
+        df_dW=[None]*len(self.layers)
+        df_db=[None]*len(self.layers)
+
+        if not self.cuda:
+            df_db[-1]=np.ones((len(hidden.f),1))
+            df_dW[-1]=np.matmul(deriv,hidden.ht[-1])[:,np.newaxis]
+            for i in reversed(range(len(self.layers)-1)):
+                df_db[i]=np.matmul(df_db[i+1],self.W[i+1].T) * self._dactivation(hidden.h[i+1])
+                df_dW[i]=np.einsum("i,ij,ik->jk",deriv,hidden.ht[i],df_db[i])
+            for i in range(len(self.layers)):
+                df_db[i]=np.matmul(deriv,df_db[i])
+
+        else:
+            assert(False)
+
+        return df_dW,df_db
+
+    def backward_par(self,deriv,hidden):
+        df_dW,df_db=self.backward(deriv,hidden)
+        der=np.zeros(self.npar,dtype=hidden.f.dtype)
+        n=0
+        for i in range(len(self.W)):
+            m=np.prod(self.W[i].shape)
+            der[n:n+m]=df_dW[i].flatten()
+            n+=m
+        for i in range(len(self.b)):
+            m=np.prod(self.b[i].shape)
+            der[n:n+m]=df_db[i]
+            n+=m
+        assert(n==self.npar)
+        return der
+
 
     # compute derivatives with respect to parameters
     def deriv(self,x):
@@ -207,7 +274,7 @@ class ANN:
         if not self.cuda:
 
             # forward propagation
-            ht[0]=+x
+            ht[0]=x.copy()
 
             for i in range(len(self.layers)-1):
                 h[i+1]=np.matmul(ht[i],self.W[i])+self.b[i]
