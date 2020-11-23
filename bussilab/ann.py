@@ -232,9 +232,14 @@ class ANN:
                 df_db[i]=np.matmul(deriv,df_db[i])
 
         else:
-           vec=len(deriv)
-           deriv=deriv.reshape((1,-1))
-           deriv=cm.CUDAMatrix(deriv)
+           if not isinstance(deriv,cm.CUDAMatrix):
+               deriv=deriv.reshape((1,-1))
+               deriv=cm.CUDAMatrix(deriv)
+
+           if deriv.shape[1]==1:
+               deriv=deriv.transpose()
+
+           vec=deriv.shape[1]
  
            df_db[-1]=cm.CUDAMatrix(np.ones((vec,1)))
            df_dW[-1]=cm.dot(deriv,hidden.ht[-1]).transpose()

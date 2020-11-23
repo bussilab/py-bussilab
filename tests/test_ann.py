@@ -195,7 +195,7 @@ if _has_cudamat:
             d=ann.derpar(traj)
             reference=np.matmul(d[0],d[1])
             state=ann.forward(traj)
-            der=ann.backward_par(state.f.asarray(),state)
+            der=ann.backward_par(state.f,state)
             self.assertAlmostEqual(np.sum((reference-der)**2),0.0,places=5)
      
         def test_backprop1(self):
