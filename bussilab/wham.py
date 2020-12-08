@@ -36,7 +36,8 @@ def wham(bias,
         threshold: float = 1e-40,
         verbose: bool = False,
         logZ: Optional[np.ndarray] = None,
-        logW: Optional[np.ndarray] = None):
+        logW: Optional[np.ndarray] = None,
+        normalize: bool = True):
     """Compute weights according to binless WHAM.
 
        The main input for this calculation is in the 2D array `bias`.
@@ -47,6 +48,14 @@ def wham(bias,
        However, it is also possible to contatenate simulations of different lengths.
        It is crucial however to compute the potential according to each of the employed
        Hamiltonian on **all the frames**, not only on those simulated using that Hamiltonian.
+
+       Notice that, unless one passes `normalize=False`, the returned weights are normalized.
+       In most practical cases, this means that one should decide a priori on which Hamiltonian
+       weights should be computed and subtract it first. E.g., to obtain the weights corresponding
+       to the first Hamiltonian, one should likely replace `bias` with `bias-bias[:,0][:,np.newaxis]`.
+       Not doing so, unless bias fluctuations are very small, will result in numerical issues.
+       If using `normalize=False`, weights are **not** normalized and biases are pre-shifted so as
+       to decrease numerical issues.
 
        Combining trajectories of different length
        ------------------------------------------
@@ -167,6 +176,9 @@ def wham(bias,
            the bias.  Providing an initial guess that is close to the converged value can speed up
            significantly the convergence. *If logW is provided, logZ is ignored*.
 
+       normalize: bool, optional
+           If False, do not normalize resulting weights. Useful when biases fluctuate a lot and one
+           does not want to choose first on which of the Hamiltonians they should be normalized.
     """
 
     # allow tuples or lists
@@ -186,14 +198,20 @@ def wham(bias,
     assert len(traj_weight) == ntraj
     assert len(frame_weight) == nframes
 
+    # track shifts
+    shifts0 = np.min(bias, axis=0)
+    shifted_bias = bias - shifts0[np.newaxis,:]
+    shifts1 = np.min(shifted_bias, axis=1)
+    shifted_bias -= shifts1[:,np.newaxis]
+
     # do exponentials only once
-    expv = np.exp((-bias+np.min(bias))/T)
+    expv = np.exp(-shifted_bias/T)
 
     if logW is not None:
-        Z = np.matmul(np.exp(logW), expv)
+        Z = np.matmul(np.exp(logW-shifts1/T), expv)
         Z /= np.sum(Z*traj_weight)
     elif logZ is not None:
-        Z = np.exp(logZ)
+        Z = np.exp(logZ+shifts0/T)
     else:
         Z = np.ones(ntraj)
 
@@ -204,8 +222,6 @@ def wham(bias,
     for nit in range(maxiter):
         # find unnormalized weights
         weight = 1.0/np.matmul(expv, traj_weight/Z)*frame_weight
-        # normalized them
-        weight /= np.sum(weight)
         # update partition functions
         Z = np.matmul(weight, expv)
         # normalize the partition functions
@@ -217,7 +233,18 @@ def wham(bias,
             sys.stderr.write("WHAM: iteration "+str(nit)+" eps "+str(eps)+"\n")
         if eps < threshold:
             break
+
+    if normalize:
+        weight *= np.exp((shifts1-np.max(shifts1))/T)
+        # normalized weights
+        weight /= np.sum(weight)
+        with np.errstate(divide = 'ignore'):
+            logW = np.log(weight)
+    else:
+        logW = np.log(weight) + shifts1/T
+
     if verbose:
         sys.stderr.write("WHAM: end")
 
-    return WhamResult(logW=np.log(weight), logZ=np.log(Z), nit=nit, eps=eps)
+
+    return WhamResult(logW=logW, logZ=np.log(Z)-shifts0/T, nit=nit, eps=eps)
