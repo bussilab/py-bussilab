@@ -187,7 +187,7 @@ def wham(bias,
     assert len(frame_weight) == nframes
 
     # do exponentials only once
-    expv = np.exp((-bias+np.min(bias,axis=0)[np.newaxis,:])/T)
+    expv = np.exp((-bias+np.min(bias))/T)
 
     if logW is not None:
         Z = np.matmul(np.exp(logW), expv)
