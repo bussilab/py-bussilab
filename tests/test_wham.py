@@ -65,5 +65,22 @@ class TestWham(TestCase):
             self.assertEqualFile("wham1.out")
             os.remove("wham1.out")
 
+    def test_wham4(self):
+        import numpy as np
+        # check if the algorithm is numerically robust if one of the biases if heavily offset
+        for diffZ in (0.0,1e1,1e2,1e3,1e4,1e5,1e6):
+            w=wham(2.0*np.array([[1,1-diffZ],[2,2-diffZ]]),T=2.0)
+            self.assertAlmostEqual(w.logZ[1]-w.logZ[0],diffZ)
+            self.assertAlmostEqual(w.logW[1]-w.logW[0],1.0)
+
+    def test_wham5(self):
+        import numpy as np
+        # check if the algorithm is numerically robust if one frame has weight much smaller than another
+        # requires weights to be non normalized
+        for diffW in (0.0,1e1,1e2,1e3,1e4,1e5,1e6):
+            w=wham(2.0*np.array([[0.0,0.0],[diffW,diffW]]),T=2.0, normalize=False)
+            self.assertAlmostEqual(w.logW[1]-w.logW[0],diffW)
+            self.assertAlmostEqual(w.logZ[1]-w.logZ[0],0.0)
+
 if __name__ == "__main__":
     unittest.main()
