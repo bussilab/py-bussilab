@@ -1,9 +1,10 @@
 import subprocess
 import re
+from typing import Optional, List
 
 from . import coretools
 
-def _parse_cpu(line: str):
+def _parse_cpu(line: List[str]):
 #  us, user    : time running un-niced user processes
 #  sy, system  : time running kernel processes
 #  ni, nice    : time running niced user processes
@@ -20,12 +21,15 @@ def _parse_cpu(line: str):
                 result[f]=float(line[i-1])
     return result
 
-def workstations(wks = None, short=True):
+def workstations(wks: Optional[List] = None, short: bool = True):
     msg=""
 
     if not wks:
         c=coretools.config()
         wks=c["workstations"]
+
+    if not wks:
+        raise ValueError("cannot build wks list")
 
     for w in wks:
        if isinstance(w, str):
