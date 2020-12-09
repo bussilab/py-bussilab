@@ -58,11 +58,11 @@ class ANN:
             if not _HAS_CUDAMAT:
                 raise ValueError("Cudamat not available, can only run ANN with numpy")
             if activation == 'softplus':
-                self._activation=cm.log_1_plus_exp
-                self._dactivation=_sigmoid_cudamat
+                self._cu_activation=cm.log_1_plus_exp
+                self._cu_dactivation=_sigmoid_cudamat
             elif activation == 'relu':
-                self._activation=_relu_cudamat
-                self._dactivation=_drelu_cudamat
+                self._cu_activation=_relu_cudamat
+                self._cu_dactivation=_drelu_cudamat
             else:
                 raise ValueError("Unknown activation type: "+activation)
         self.layers=layers
@@ -174,7 +174,7 @@ class ANN:
                 cu_x=cm.dot(cu_x,self.cu_W[i])
                 cu_x.add_row_vec(self.cu_b[i])
                 if i+1<len(self.cu_W):
-                    self._activation(cu_x)
+                    self._cu_activation(cu_x)
             x=np.array(cu_x.asarray())
 
         return x[:,0]
@@ -209,7 +209,7 @@ class ANN:
                 h[i+1]=cm.dot(ht[i],self.cu_W[i])
                 h[i+1].add_row_vec(self.cu_b[i])
                 ht[i+1]=h[i+1].copy()
-                self._activation(ht[i+1])
+                self._cu_activation(ht[i+1])
             f=cm.dot(ht[-1],self.cu_W[-1])
             f.add_row_vec(self.cu_b[-1])
 
@@ -245,7 +245,7 @@ class ANN:
            df_dW[-1]=cm.dot(deriv,hidden.ht[-1]).transpose()
  
            for i in reversed(range(len(self.layers)-1)):
-               self._dactivation(hidden.h[i+1])
+               self._cu_dactivation(hidden.h[i+1])
                df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
                df_db[i].mult(hidden.h[i+1])
  
@@ -335,7 +335,7 @@ class ANN:
                 h[i+1]=cm.dot(ht[i],self.cu_W[i])
                 h[i+1].add_row_vec(self.cu_b[i])
                 ht[i+1]=h[i+1].copy()
-                self._activation(ht[i+1])
+                self._cu_activation(ht[i+1])
 
             f=cm.dot(ht[-1],self.cu_W[-1]).asarray()[:,0]+self.b[-1][0]
 
@@ -349,7 +349,7 @@ class ANN:
             df_db_host[-1]=df_db[-1].asarray()
 
             for i in reversed(range(len(self.layers)-1)):
-                self._dactivation(h[i+1])
+                self._cu_dactivation(h[i+1])
                 df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
                 df_db[i].mult(h[i+1])
                 df_db_host[i]=df_db[i].asarray() # should be moved to CPU anyway
