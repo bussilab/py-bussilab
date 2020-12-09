@@ -10,10 +10,10 @@ import numpy as np
 def lohman(t: float, ku: float, kd: float, n: int, boundaries: Tuple[float, float]) -> float:
     pass
 @overload
-def lohman(t: Sequence, ku: float, kd: float, n: int, boundaries: Tuple[float, float]) -> np.array:
+def lohman(t: Sequence, ku: float, kd: float, n: int, boundaries: Tuple[float, float]) -> np.ndarray:
     pass
 @overload
-def lohman(t: np.array, ku: float, kd: float, n: int, boundaries: Tuple[float, float]) -> np.array:
+def lohman(t: np.ndarray, ku: float, kd: float, n: int, boundaries: Tuple[float, float]) -> np.ndarray:
     pass
 
 # actual implementation:
@@ -22,7 +22,7 @@ def lohman(t,
            kd: float,
            n: int = 1,
            boundaries: Tuple[float, float] = (0.0, 1.0)
-          ) -> Union[float, np.array]:
+          ) -> Union[float, np.ndarray]:
     """Lohman model for helicases.
 
        Compute the fraction of unwound helices as a function of time.
