@@ -198,20 +198,22 @@ def wham(bias,
     assert len(traj_weight) == ntraj
     assert len(frame_weight) == nframes
 
+    # divide by T once for all
+    shifted_bias = bias/T
     # track shifts
-    shifts0 = np.min(bias, axis=0)
-    shifted_bias = bias - shifts0[np.newaxis,:]
+    shifts0 = np.min(shifted_bias, axis=0)
+    shifted_bias -= shifts0[np.newaxis,:]
     shifts1 = np.min(shifted_bias, axis=1)
     shifted_bias -= shifts1[:,np.newaxis]
 
     # do exponentials only once
-    expv = np.exp(-shifted_bias/T)
+    expv = np.exp(-shifted_bias)
 
     if logW is not None:
-        Z = np.matmul(np.exp(logW-shifts1/T), expv)
+        Z = np.matmul(np.exp(logW-shifts1), expv)
         Z /= np.sum(Z*traj_weight)
     elif logZ is not None:
-        Z = np.exp(logZ+shifts0/T)
+        Z = np.exp(logZ+shifts0)
     else:
         Z = np.ones(ntraj)
 
@@ -235,16 +237,16 @@ def wham(bias,
             break
 
     if normalize:
-        weight *= np.exp((shifts1-np.max(shifts1))/T)
+        weight *= np.exp((shifts1-np.max(shifts1)))
         # normalized weights
         weight /= np.sum(weight)
         with np.errstate(divide = 'ignore'):
             logW = np.log(weight)
     else:
-        logW = np.log(weight) + shifts1/T
+        logW = np.log(weight) + shifts1
 
     if verbose:
         sys.stderr.write("WHAM: end")
 
 
-    return WhamResult(logW=logW, logZ=np.log(Z)-shifts0/T, nit=nit, eps=eps)
+    return WhamResult(logW=logW, logZ=np.log(Z)-shifts0, nit=nit, eps=eps)
