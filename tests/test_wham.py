@@ -84,11 +84,11 @@ class TestWham(TestCase):
 
     def rest_wham_restart(self):
         import numpy as np
-        w0=bussilab.wham.wham(((0,10),(-4,11)),T=0.8)
+        w0=wham(((0,10),(-4,11)),T=0.8)
         self.assertGreaterEqual(w0.nit,20)
-        w1=bussilab.wham.wham(((0,10),(-4,11)),T=0.8,logW=w0.logW)
+        w1=wham(((0,10),(-4,11)),T=0.8,logW=w0.logW)
         self.assertLessEqual(w1.nit,5)
-        w2=bussilab.wham.wham(((0,10),(-4,11)),T=0.8,logZ=w0.logZ)
+        w2=wham(((0,10),(-4,11)),T=0.8,logZ=w0.logZ)
         self.assertLessEqual(w2.nit,5)
 
 if __name__ == "__main__":
