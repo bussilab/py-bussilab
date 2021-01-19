@@ -263,7 +263,7 @@ def wham(bias,
             minimize_opt={}
             minimize_opt["method"]="CG"
             minimize_opt["jac"]=True
-        x=np.zeros(len(Z))
+        x=np.log(Z)
         res = minimize(func, x, **minimize_opt)
         Z=np.exp(res.x)
         Z/=np.sum(Z*traj_weight)
