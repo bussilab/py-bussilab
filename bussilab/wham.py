@@ -16,6 +16,7 @@ class WhamResult(coretools.Result):
                  logW: np.ndarray,
                  logZ: np.ndarray,
                  nit: int,
+                 nfev: int,
                  eps: float):
         super().__init__()
         self.logW = logW
@@ -24,6 +25,8 @@ class WhamResult(coretools.Result):
         """`numpy.ndarray` containing the logarithm of the partition function of each state."""
         self.nit = nit
         """The number of performed iterations."""
+        self.nfev = nfev
+        """The number of function evalutations (might differ from nit when using method='minimize')."""
         self.eps = eps
         """The final error in the iterative solution."""
 
@@ -181,6 +184,14 @@ def wham(bias,
        normalize: bool, optional
            If False, do not normalize resulting weights. Useful when biases fluctuate a lot and one
            does not want to choose first on which of the Hamiltonians they should be normalized.
+
+       method: str, optional
+           If "substitute", solve self-consistent equations by substitution. This is the default.
+           If "minimize", use a minimization as in J Chem Phys 136, 144102 (2012).
+
+       minimize_opt: dict, optional
+           If method=="minimize", this dict can be used to pass options to scipy.minimize.
+           Notice that by default the minimization is performed using 'L-BFGS-B'.
     """
 
     # allow tuples or lists
@@ -238,22 +249,22 @@ def wham(bias,
                 sys.stderr.write("WHAM: iteration "+str(nit)+" eps "+str(eps)+"\n")
             if eps < threshold:
                 break
+        nfev=nit
     elif method == "minimize":
         from scipy.optimize import minimize
         def func(x):
+            x-=np.average(x)
             Zm1=np.exp(-x)
             tmp=expv*(traj_weight*Zm1)[np.newaxis,:]
             tmp1=np.sum(tmp,axis=1)
             C=np.sum(frame_weight*np.log(tmp1))+np.sum(traj_weight*x)
             tmp/=tmp1[:,np.newaxis]
             grad=-np.matmul(frame_weight,tmp)+traj_weight
-            # fix this removing one parameter:
-            C+=np.sum(x)**2
-            grad+=2*np.sum(x)
+            grad-=np.average(grad)
             return C,grad
         if minimize_opt is not None:
             if not "method" in minimize_opt:
-                minimize_opt["method"]="CG"
+                minimize_opt["method"]="L-BFGS-B"
             if "jac" in minimize_opt:
                 if not minimize_opt["jac"]:
                     raise ValueError("minimize_opt['jac'] must be True")
@@ -261,7 +272,7 @@ def wham(bias,
                 minimize_opt["jac"]=True
         else:
             minimize_opt={}
-            minimize_opt["method"]="CG"
+            minimize_opt["method"]="L-BFGS-B"
             minimize_opt["jac"]=True
         x=np.log(Z)
         res = minimize(func, x, **minimize_opt)
@@ -272,6 +283,7 @@ def wham(bias,
         Z = np.matmul(weight, expv)
         Z /= np.sum(Z*traj_weight)
         nit=res.nit
+        nfev=res.nfev
         eps=np.sum(np.log(Z/Zold)**2)
     else:
         raise ValueError("method should be 'minimize' or 'substitute'")
@@ -289,4 +301,4 @@ def wham(bias,
         sys.stderr.write("WHAM: end")
 
 
-    return WhamResult(logW=logW, logZ=np.log(Z)-shifts0, nit=nit, eps=eps)
+    return WhamResult(logW=logW, logZ=np.log(Z)-shifts0, nit=nit, nfev=nfev, eps=eps)
