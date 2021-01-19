@@ -37,7 +37,9 @@ def wham(bias,
         verbose: bool = False,
         logZ: Optional[np.ndarray] = None,
         logW: Optional[np.ndarray] = None,
-        normalize: bool = True):
+        normalize: bool = True,
+        method: str = "substitute",
+        minimize_opt: Optional[dict] = None):
     """Compute weights according to binless WHAM.
 
        The main input for this calculation is in the 2D array `bias`.
@@ -221,20 +223,58 @@ def wham(bias,
 
     if verbose:
         sys.stderr.write("WHAM: start\n")
-    for nit in range(maxiter):
-        # find unnormalized weights
+    if method == "substitute":
+        for nit in range(maxiter):
+            # find unnormalized weights
+            weight = 1.0/np.matmul(expv, traj_weight/Z)*frame_weight
+            # update partition functions
+            Z = np.matmul(weight, expv)
+            # normalize the partition functions
+            Z /= np.sum(Z*traj_weight)
+            # monitor change in partition functions
+            eps = np.sum(np.log(Z/Zold)**2)
+            Zold = Z
+            if verbose:
+                sys.stderr.write("WHAM: iteration "+str(nit)+" eps "+str(eps)+"\n")
+            if eps < threshold:
+                break
+    elif method == "minimize":
+        from scipy.optimize import minimize
+        def func(x):
+            Zm1=np.exp(-x)
+            tmp=expv*(traj_weight*Zm1)[np.newaxis,:]
+            tmp1=np.sum(tmp,axis=1)
+            C=np.sum(frame_weight*np.log(tmp1))+np.sum(traj_weight*x)
+            tmp/=tmp1[:,np.newaxis]
+            grad=-np.matmul(frame_weight,tmp)+traj_weight
+            # fix this removing one parameter:
+            C+=np.sum(x)**2
+            grad+=2*np.sum(x)
+            return C,grad
+        if minimize_opt is not None:
+            if not "method" in minimize_opt:
+                minimize_opt["method"]="CG"
+            if "jac" in minimize_opt:
+                if not minimize_opt["jac"]:
+                    raise ValueError("minimize_opt['jac'] must be True")
+            else:
+                minimize_opt["jac"]=True
+        else:
+            minimize_opt={}
+            minimize_opt["method"]="CG"
+            minimize_opt["jac"]=True
+        x=np.zeros(len(Z))
+        res = minimize(func, x, **minimize_opt)
+        Z=np.exp(res.x)
+        Z/=np.sum(Z*traj_weight)
         weight = 1.0/np.matmul(expv, traj_weight/Z)*frame_weight
-        # update partition functions
+        Zold=Z.copy()
         Z = np.matmul(weight, expv)
-        # normalize the partition functions
         Z /= np.sum(Z*traj_weight)
-        # monitor change in partition functions
-        eps = np.sum(np.log(Z/Zold)**2)
-        Zold = Z
-        if verbose:
-            sys.stderr.write("WHAM: iteration "+str(nit)+" eps "+str(eps)+"\n")
-        if eps < threshold:
-            break
+        nit=res.nit
+        eps=np.sum(np.log(Z/Zold)**2)
+    else:
+        raise ValueError("method should be 'minimize' or 'substitute'")
 
     if normalize:
         weight *= np.exp((shifts1-np.max(shifts1)))
