@@ -221,9 +221,10 @@ def maxent(
             box_const.append(False)
 
 
-    fullreference = np.array(fullreference)
-    bounds = np.array(bounds)
-    box_const = np.array(box_const)
+    # to fix these, use np.asarray, only available in numpy 1.20.0
+    fullreference = np.array(fullreference) # type: ignore
+    bounds = np.array(bounds) # type: ignore
+    box_const = np.array(box_const) # type: ignore
 
     nit = 0
     def _callback(par):

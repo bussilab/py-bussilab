@@ -12,9 +12,9 @@ from typing import List, Optional
 import numpy as np
 import yaml
 
-def ensure_np_array(arg) -> np.ndarray:
+def ensure_np_array(arg) -> Optional[np.ndarray]:
     """Convert arg to np.array if necessary."""
-    if arg is not None and not isinstance(arg, (np.ndarray, np.generic)):
+    if arg is not None and not isinstance(arg, np.ndarray):
         return np.array(arg)
     return arg
 
