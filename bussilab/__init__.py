@@ -231,6 +231,8 @@ This check should succeed.
 """
 
 # Minimal import here to speedup the loading of this module.
+# Notice that we should not import any required package here, or
+# setup will fail (this package is imported to find our requirements).
 
 from typing import List as _List
 import sys as _sys
