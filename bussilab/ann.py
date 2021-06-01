@@ -96,12 +96,12 @@ class ANN:
             self.cuda_setup()
 
     def cuda_setup(self):
-         self.cu_W=[]
-         for i in range(len(self.W)):
-             self.cu_W.append(cm.CUDAMatrix(self.W[i]))
-         self.cu_b=[]
-         for i in range(len(self.b)):
-             self.cu_b.append(cm.CUDAMatrix(np.reshape(self.b[i],(1,-1))))
+        self.cu_W=[]
+        for i in range(len(self.W)):
+            self.cu_W.append(cm.CUDAMatrix(self.W[i]))
+        self.cu_b=[]
+        for i in range(len(self.b)):
+            self.cu_b.append(cm.CUDAMatrix(np.reshape(self.b[i],(1,-1))))
 
     # set array of parameters
     def setpar(self,par):
@@ -135,10 +135,10 @@ class ANN:
         x = ensure_np_array(x)
 
         if len(x.shape)==1:
-          f, der = self.derpar(x.reshape((-1,len(x))))
-          return f[0], der[0]
+            f, der = self.derpar(x.reshape((-1,len(x))))
+            return f[0], der[0]
         elif len(x.shape)>2:
-          raise TypeError("Incorrectly shaped x")
+            raise TypeError("Incorrectly shaped x")
 
         assert x.shape[1]==self.narg
         f,df_dW,df_db=self.deriv(x)
@@ -232,32 +232,32 @@ class ANN:
                 df_db[i]=np.matmul(deriv,df_db[i])
 
         else:
-           if not isinstance(deriv,cm.CUDAMatrix):
-               deriv=deriv.reshape((1,-1))
-               deriv=cm.CUDAMatrix(deriv)
+            if not isinstance(deriv,cm.CUDAMatrix):
+                deriv=deriv.reshape((1,-1))
+                deriv=cm.CUDAMatrix(deriv)
 
-           if deriv.shape[1]==1:
-               deriv=deriv.transpose()
+            if deriv.shape[1]==1:
+                deriv=deriv.transpose()
 
-           vec=deriv.shape[1]
- 
-           df_db[-1]=cm.CUDAMatrix(np.ones((vec,1)))
-           df_dW[-1]=cm.dot(deriv,hidden.ht[-1]).transpose()
- 
-           for i in reversed(range(len(self.layers)-1)):
-               self._cu_dactivation(hidden.h[i+1])
-               df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
-               df_db[i].mult(hidden.h[i+1])
- 
-               hidden.ht[i].mult_by_col(deriv.transpose())
-               df_dW[i]=cm.dot(hidden.ht[i].transpose(),df_db[i])
- 
-           for i in range(len(self.layers)):
-               df_db[i]=cm.dot(deriv,df_db[i])
-           for i in range(len(df_db)):
-               df_db[i]=df_db[i].asarray()[0,:]
-           for i in range(len(df_db)):
-               df_dW[i]=df_dW[i].asarray()
+            vec=deriv.shape[1]
+
+            df_db[-1]=cm.CUDAMatrix(np.ones((vec,1)))
+            df_dW[-1]=cm.dot(deriv,hidden.ht[-1]).transpose()
+
+            for i in reversed(range(len(self.layers)-1)):
+                self._cu_dactivation(hidden.h[i+1])
+                df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
+                df_db[i].mult(hidden.h[i+1])
+
+                hidden.ht[i].mult_by_col(deriv.transpose())
+                df_dW[i]=cm.dot(hidden.ht[i].transpose(),df_db[i])
+
+            for i in range(len(self.layers)):
+                df_db[i]=cm.dot(deriv,df_db[i])
+            for i in range(len(df_db)):
+                df_db[i]=df_db[i].asarray()[0,:]
+            for i in range(len(df_db)):
+                df_dW[i]=df_dW[i].asarray()
 
         return df_dW,df_db
 

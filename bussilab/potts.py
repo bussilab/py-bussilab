@@ -107,7 +107,7 @@ class Model:
         all_ene-=shift
         prob=np.exp(-all_ene)
         Z=np.sum(prob)
-        if not self.allseq_matrix is None:
+        if self.allseq_matrix is not None:
             average=np.tensordot(prob,self.allseq_matrix,(0,0))/Z
         else:
             average=np.einsum("ki,kj,k->ij",self.allseq,self.allseq,prob)/Z
@@ -131,7 +131,7 @@ class Model:
              n: int):
         """Compute averages for a coupling matrix J sampling n states.
         """
-        if not self.allseq_matrix is None:
+        if self.allseq_matrix is not None:
             all_ene=np.tensordot(self.allseq_matrix,self.fixJ(J),((1,2),(0,1)))
         else:
             all_ene=np.einsum("ki,kj,ij->k",self.allseq,self.allseq,self.fixJ(J))
@@ -145,7 +145,7 @@ class Model:
         ret=np.zeros((self.size*self.colors,self.size*self.colors))
         for i in range(n):
             j=np.random.choice(len(self.allseq),p=prob)
-            if not self.allseq_matrix is None:
+            if self.allseq_matrix is not None:
                 ret+=self.allseq_matrix[j]
             else:
                 ret+=np.outer(self.allseq[j],self.allseq[j])

@@ -263,7 +263,7 @@ def wham(bias,
             grad-=np.average(grad)
             return C,grad
         if minimize_opt is not None:
-            if not "method" in minimize_opt:
+            if "method" not in minimize_opt:
                 minimize_opt["method"]="L-BFGS-B"
             if "jac" in minimize_opt:
                 if not minimize_opt["jac"]:

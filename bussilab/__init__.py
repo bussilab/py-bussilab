@@ -256,9 +256,9 @@ def _process_macports(macports: _List[str]) -> _List[str]:
     import re
     l = []
     for d in _required_:
-      d=re.sub(">.*$","",d) # remove versions
-      d=re.sub("^pyyaml$","yaml",d) # fix yaml
-      l.append("py-" + d)
+        d = re.sub(">.*$", "", d) # remove versions
+        d = re.sub("^pyyaml$", "yaml", d) # fix yaml
+        l.append("py-" + d)
     return l
 
 _macports_required_ = _process_macports(_required_)
@@ -377,7 +377,7 @@ def describe_submodule(module: str) -> str:
     """
     import os
     import ast
-    if module != "" and not module in list_submodules(_hidden=True):
+    if module != "" and module not in list_submodules(_hidden=True):
         raise ModuleNotFoundError(module)
     if module == "":
         module = "__init__"
