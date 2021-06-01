@@ -102,9 +102,9 @@ jobs:
           if($1=="_macports_py_" && $2=="=") {
             a=$3;
             gsub("\"","",a);
-            print("\"MACPORTS_PY=" a "\"")
+            print("MACPORTS_PY=" a )
             gsub("\\.","",a);
-            print("\"MACPORTS_PY_ND=" a "\"")
+            print("MACPORTS_PY_ND=" a )
           }
         }' bussilab/__init__.py >> $GITHUB_ENV
     - name: Install package
