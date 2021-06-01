@@ -6,9 +6,9 @@ def confirm():
     cont=True
     while cont:
         response=input("Confirm (yes/no)?")
-        if re.match("[Yy][Ee][Ss]",response) :
+        if re.match("[Yy][Ee][Ss]",response):
             cont=False
-        elif re.match("[Nn][Oo]",response) :
+        elif re.match("[Nn][Oo]",response):
             quit()
         else:
             pass
@@ -52,5 +52,5 @@ for c in cmd:
 confirm()
 
 for c in cmd:
-   os.system(c)
+    os.system(c)
 

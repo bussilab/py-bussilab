@@ -45,8 +45,8 @@ def _heavy_part(logW: np.ndarray,
                 traj: np.ndarray,
                 l: np.ndarray,
                 weights: bool = False):
-    logW_ME = logW-np.dot(traj, l) # maxent correction
-    shift_ME = np.max(logW_ME) # shift to avoid overflow
+    logW_ME = logW-np.dot(traj, l)  # maxent correction
+    shift_ME = np.max(logW_ME)  # shift to avoid overflow
     W_ME = np.exp(logW_ME - shift_ME)
     # Partition function:
     Z = np.sum(W_ME)
@@ -222,13 +222,13 @@ def maxent(
 
 
     # to fix these, use np.asarray, only available in numpy 1.20.0
-    fullreference = np.array(fullreference) # type: ignore
-    bounds = np.array(bounds) # type: ignore
-    box_const = np.array(box_const) # type: ignore
+    fullreference = np.array(fullreference)  # type: ignore
+    bounds = np.array(bounds)  # type: ignore
+    box_const = np.array(box_const)  # type: ignore
 
     nit = 0
     def _callback(par):
-        nonlocal nit # needed to access outer scope
+        nonlocal nit  # needed to access outer scope
         nit += 1
         if verbose:
             sys.stderr.write("MAXENT: iteration "+str(nit)+"\n")
@@ -241,14 +241,14 @@ def maxent(
 
     # logZ0 is not changing during minimization and is computed once.
     # it is only needed to compute Gamma
-    shift0 = np.max(logW) # shift to avoid overflow
+    shift0 = np.max(logW)  # shift to avoid overflow
     W0 = np.exp(logW - shift0)
     logZ0 = np.log(np.sum(W0)) + shift0
 
     # function to be minimized
     def func(l):
 
-        l = np.array(l) # ensure array
+        l = np.array(l)  # ensure array
 
         assert len(l) == len(fullreference)
 

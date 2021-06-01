@@ -7,7 +7,7 @@ ANN can be constructed with `cuda=True`, in which case it will use cudamat.
 import numpy as np
 
 try:
-    import cudamat as cm # pylint: disable=import-error
+    import cudamat as cm  # pylint: disable=import-error
     _HAS_CUDAMAT=True
 except ModuleNotFoundError:
     _HAS_CUDAMAT=False
@@ -193,8 +193,8 @@ class ANN:
             raise TypeError("Incorrectly shaped x")
 
         # allocate hidden nodes
-        h=[None]*len(self.layers) # hidden nodes
-        ht=[None]*len(self.layers) # non-linear functions of hidden nodes
+        h=[None]*len(self.layers)  # hidden nodes
+        ht=[None]*len(self.layers)  # non-linear functions of hidden nodes
 
         if not self.cuda:
             # forward propagation
@@ -299,8 +299,8 @@ class ANN:
         vec=x.shape[0]
 
         # allocate hidden nodes
-        h=[None]*len(self.layers) # hidden nodes
-        ht=[None]*len(self.layers) # non-linear functions of hidden nodes
+        h=[None]*len(self.layers)  # hidden nodes
+        ht=[None]*len(self.layers)  # non-linear functions of hidden nodes
 
         # allocate derivatives
         df_dW=[None]*len(self.layers)
@@ -352,7 +352,7 @@ class ANN:
                 self._cu_dactivation(h[i+1])
                 df_db[i]=cm.dot(df_db[i+1],self.cu_W[i+1].transpose())
                 df_db[i].mult(h[i+1])
-                df_db_host[i]=df_db[i].asarray() # should be moved to CPU anyway
+                df_db_host[i]=df_db[i].asarray()  # should be moved to CPU anyway
  
                 # this is still on CPU, but could be done on GPU avoiding the movement of ht[i]
                 df_dW[i]=ht[i].asarray()[:,:,np.newaxis]*df_db_host[i][:,np.newaxis,:]

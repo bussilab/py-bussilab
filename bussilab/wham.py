@@ -300,6 +300,6 @@ def wham(bias,
     if verbose:
         sys.stderr.write("WHAM: end")
 
-    logW = cast(np.ndarray, logW) # to avoid mypy error
+    logW = cast(np.ndarray, logW)  # to avoid mypy error
 
     return WhamResult(logW=logW, logZ=np.log(Z)-shifts0, nit=nit, nfev=nfev, eps=eps)

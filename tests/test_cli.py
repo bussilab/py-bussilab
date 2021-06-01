@@ -22,13 +22,13 @@ class Test(unittest.TestCase):
         with self.assertRaises(OSError):
             cli.cli("wham -b not_existing_file")
 
-        self.assertEqual(cli.cli(["wham", "-b"], throws_on_parser_errors=False), 2) # here argument is missing
+        self.assertEqual(cli.cli(["wham", "-b"], throws_on_parser_errors=False), 2)  # here argument is missing
 
         with self.assertRaises(TypeError):
-            cli.cli(["wham", "-b"]) # here argument is missing
+            cli.cli(["wham", "-b"])  # here argument is missing
 
         with self.assertRaises(OSError):
-            cli.cli(["wham", "-b", ""]) # "" is a file with no name
+            cli.cli(["wham", "-b", ""])  # "" is a file with no name
 
         with self.assertRaises(NotImplementedError):
             cli._list_submodules()

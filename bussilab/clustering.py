@@ -48,12 +48,12 @@ def max_clique(adj,weights=None):
 
 def daura(adj,weights=None):
     """Same algorithm as in Daura et al, Angew. Chemie (1999)."""
-    adj=adj.copy() # take a copy (adj is modified while clustering)
+    adj=adj.copy()  # take a copy (adj is modified while clustering)
     indexes=np.arange(len(adj))
     clusters=[]
     ww=[]
     if weights is not None:
-        weights = weights.copy() # take a copy (weights is modified while clustering)
+        weights = weights.copy()  # take a copy (weights is modified while clustering)
     while len(indexes)>0:
         if weights is not None:
             d=np.sum(adj*weights,axis=0)

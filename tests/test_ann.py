@@ -149,7 +149,7 @@ if _has_cudamat:
             for i in range(len(d[1])):
                 for j in range(len(d[1][i])):
                     self.assertAlmostEqual(d[1][i,j],dc[1][i,j],places=5)
-    
+
         def test_ann1(self):
             self._test_layers([10])
         def test_ann2(self):
@@ -160,13 +160,13 @@ if _has_cudamat:
             self._test_layers([10,8,6,4,2])
 
         def test_ann1r(self):
-            self._test_layers([10],activation='relu') # might fail due to relu discontinuity
+            self._test_layers([10],activation='relu')  # might fail due to relu discontinuity
         def test_ann2r(self):
-            self._test_layers([10,10],activation='relu') # might fail due to relu discontinuity
+            self._test_layers([10,10],activation='relu')  # might fail due to relu discontinuity
         def test_ann3r(self):
-            self._test_layers([10,10,10],activation='relu') # might fail due to relu discontinuity
+            self._test_layers([10,10,10],activation='relu')  # might fail due to relu discontinuity
         def test_ann4r(self):
-            self._test_layers([10,8,6,4],activation='relu') # might fail due to relu discontinuity
+            self._test_layers([10,8,6,4],activation='relu')  # might fail due to relu discontinuity
 
         def test_ann1_vec(self):
             self._test_layers_vec([10])
@@ -178,13 +178,13 @@ if _has_cudamat:
             self._test_layers_vec([10,8,6,4,2])
 
         def test_ann1r_vec(self):
-            self._test_layers_vec([10],activation='relu') # might fail due to relu discontinuity
+            self._test_layers_vec([10],activation='relu')  # might fail due to relu discontinuity
         def test_ann2r_vec(self):
-            self._test_layers_vec([10,10],activation='relu') # might fail due to relu discontinuity
+            self._test_layers_vec([10,10],activation='relu')  # might fail due to relu discontinuity
         def test_ann3r_vec(self):
-            self._test_layers_vec([10,10,10],activation='relu') # might fail due to relu discontinuity
+            self._test_layers_vec([10,10,10],activation='relu')  # might fail due to relu discontinuity
         def test_ann4r_vec(self):
-            self._test_layers_vec([10,8,6,4],activation='relu') # might fail due to relu discontinuity
+            self._test_layers_vec([10,8,6,4],activation='relu')  # might fail due to relu discontinuity
 
         def backprop(self,layers=None,activation="softplus"):
             if layers is None:
@@ -197,7 +197,7 @@ if _has_cudamat:
             state=ann.forward(traj)
             der=ann.backward_par(state.f,state)
             self.assertAlmostEqual(np.sum((reference-der)**2),0.0,places=5)
-     
+
         def test_backprop1(self):
             self.backprop([10,10,10,10],"softplus")
         def test_backprop2(self):

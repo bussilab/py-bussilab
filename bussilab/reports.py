@@ -5,14 +5,14 @@ from typing import Optional, List
 from . import coretools
 
 def _parse_cpu(line: List[str]):
-#  us, user    : time running un-niced user processes
-#  sy, system  : time running kernel processes
-#  ni, nice    : time running niced user processes
-#  id, idle    : time spent in the kernel idle handler
-#  wa, IO-wait : time waiting for I/O completion
-#  hi : time spent servicing hardware interrupts
-#  si : time spent servicing software interrupts
-#  st : time stolen from this vm by the hypervisor
+    #  us, user    : time running un-niced user processes
+    #  sy, system  : time running kernel processes
+    #  ni, nice    : time running niced user processes
+    #  id, idle    : time spent in the kernel idle handler
+    #  wa, IO-wait : time waiting for I/O completion
+    #  hi : time spent servicing hardware interrupts
+    #  si : time spent servicing software interrupts
+    #  st : time stolen from this vm by the hypervisor
     field = ["us", "sy", "ni", "id", "wa", "hi", "si", "st"]
     result = {}
     for i in range(1,len(line)):

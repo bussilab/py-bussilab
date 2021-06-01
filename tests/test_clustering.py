@@ -32,7 +32,7 @@ class TestClustering(TestCase):
         dist=distance.squareform(distance.pdist(data))
         adj=np.int_(dist<500)
         cl=daura(adj)
-        self.assertEqual(adj.shape,dist.shape) # check that adj has not been resized
+        self.assertEqual(adj.shape,dist.shape)  # check that adj has not been resized
         self.assertEqual(cl.method,"daura")
         self.assertEqual(cl.weights,[32, 13, 5])
         ref=[[31, 30, 28, 29, 27, 25, 26, 23, 24, 22, 20, 21, 18, 19, 16, 17, 13, 14, 15, 10, 11, 12, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4], [38, 39, 40, 41, 42, 43, 44, 37, 35, 36, 34, 33, 32], [45, 48, 49, 46, 47]]
@@ -66,8 +66,8 @@ class TestClustering(TestCase):
         dist=distance.squareform(distance.pdist(data))
         adj=np.int_(dist<3)
         cl=daura(adj,weights)
-        self.assertEqual(adj.shape,dist.shape) # check that adj has not been resized
-        self.assertEqual(weights.shape,(len(dist),)) # check that adj has not been resized
+        self.assertEqual(adj.shape,dist.shape)  # check that adj has not been resized
+        self.assertEqual(weights.shape,(len(dist),))  # check that adj has not been resized
         self.assertEqual(cl.method,"daura")
         self.assertEqual(cl.weights,[3,2])
         ref=[[0],[1,2]]

@@ -26,11 +26,11 @@ def _run(cron_file: str,
         else:
             config=coretools.config()
         if "cron" in config:
-           for i in range(len(config["cron"])):
-              args = [sys.executable, "-c", config["cron"][i]]
-              timeout=_time_to_next_event(period)//2+1
-              print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
-              subprocess.run(args, timeout=timeout)
+            for i in range(len(config["cron"])):
+               args = [sys.executable, "-c", config["cron"][i]]
+               timeout=_time_to_next_event(period)//2+1
+               print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
+               subprocess.run(args, timeout=timeout)
     except Exception as e:
         print(e)
         print()

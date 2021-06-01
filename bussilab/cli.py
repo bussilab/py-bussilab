@@ -209,7 +209,7 @@ def group(title: Union[str, Callable, None] = None,
         msg = "description can only be used for non exclusive groups"
         raise TypeError(msg)
     if exclusive and required is None:
-        required = False # default for add_mutually_exclusive_group
+        required = False  # default for add_mutually_exclusive_group
     def call(p):
         if exclusive:
             p.append(p[-1].add_mutually_exclusive_group(required=required))
@@ -244,7 +244,7 @@ def endgroup(f: Optional[Callable] = None):
 
 def cli(arguments: Union[str, List[str]] = "",
         *,
-        prog: Optional[str] = "", # None is used to imply sys.argv[0]
+        prog: Optional[str] = "",  # None is used to imply sys.argv[0]
         use_argcomplete: bool = False,
         throws_on_parser_errors: bool = True
        ) -> Optional[int]:

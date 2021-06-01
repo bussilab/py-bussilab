@@ -65,11 +65,11 @@ import os
 import socket
 
 try:
-# slack client 3
+    # slack client 3
     from slack_sdk import WebClient
     from slack_sdk.web.base_client import SlackResponse
 except ModuleNotFoundError:
-# slack client 2
+    # slack client 2
     from slack import WebClient
     from slack.web.base_client import SlackResponse
 
@@ -77,7 +77,7 @@ from . import coretools
 
 from typing import cast
 
-_organization="bussilab" # this is hardcoded for now
+_organization="bussilab"  # this is hardcoded for now
 
 def notify(message: str = "",
            channel: str = None,
@@ -185,8 +185,8 @@ def notify(message: str = "",
             organization = re.sub("^https://","", re.sub(r"\.slack\.com/archives/.*","",channel))
             channel=re.sub(r"^https://.*\.slack\.com/archives/","",channel)
         else:
-        # this is needed to set organization correctly (so as to build the
-        # proper link) when passing the name of a channel
+            # this is needed to set organization correctly (so as to build the
+            # proper link) when passing the name of a channel
             organization = _organization
 
     client = WebClient(token=token)
@@ -198,7 +198,7 @@ def notify(message: str = "",
         blocks.append(
            {
                "type": "section",
-               "text": { "type": "mrkdwn", "text": "*" + title + "*"},
+               "text": {"type": "mrkdwn", "text": "*" + title + "*"},
            }
            )
 
@@ -226,7 +226,7 @@ def notify(message: str = "",
         blocks.append({
                           "type": "context",
                           "elements": [
-                              { # type: ignore
+                              {  # type: ignore
                                 "type": "mrkdwn",
                                 "text": h
                               }

@@ -256,8 +256,8 @@ def _process_macports(macports: _List[str]) -> _List[str]:
     import re
     l = []
     for d in _required_:
-        d = re.sub(">.*$", "", d) # remove versions
-        d = re.sub("^pyyaml$", "yaml", d) # fix yaml
+        d = re.sub(">.*$", "", d)  # remove versions
+        d = re.sub("^pyyaml$", "yaml", d)  # fix yaml
         l.append("py-" + d)
     return l
 
@@ -410,5 +410,5 @@ if _sys.version_info >= (3, 7):
         raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
     def __dir__():
-# if later on we support __all__, globals() should be replaced by __all__
+        # if later on we support __all__, globals() should be replaced by __all__
         return sorted(list(globals()) + list_submodules(_hidden=True))
