@@ -96,19 +96,30 @@ jobs:
       run: |
         curl -LO https://raw.githubusercontent.com/GiovanniBussi/macports-ci/master/macports-ci
         source ./macports-ci install
+    - name: Setup environment
+      run: |
+        awk '{
+          if($1=="_macports_py_" && $2=="=") {
+            a=$3;
+            gsub("\"","",a);
+            print("\"MACPORTS_PY=" a "\"")
+            gsub("\\.","",a);
+            print("\"MACPORTS_PY_ND=" a "\"")
+          }
+        }' bussilab/__init__.py >> $GITHUB_ENV
     - name: Install package
       run: |
-        sudo port install python38 py38-pip py38-setuptools
-        pip-3.8 install --user --no-deps .
-        PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
-        sudo port install $(bussilab required --macports --pyver 38)
+        sudo port install python$MACPORTS_PY_ND py$MACPORTS_PY_ND-pip py$MACPORTS_PY_ND-setuptools
+        pip-$MACPORTS_PY install --user --no-deps .
+        PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
+        sudo port install $(bussilab required --macports --pyver $MACPORTS_PY_ND)
     - name: Run tests
       run: |
-        PATH="$(python3.8 -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
+        PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
         bussilab check --import
-        sudo port install py38-pytest
+        sudo port install py$MACPORTS_PY_ND-pytest
         # ignore BUSSILAB_TEST_NOTIFY_TOKEN since it does not work with macports for some reason
-        pytest-3.8 -v
+        pytest-$MACPORTS_PY -v
 
   conda:
 
