@@ -65,6 +65,7 @@ class ANN:
                 self._cu_dactivation=_drelu_cudamat
             else:
                 raise ValueError("Unknown activation type: "+activation)
+        self.activation=activation
         self.layers=layers
         self.W=[]
         self.b=[]
@@ -370,3 +371,51 @@ class ANN:
         return self.deriv(x)
     def derparVec(self,x):
         return self.derpar(x)
+
+    def dumpPlumed(self,path,style="ann",prefix=None,arguments=None):
+        if style == "ann":
+            with open(path,"w") as f:
+                for i in range(len(self.W)):
+                    ni=self.W[i].shape[0]
+                    no=self.W[i].shape[1]
+                    print("#! FIELDS "+" ".join(["w"+str(j) for j in range(ni)]),file=f)
+                    for j in range(no):
+                        print(' '.join(map(str, self.W[i][:,j])),file=f)
+                    print("#! FIELDS "+" ".join(["b"+str(j) for j in range(no)]),file=f)
+                    print(' '.join(map(str, self.b[i])),file=f)
+                    if i+1 < len(self.W):
+                        print("#! FIELDS "+" ".join(["activation"+str(j) for j in range(no)]),file=f)
+                        print(' '.join([self.activation]*no),file=f)
+        elif style == "combine":
+            if not prefix:
+                raise ValueError("with style combine, prefix is needed")
+            if not arguments:
+                raise ValueError("with style combine, arguments is needed")
+            with open(path,"w") as f:
+                if self.activation=="softplus":
+                    func="log(1+exp(-abs(x)))+max(x,0)"
+                else:
+                    raise ValueError("only activation softplus supported")
+                print(prefix+"_one: CONSTANT VALUE=1.0",file=f)
+                for i in range(len(self.W)):
+                    ni=self.W[i].shape[0]
+                    no=self.W[i].shape[1]
+                    for j in range(no):
+                        coeff=','.join(map(str, self.W[i][:,j]))
+                        coeff+=","+str(self.b[i][j])
+                        if i+1<len(self.W):
+                            result="{}_h_{}_{}".format(prefix,i,j)
+                        else:
+                            result="{}_result".format(prefix)
+                        print("{}: COMBINE ...".format(result),file=f)
+                        print("  PERIODIC=NO",file=f)
+                        print("  COEFFICIENTS={}".format(coeff),file=f)
+                        print("  ARG={},{}_one".format(arguments,prefix),file=f)
+                        print("...",file=f)
+                    if i+1<len(self.W):
+                        for j in range(no):
+                            print("{}_ht_{}_{}: CUSTOM PERIODIC=NO ARG={}_h_{}_{} FUNC={}".format(prefix,i,j,prefix,i,j,func),file=f)
+                        arguments=",".join(["{}_ht_{}_{}".format(prefix,i,j) for j in range(no)])
+        else:
+            raise ValueError("unknown style")
+
