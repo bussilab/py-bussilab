@@ -398,7 +398,6 @@ class ANN:
                     raise ValueError("only activation softplus supported")
                 print(prefix+"_one: CONSTANT VALUE=1.0",file=f)
                 for i in range(len(self.W)):
-                    ni=self.W[i].shape[0]
                     no=self.W[i].shape[1]
                     for j in range(no):
                         coeff=','.join(map(str, self.W[i][:,j]))
