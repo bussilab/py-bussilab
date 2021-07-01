@@ -45,6 +45,10 @@ def workstations(wks: Optional[List] = None, short: bool = True):
             except KeyError:
                 disk = "/scratch"
             try:
+                tmpdisk = w['tmpdisk']
+            except KeyError:
+                tmpdisk = "/var"
+            try:
                 nvidia = w['nvidia']
             except KeyError:
                 nvidia = 'True'
@@ -53,6 +57,7 @@ def workstations(wks: Optional[List] = None, short: bool = True):
 
         cmd = "top -n 1 -b | head -n 3 | tail -n 1;"
         cmd += "df -h " + disk + " | tail -n 1;"
+        cmd += "df -h " + tmpdisk + " | tail -n 1;"
 
         if nvidia != "False":
             cmd += "nvidia-smi  | grep Default"
@@ -76,7 +81,7 @@ def workstations(wks: Optional[List] = None, short: bool = True):
             if cpu_fields["id"] + cpu_fields["us"] + cpu_fields["ni"] < 80:
                 msg += "(:warning: id+us+ni<80)"
             if nvidia != 'False':
-                for j in range(2,len(out)-1):
+                for j in range(3,len(out)-1):
                     gpu_fields = out[j].split()
                     gpu_usage = 0.0
                     for i in range(1,len(gpu_fields)):
@@ -91,6 +96,7 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                     else:
                         msg += " :running:"
             msg += " disk"
+            # scratch
             disk_fields = out[1].split()
             disk_occupation = float(disk_fields[-2].strip("%"))
             if disk_occupation < 80:
@@ -101,6 +107,11 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                 msg += " :worried:"
             else:
                 msg += " :scream:"
+            # var
+            disk_fields = out[2].split()
+            disk_occupation = float(disk_fields[-2].strip("%"))
+            if disk_occupation > 70:
+                msg += " (:warning: /var >70%)"
             msg += "\n"
             if not short:
                 msg+= "\n".join(out)+"\n\n"
