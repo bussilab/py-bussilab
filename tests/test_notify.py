@@ -35,9 +35,5 @@ if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
             with self.assertRaises(TypeError):
                 notify("unittest1", token=token, delete="incorrect-url")
 
-            url=notify("test upload",file=os.path.realpath(__file__), token=token)
-            notify(delete=url, token=token)
-
-
 if __name__ == "__main__":
     unittest.main()

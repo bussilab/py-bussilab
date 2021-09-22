@@ -28,12 +28,6 @@ Notice that the message is optional. Even with an empty message, the footer
 will allow you to reconstruct from which machine and directory the message was
 sent from. This might be sufficient for your goal.
 
-Alternatively, you can upload a file:
-```python
-from bussilab.notify import notify
-notify("text here",file="/path/to/file")
-```
-
 You can also indicate a specific channel for the notification using the
 `channel` option:
 ```bash
@@ -85,23 +79,6 @@ from typing import cast
 
 _organization="bussilab"  # this is hardcoded for now
 
-def _parse_url(url: str):
-    if re.match(r"^https://.*\.slack\.com/archives/.*",url):
-        organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
-        url=re.sub(r"^https://.*\.slack\.com/archives/","",url)
-        url=url[:-6]+"."+url[-6:]
-        channel=re.sub("/p.*","",url)
-        ts=re.sub(".*/p","",url)
-        return { "type":"message", "ts":ts, "channel":channel, "organization":organization }
-    if re.match(r"^https://.*\.slack\.com/files/.*",url):
-        organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/files/.*","",url))
-        url=re.sub(r"^https://.*\.slack\.com/files/","",url)
-        user=re.sub("/.*","",url)
-        id=re.sub("^"+user+"/","",url)
-        id=re.sub("/.*","",id)
-        return { "type":"file", "id":id, "user":user, "organization":organization }
-    return {}
-
 def notify(message: str = "",
            channel: str = None,
            *,
@@ -110,7 +87,6 @@ def notify(message: str = "",
            title: str = "",
            footer: bool = True,
            type: str = "mrkdwn",
-           file: str = "",
            token: str = None):
     """Tool to send notifications to Slack.
 
@@ -180,24 +156,26 @@ def notify(message: str = "",
     if update and delete:
         raise TypeError("")
 
-    if len(file)>0 and update:
-        raise TypeError("")
-
     config = None
     if token is None:
         config = coretools.config()
         token=config["notify"]["token"]
 
     if update:
-        update_dict=_parse_url(update)
-        if not update_dict:
-           raise TypeError("")
-        organization=update_dict["organization"]
+        if not re.match(r"^https://.*\.slack\.com/archives/.*",update):
+            raise TypeError("")
+        organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",update))
+        update=re.sub(r"^https://.*\.slack\.com/archives/","",update)
+        update=update[:-6]+"."+update[-6:]
+        channel=re.sub("/p.*","",update)
+        ts=re.sub(".*/p","",update)
     elif delete:
-        delete_dict=_parse_url(delete)
-        if not delete_dict:
-           raise TypeError("")
-        organization=delete_dict["organization"]
+        if not re.match(r"^https://.*\.slack\.com/archives/.*",delete):
+            raise TypeError("")
+        delete=re.sub(r"^https://.*\.slack\.com/archives/","",delete)
+        delete=delete[:-6]+"."+delete[-6:]
+        channel=re.sub("/p.*","",delete)
+        ts=re.sub(".*/p","",delete)
     else:
         if channel is None:
             if config is None:
@@ -270,21 +248,13 @@ def notify(message: str = "",
 
     if update:
         response = client.chat_update(
-                   channel=update_dict["channel"],
+                   channel=channel,
                    text=text,
                    blocks=blocks,
-                   ts=update_dict["ts"])
-    elif delete and delete_dict["type"]=="message":
-        client.chat_delete(channel=delete_dict["channel"], ts=delete_dict["ts"])
+                   ts=ts)
+    elif delete:
+        client.chat_delete(channel=channel, ts=ts)
         return ""
-    elif delete and delete_dict["type"]=="file":
-        client.files_delete(file=delete_dict["id"])
-        return ""
-    elif len(file)>0:
-        file_title = title
-        if len(file_title) == 0:
-            file_title=message
-        response = client.files_upload(file=file,title=file_title,channels=channel)
     else:
         response = client.chat_postMessage(
                    blocks=blocks,
@@ -293,9 +263,4 @@ def notify(message: str = "",
 
     response = cast(SlackResponse, response)
 
-    if len(file)==0:
-        url="https://" + organization + ".slack.com/archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
-    else:
-        url="https://" + organization + ".slack.com/files/" + response["file"]["user"] + "/" + response["file"]["id"]
-
-    return url
+    return "https://" + organization + ".slack.com/archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
