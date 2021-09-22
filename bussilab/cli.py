@@ -542,7 +542,8 @@ def _pip_upgrade_all(**kargs):
 @arg("-u","--update", help="url of the message to be updated")
 @arg("-d","--delete", help="url of the message to be deleted")
 @endgroup
-@arg("-t","--title", help="url of the message to be deleted")
+@arg("-f","--file", help="path to a file to be uploaded (incompatible with -u and -d)")
+@arg("-t","--title", help="title of the message")
 @arg("--type", help="'plain_text' or 'mrkdwn'", default='mrkdwn')
 @arg("--token", help="token (check ~/.bussilabrc by default")
 def _notify(**kargs):
