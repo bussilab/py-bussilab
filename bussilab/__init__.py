@@ -250,7 +250,7 @@ _required_ = [
     'typing_extensions'
 ]
 
-_macports_py_ = "3.8"
+_macports_py_ = "3.9"
 
 def _process_macports(macports: _List[str]) -> _List[str]:
     import re
