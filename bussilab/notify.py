@@ -236,21 +236,21 @@ def notify(message: str = "",
            )
 
     if footer:
-        h = ""
+        footer_text = ""
         if update:
-            h += "Updated"
+            footer_text += "Updated"
         else:
-            h += "Sent"
-        h += " by "+ os.environ['USER']
-        h += " at " + socket.gethostname() +'\n'
-        h += "pwd: " + os.getcwd() + '\n'
-        h += '{}'.format(datetime.datetime.now())
+            footer_text += "Sent"
+        footer_text += " by "+ os.environ['USER']
+        footer_text += " at " + socket.gethostname() +'\n'
+        footer_text += "pwd: " + os.getcwd() + '\n'
+        footer_text += '{}'.format(datetime.datetime.now())
         blocks.append({
                           "type": "context",
                           "elements": [
                               {  # type: ignore
                                 "type": "mrkdwn",
-                                "text": h
+                                "text": footer_text
                               }
                           ]
                       })
@@ -281,9 +281,13 @@ def notify(message: str = "",
         client.files_delete(file=delete_dict["id"])
         return ""
     elif len(file)>0:
-        file_title = title
-        if len(file_title) == 0:
-            file_title=message
+        file_title = ""
+        if len(title)>0:
+            file_title += title + " "
+        if len(message)>0:
+            file_title += message +" "
+        if footer:
+            file_title += footer_text
         response = client.files_upload(file=file,title=file_title,channels=channel)
     else:
         response = client.chat_postMessage(
