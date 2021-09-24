@@ -116,7 +116,7 @@ class TestWham(TestCase):
             self.assertAlmostEqual(w.logW[1]-w.logW[0],diffW)
             self.assertAlmostEqual(w.logZ[1]-w.logZ[0],0.0)
 
-    def rest_wham_restart(self):
+    def test_wham_restart(self):
         import numpy as np
         w0=wham(((0,10),(-4,11)),T=0.8)
         self.assertGreaterEqual(w0.nit,20)
