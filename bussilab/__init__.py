@@ -90,7 +90,9 @@ environment variable. Alternatively, if the `bussilab` script is not in your
 ### Setting autocompletion
 
 In order to benefit from autocompletion for the executable script you should
-add the following command to your `.bashrc` file:[^macports_auto]
+install the [argcomplete](https://github.com/kislyuk/argcomplete) package
+(with pip, conda, or macports)
+and add the following command to your `.bashrc` file:[^macports_auto]
 ```bash
 eval "$(register-python-argcomplete bussilab)"
 ```
