@@ -180,7 +180,7 @@ def notify(message: str = "",
     if update and delete:
         raise TypeError("")
 
-    if len(file)>0 and update:
+    if len(file)>0 and (update or delete):
         raise TypeError("")
 
     config = None
