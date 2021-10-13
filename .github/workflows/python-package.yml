@@ -39,9 +39,7 @@ jobs:
         pip install pytest pytest-cov
         pytest -v
         NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab
-        curl -Os https://uploader.codecov.io/latest/linux/codecov
-        chmod +x codecov
-        ./codecov
+        bash <(curl -s https://codecov.io/bash)
     - name: Pyflakes
       run: |
         pip install --upgrade pyflakes
