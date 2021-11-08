@@ -441,6 +441,7 @@ def _wham(**args):
 @arg("--python-exec", help="python executable", default="")
 @arg("-S", "--sockname", help="screen sockname", default="jupyter-server")
 @arg("--no-screen", help="do not run screen", action="store_true")
+@arg("--keep-ld-library-path", help="propagate LD_LIBRARY_PATH through screen", action="store_true")
 @arg("--detach", help="detach screen", action="store_true")
 def _jrun(**kargs):
     """

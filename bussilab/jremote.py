@@ -27,6 +27,7 @@ def run_server(dry_run: bool = False,
                port: int = 0,
                screen_cmd: str = "screen",
                no_screen: bool = False,
+               keep_ld_library_path: bool = False,
                python_exec: str = "",
                sockname: str = "jupyter-server",
                detach: bool = False):
@@ -47,6 +48,10 @@ def run_server(dry_run: bool = False,
         if detach:
             cmd += " -d"
         cmd += " -m -S " + sockname + "-" + str(port) + " "
+    if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
+        cmd += "env LD_LIBRARY_PATH='"
+        cmd += os.environ["LD_LIBRARY_PATH"]
+        cmd += "' "
     cmd += python_exec + " -m jupyter notebook --no-browser "
     cmd += "--port=" + str(port)
     print("cmd:", cmd)
