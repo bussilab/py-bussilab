@@ -36,10 +36,14 @@ def workstations(wks: Optional[List] = None, short: bool = True):
             name = w
             url = w
             disk = "/scratch"
+            tmpdisk = "/var"
             nvidia = 'True'
         elif isinstance(w, dict):
-            name = w['name']
             url = w['url']
+            try:
+                name = w['name']
+            except KeyError:
+                name = url
             try:
                 disk = w['disk']
             except KeyError:
@@ -72,23 +76,23 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                timeout = 20,
                check = True).stdout.split('\n')
             cpu_fields = _parse_cpu(out[0].split())
+            msg += " CPU"
             if cpu_fields["id"] > 75:
-                msg += " CPU :sleeping:"
+                msg += " :sleeping:"
             elif cpu_fields["id"] > 50:
-                msg += " CPU :walking:"
+                msg += " :walking:"
             else:
-                msg += " CPU :running:"
+                msg += " :running:"
             if cpu_fields["id"] + cpu_fields["us"] + cpu_fields["ni"] < 80:
                 msg += "(:warning: id+us+ni<80)"
             if nvidia != 'False':
+                msg += " GPU"
                 for j in range(3,len(out)-1):
                     gpu_fields = out[j].split()
                     gpu_usage = 0.0
                     for i in range(1,len(gpu_fields)):
                         if re.match("^Default",gpu_fields[i]):
                             gpu_usage = float(gpu_fields[i-1].strip("%"))
-                    if j<= 2:
-                        msg += " GPU"
                     if gpu_usage < 25:
                         msg += " :sleeping:"
                     elif gpu_usage < 50:
@@ -98,20 +102,20 @@ def workstations(wks: Optional[List] = None, short: bool = True):
             msg += " disk"
             # scratch
             disk_fields = out[1].split()
-            disk_occupation = float(disk_fields[-2].strip("%"))
+            disk_occupation = int(disk_fields[-2].strip("%"))
             if disk_occupation < 80:
                 msg += " :smile:"
             elif disk_occupation < 90:
                 msg += " :neutral_face:"
             elif disk_occupation < 99:
-                msg += " :worried:"
+                msg += " :worried:  ({}%)".format(disk_occupation)
             else:
-                msg += " :scream:"
+                msg += " :scream: ({}%)".format(disk_occupation)
             # var
             disk_fields = out[2].split()
-            disk_occupation = float(disk_fields[-2].strip("%"))
+            disk_occupation = int(disk_fields[-2].strip("%"))
             if disk_occupation > 70:
-                msg += " (:warning: /var >70%)"
+                msg += " (:warning: /var {}%)".format(disk_occupation)
             msg += "\n"
             if not short:
                 msg+= "\n".join(out)+"\n\n"
