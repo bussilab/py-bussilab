@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [3.6, 3.7, 3.8, 3.9]
+        python-version: ["3.6", "3.7", "3.8", "3.9", "3.10"]
 
     steps:
     - uses: actions/checkout@v2
@@ -68,13 +68,13 @@ jobs:
         cp examples/*html doc/examples/
         ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
     - name: Push doc
-      if: ${{ matrix.python-version == '3.9' && github.ref == 'refs/heads/master' }}
+      if: ${{ matrix.python-version == '3.10' && github.ref == 'refs/heads/master' }}
       env:
         BUSSILABBOT_TOKEN: ${{ secrets.BUSSILABBOT_TOKEN }}
       run: |
         .ci/pushdoc
     - name: Deploy PyPI
-      if: ${{ matrix.python-version == '3.9' && startsWith(github.ref, 'refs/tags/') }}
+      if: ${{ matrix.python-version == '3.10' && startsWith(github.ref, 'refs/tags/') }}
       env:
         BUSSILABBOT_PYPI: ${{ secrets.BUSSILABBOT_PYPI }}
       run: |
