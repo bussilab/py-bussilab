@@ -18,8 +18,10 @@ _pip_.
 If you manage your dependencies with pip and install packages in your home, use:
 ```bash
 pip install --user bussilab
-# make sure the bussilab script is in the path
-PATH="$PATH:$(python -c 'import site; print(site.USER_BASE + "/bin")')"
+# make sure the user installed packages can be imported, or add this to your python path
+export PYTHONPATH="$(python -c 'import site; print(site.USER_SITE)'):$PYTHONPATH"
+# make sure the bussilab script is your execution the path, or add this to your shell path
+export PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
 ```
 Required packages will be downloaded and installed automatically in your home.
 
@@ -51,8 +53,10 @@ You can do it as follows:
 sudo port install py_macports_pynd_-pip py_macports_pynd_-setuptools
 # install a bare version of the package, without dependencies
 pip-_macports_py_ install --user --no-deps bussilab
-# make sure the bussilab script is in the path
-PATH="$PATH:$(python_macports_py_ -c 'import site; print(site.USER_BASE + "/bin")')"
+# make sure the user installed packages can be imported, or add this to your python path
+export PYTHONPATH="$(python_macports_py_ -c 'import site; print(site.USER_SITE)'):$PYTHONPATH"
+# make sure the bussilab script is your execution the path, or add this to your shell path
+export PATH="$(python_macports_py_ -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
 # install the dependencies
 sudo port install $(bussilab required --macports --pyver _macports_pynd_)
 ```
@@ -67,12 +71,19 @@ A different python version should work as well.
 
 ### Checking the installation
 
-Once the package is installed you should be able to import the module from the python interpreter:
+Once the package is installed you should be able to import the module from the python interpreter:[^pythonpath]
 ```python
 import bussilab
 # this command can be used to check if all dependencies are in place:
 bussilab.import_submodules()
 ```
+
+[^pythonpath]:
+If you installed the package using the `--user` option, in order to be able to import
+the package you will have to make sure that the directory returned by the command
+`python -c 'import site; print(site.USER_SITE)'` is included in your python search path.
+If not, you can add it to the environment variable `PYTHONPATH`.
+
 You should also have access to an executable script that can be used from the command line:[^path]
 ```bash
 bussilab -h
