@@ -28,6 +28,8 @@ class TestCron(TestCase):
             cli("cron --cron-file cron.yml --period 2 --max-times 2 --no-screen")
             # make sure to give enough time to the asynchronous test
             time.sleep(7-(time.time()-now))
+            # this is for debugging, should be shown only if there is an error later
+            os.system("ls -ltr")
             self.assertEqualFile("cron.out")
             self.assertEqualFile("cron_screen.out")
             self.assertEqualFile("cron_screen2.out")
