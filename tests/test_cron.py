@@ -22,7 +22,7 @@ class TestCron(TestCase):
             except FileNotFoundError:
                 pass
             # this is asynchronous
-            cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach")
+            cli(["cron","--screen-cmd","screen -L -Logfile screenlog","--cron-file","cron_screen.yml","--period","2","--max-times","2","--detach"])
             now=time.time()
             # this is synchronous, and will take some time
             cli("cron --cron-file cron.yml --period 2 --max-times 2 --no-screen")
@@ -30,6 +30,7 @@ class TestCron(TestCase):
             time.sleep(7-(time.time()-now))
             # this is for debugging, should be shown only if there is an error later
             os.system("ls -ltr")
+            os.system("cat -n screenlog")
             self.assertEqualFile("cron.out")
             self.assertEqualFile("cron_screen.out")
             self.assertEqualFile("cron_screen2.out")
