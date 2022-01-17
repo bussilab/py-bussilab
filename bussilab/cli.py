@@ -563,7 +563,6 @@ def _notify(**kargs):
 @arg("--screen-cmd", help="screen command", default="screen")
 @arg("--no-screen", help="do not run screen", action="store_true")
 @arg("--keep-ld-library-path", help="propagate LD_LIBRARY_PATH through screen", action="store_true")
-@arg("--keep-python-path", help="propagate PYTHONPATH through screen", action="store_true")
 @arg("-S", "--sockname", help="screen sockname", default="cron")
 @arg("--python-exec", help="python executable", default="")
 @arg("--detach", help="detach screen", action="store_true")
