@@ -76,13 +76,13 @@ def cron(*,
             cmd += " -d"
         cmd += " -m -S " + sockname
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
-            cmd += "env LD_LIBRARY_PATH='"
+            cmd += " env LD_LIBRARY_PATH='"
             cmd += os.environ["LD_LIBRARY_PATH"]
-            cmd += "' "
+            cmd += "'"
         if keep_python_path and 'PYTHONPATH' in os.environ:
-            cmd += "env PYTHONPATH='"
+            cmd += " env PYTHONPATH='"
             cmd += os.environ["PYTHONPATH"]
-            cmd += "' "
+            cmd += "'"
         cmd +=" "+ python_exec + " -m bussilab cron --no-screen"
         cmd +=" --period " + str(period)
         if len(cron_file)>0:
