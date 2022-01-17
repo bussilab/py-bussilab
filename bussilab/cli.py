@@ -561,6 +561,7 @@ def _notify(**kargs):
 @arg("--quick-start", help="run immediately", action="store_true")
 @arg("--cron-file", help="path to cron file")
 @arg("--screen-cmd", help="screen command", default="screen")
+@arg("--screen-log", help="screen logfile (no logfile by default)", default="")
 @arg("--no-screen", help="do not run screen", action="store_true")
 @arg("--keep-ld-library-path", help="propagate LD_LIBRARY_PATH through screen", action="store_true")
 @arg("-S", "--sockname", help="screen sockname", default="cron")
