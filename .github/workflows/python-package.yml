@@ -112,7 +112,12 @@ jobs:
         sudo port install screen
         sudo port install python$MACPORTS_PY_ND py$MACPORTS_PY_ND-pip py$MACPORTS_PY_ND-setuptools
         echo PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" >> $GITHUB_ENV
-        echo PYTHONPATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_SITE)'):$PYTHONPATH" >> $GITHUB_ENV
+	# the re.sub() command is necessary since site.USER_SITE seems to be incorrectly set to
+        # /Users/runner/Library/Python/3.9/lib/python/site-packages
+        # instead of the correct
+        # /Users/runner/Library/Python/3.9/lib/python3.9/site-packages
+        # to be checked
+        echo PYTHONPATH="$(python$MACPORTS_PY -c 'import site; import re; print(re.sub("python/","python3.9/",site.USER_SITE))'):$PYTHONPATH" >> $GITHUB_ENV
     - name: Install package
       run: |
         pip-$MACPORTS_PY install --user --no-deps .
