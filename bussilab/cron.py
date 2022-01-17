@@ -42,6 +42,7 @@ def cron(*,
          screen_cmd: str = "screen",
          no_screen: bool = True,
          keep_ld_library_path: bool = False,
+         keep_python_path: bool = False,
          sockname: str = "cron",
          python_exec: str = "",
          detach: bool = False,
@@ -78,6 +79,10 @@ def cron(*,
             cmd += "env LD_LIBRARY_PATH='"
             cmd += os.environ["LD_LIBRARY_PATH"]
             cmd += "' "
+        if keep_python_path and 'PYTHONPATH' in os.environ:
+            cmd += "env PYTHONPATH='"
+            cmd += os.environ["PYTHONPATH"]
+            cmd += "' "
         cmd +=" "+ python_exec + " -m bussilab cron --no-screen"
         cmd +=" --period " + str(period)
         if len(cron_file)>0:
@@ -86,7 +91,7 @@ def cron(*,
             cmd += " --quick-start"
         if max_times is not None:
             cmd += " --max-times " + str(max_times)
-        print(cmd)
+        print("cmd:",cmd)
         ret=os.system(cmd)
         if ret != 0:
             raise RuntimeError("Execution of '" + cmd + "' failed. Perhaps '" + screen_cmd + "' command is not available on your system");
