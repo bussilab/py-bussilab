@@ -110,8 +110,8 @@ jobs:
     - name: Install requirements and set paths
       run: |
         sudo port install python$MACPORTS_PY_ND py$MACPORTS_PY_ND-pip py$MACPORTS_PY_ND-setuptools
-        PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" >> $GITHUB_ENV
-        PYTHONPATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_SITE)'):$PYTHONPATH" >> $GITHUB_ENV
+        echo PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" >> $GITHUB_ENV
+        echo PYTHONPATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_SITE)'):$PYTHONPATH" >> $GITHUB_ENV
     - name: Install package
       run: |
         pip-$MACPORTS_PY install --user --no-deps .
