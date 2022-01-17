@@ -87,4 +87,6 @@ def cron(*,
         if max_times is not None:
             cmd += " --max-times " + str(max_times)
         print(cmd)
-        os.system(cmd)
+        ret=os.system(cmd)
+        if ret != 0:
+            raise RuntimeError("Execution of '" + cmd + "' failed. Perhaps '" + screen_cmd + "' command is not available on your system");
