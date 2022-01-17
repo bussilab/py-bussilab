@@ -22,7 +22,7 @@ class TestCron(TestCase):
             except FileNotFoundError:
                 pass
             # this is asynchronous
-            cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog")
+            cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog --keep-python-path")
             now=time.time()
             # this is synchronous, and will take some time
             cli("cron --cron-file cron.yml --period 2 --max-times 2 --no-screen")
