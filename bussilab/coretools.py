@@ -161,10 +161,20 @@ class TestCase(unittest.TestCase):
         """
         if file2 is None:
             file2 = pathlib.PurePath(str(file1)+".ref")
-        with open(file1, "r") as f1:
-            with open(file2, "r") as f2:
-                self.assertEqual(f1.read(), f2.read())
 
+        try:
+            f1=open(file1, "r")
+        except FileNotFoundError:
+            self.fail("file " +file1 + " was not found")
+
+        try:
+            f2=open(file2, "r")
+        except FileNotFoundError:
+            self.fail("file " +file2 + " was not found")
+
+        with f1:
+            with f2:
+                self.assertEqual(f1.read(), f2.read())
 
 def config(path: Optional[os.PathLike] = None):
     if path is None:
