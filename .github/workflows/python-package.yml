@@ -109,7 +109,6 @@ jobs:
         }' bussilab/__init__.py >> $GITHUB_ENV
     - name: Install requirements and set paths
       run: |
-        sudo port install screen
         sudo port install python$MACPORTS_PY_ND py$MACPORTS_PY_ND-pip py$MACPORTS_PY_ND-setuptools
         echo PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" >> $GITHUB_ENV
         # the re.sub() command is necessary since site.USER_SITE seems to be incorrectly set to
@@ -155,7 +154,7 @@ jobs:
     - name: Test
       run: |
         source activate base
-        conda install -c conda-forge pytest pytest-cov screen
+        conda install -c conda-forge pytest pytest-cov
         pytest -v
     - name: Deploy conda
       if: ${{ startsWith(github.ref, 'refs/tags/') }}

@@ -21,8 +21,12 @@ class TestCron(TestCase):
                 os.remove("cron_screen2.out")
             except FileNotFoundError:
                 pass
+            try:
+                os.remove("screenlog.0")
+            except FileNotFoundError:
+                pass
             # this is asynchronous
-            cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog")
+            cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog.0")
             now=time.time()
             # this is synchronous, and will take some time
             cli("cron --cron-file cron.yml --period 2 --max-times 2 --no-screen")
@@ -39,7 +43,7 @@ class TestCron(TestCase):
             os.remove("cron.out")
             os.remove("cron_screen.out")
             os.remove("cron_screen2.out")
-            os.remove("screenlog")
+            os.remove("screenlog.0")
 
 if __name__ == "__main__":
     unittest.main()

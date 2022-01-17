@@ -75,7 +75,9 @@ def cron(*,
         if detach:
             cmd += " -d"
         if screen_log != "":
-            cmd += " -L -Logfile " + screen_log
+            cmd += " -L"
+            if screen_log != "screenlog.0":
+              cmd +=" -Logfile " + screen_log
         cmd += " -m -S " + sockname
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
             cmd += " env LD_LIBRARY_PATH='"
@@ -92,4 +94,7 @@ def cron(*,
         print("cmd:",cmd)
         ret=os.system(cmd)
         if ret != 0:
-            raise RuntimeError("Execution of '" + cmd + "' failed. Perhaps '" + screen_cmd + "' command is not available on your system");
+            msg = "Execution of '" + cmd + "' failed. Perhaps '" + screen_cmd + "' command is not available on your system."
+            if screen_log !="" and screen_log != "screenlog.0":
+                msg += " Notice that some screen versions do not support a logfile with a name different from screenlog.0"
+            raise RuntimeError(msg)
