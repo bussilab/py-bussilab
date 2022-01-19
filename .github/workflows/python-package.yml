@@ -150,45 +150,36 @@ jobs:
         python make_conda_recipe.py
         export CPU_COUNT=2
         conda-build -c conda-forge conda
+        rm -fr bussilab # make sure this is not imported by mistake in tests
     - name: Test 3.6
       run: |
         source activate base
-        conda create -n py36
+        conda create -n py36 -c conda-forge -c local python=3.6 py-bussilab pytest
         source activate py36
-        conda install -c conda-forge -c local py-bussilab
-        conda install -c conda-forge pytest
         pytest -v
     - name: Test 3.7
       run: |
         source activate base
-        conda create -n py37
+        conda create -n py37 -c conda-forge -c local python=3.7 py-bussilab pytest
         source activate py37
-        conda install -c conda-forge -c local py-bussilab
-        conda install -c conda-forge pytest
         pytest -v
     - name: Test 3.8
       run: |
         source activate base
-        conda create -n py38
+        conda create -n py38 -c conda-forge -c local python=3.8 py-bussilab pytest
         source activate py38
-        conda install -c conda-forge -c local py-bussilab
-        conda install -c conda-forge pytest
         pytest -v
     - name: Test 3.9
       run: |
         source activate base
-        conda create -n py39
+        conda create -n py39 -c conda-forge -c local python=3.9 py-bussilab pytest
         source activate py39
-        conda install -c conda-forge -c local py-bussilab
-        conda install -c conda-forge pytest
         pytest -v
     - name: Test 3.10
       run: |
         source activate base
-        conda create -n py310
+        conda create -n py310 -c conda-forge -c local python=3.10 py-bussilab pytest
         source activate py310
-        conda install -c conda-forge -c local py-bussilab
-        conda install -c conda-forge pytest
         pytest -v
     - name: Deploy conda
       if: ${{ startsWith(github.ref, 'refs/tags/') }}
