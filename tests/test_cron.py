@@ -35,7 +35,7 @@ class TestCron(TestCase):
             # this is for debugging, should be shown only if there is an error later
             os.system("ls -ltr")
             os.system("echo == screenlog ==")
-            os.system("cat screenlog")
+            os.system("cat screenlog.0")
             os.system("echo == end screenlog ==")
             self.assertEqualFile("cron.out")
             self.assertEqualFile("cron_screen.out")
