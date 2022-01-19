@@ -150,11 +150,45 @@ jobs:
         python make_conda_recipe.py
         export CPU_COUNT=2
         conda-build -c conda-forge conda
-        conda install -c conda-forge -c local py-bussilab ;
-    - name: Test
+    - name: Test 3.6
       run: |
         source activate base
-        conda install -c conda-forge pytest pytest-cov
+        conda create -n py36
+        source activate py36
+        conda install -c conda-forge -c local py-bussilab
+        conda install -c conda-forge pytest
+        pytest -v
+    - name: Test 3.7
+      run: |
+        source activate base
+        conda create -n py37
+        source activate py37
+        conda install -c conda-forge -c local py-bussilab
+        conda install -c conda-forge pytest
+        pytest -v
+    - name: Test 3.8
+      run: |
+        source activate base
+        conda create -n py38
+        source activate py38
+        conda install -c conda-forge -c local py-bussilab
+        conda install -c conda-forge pytest
+        pytest -v
+    - name: Test 3.9
+      run: |
+        source activate base
+        conda create -n py39
+        source activate py39
+        conda install -c conda-forge -c local py-bussilab
+        conda install -c conda-forge pytest
+        pytest -v
+    - name: Test 3.10
+      run: |
+        source activate base
+        conda create -n py310
+        source activate py310
+        conda install -c conda-forge -c local py-bussilab
+        conda install -c conda-forge pytest
         pytest -v
     - name: Deploy conda
       if: ${{ startsWith(github.ref, 'refs/tags/') }}
