@@ -394,7 +394,8 @@ def describe_submodule(module: str) -> str:
         raise ModuleNotFoundError(module)
     if module == "":
         module = "__init__"
-    M = ast.parse(''.join(open(os.path.dirname(__file__) + "/" + module + ".py")))
+    with open(os.path.dirname(__file__) + "/" + module + ".py") as f:
+        M = ast.parse(''.join(f))
     d = ast.get_docstring(M)
     if d is None:
         return ""
