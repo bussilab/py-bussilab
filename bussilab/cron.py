@@ -5,6 +5,7 @@ import datetime
 import subprocess
 from typing import Optional
 import yaml
+import re
 from . import coretools
 
 def _time_to_next_event(period: int):
@@ -15,6 +16,17 @@ def _time_to_next_event(period: int):
 
 def _now():
     return '{}'.format(datetime.datetime.now()) + ":"
+
+def _adjust_sockname(sockname,cron_file):
+    path_to_cron_file=""
+    if len(cron_file) > 0:
+        path_to_cron_file=cron_file
+    else:
+        path_to_cron_file=str(coretools.config_path())
+    path_to_cron_file=os.path.abspath(path_to_cron_file)
+    path_to_cron_file=re.sub("[^-A-Za-z0-9.]",":",path_to_cron_file)
+    sockname=re.sub("\(path to cron file\)",path_to_cron_file,sockname)
+    return sockname
 
 def _run(cron_file: str,
          period: int):
@@ -43,7 +55,7 @@ def cron(*,
          screen_log: str = "",
          no_screen: bool = True,
          keep_ld_library_path: bool = False,
-         sockname: str = "cron",
+         sockname: str = "(path to cron file):cron",
          python_exec: str = "",
          detach: bool = False,
          period: int = 3600,
@@ -78,7 +90,7 @@ def cron(*,
             cmd += " -L"
             if screen_log != "screenlog.0":
               cmd +=" -Logfile " + screen_log
-        cmd += " -m -S " + sockname
+        cmd += " -m -S " +  _adjust_sockname(sockname,cron_file)
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
             cmd += " env LD_LIBRARY_PATH='"
             cmd += os.environ["LD_LIBRARY_PATH"]

@@ -176,9 +176,13 @@ class TestCase(unittest.TestCase):
             with f2:
                 self.assertEqual(f1.read(), f2.read())
 
-def config(path: Optional[os.PathLike] = None):
+def config_path(path: Optional[os.PathLike] = None):
     if path is None:
         path = pathlib.PurePath(os.environ["HOME"]+"/.bussilabrc")
-    with open(path) as rc:
+    return path
+
+def config(path: Optional[os.PathLike] = None):
+    with open(config_path(path)) as rc:
         return yaml.load(rc,Loader=yaml.BaseLoader)
+
 
