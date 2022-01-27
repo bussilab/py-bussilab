@@ -23,13 +23,19 @@ def find_free_port():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]
 
+def _adjust_sockname(sockname):
+    pwd=os.getcwd()
+    pwd=re.sub("[^-A-Za-z0-9.]",":",pwd)
+    sockname=re.sub("\(present working dir\)",pwd,sockname)
+    return sockname
+
 def run_server(dry_run: bool = False,
                port: int = 0,
                screen_cmd: str = "screen",
                no_screen: bool = False,
                keep_ld_library_path: bool = False,
                python_exec: str = "",
-               sockname: str = "jupyter-server",
+               sockname: str = "(present working dir):jupyter-server",
                detach: bool = False):
     """Runs a jupyter server inside a screen command.
 
@@ -47,7 +53,7 @@ def run_server(dry_run: bool = False,
         cmd += screen_cmd
         if detach:
             cmd += " -d"
-        cmd += " -m -S " + sockname + "-" + str(port) + " "
+        cmd += " -m -S " + _adjust_sockname(sockname) + "-" + str(port) + " "
     if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
         cmd += "env LD_LIBRARY_PATH='"
         cmd += os.environ["LD_LIBRARY_PATH"]

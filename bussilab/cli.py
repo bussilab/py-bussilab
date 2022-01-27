@@ -439,7 +439,7 @@ def _wham(**args):
 @arg("--port", help="set port", default=0)
 @arg("--screen-cmd", help="screen command", default="screen")
 @arg("--python-exec", help="python executable", default="")
-@arg("-S", "--sockname", help="screen sockname", default="jupyter-server")
+@arg("-S", "--sockname", help="screen sockname", default="(present working dir):jupyter-server")
 @arg("--no-screen", help="do not run screen", action="store_true")
 @arg("--keep-ld-library-path", help="propagate LD_LIBRARY_PATH through screen", action="store_true")
 @arg("--detach", help="detach screen", action="store_true")
