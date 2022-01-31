@@ -151,12 +151,6 @@ jobs:
         export CPU_COUNT=2
         conda-build -c conda-forge conda
         rm -fr bussilab # make sure this is not imported by mistake in tests
-    - name: Test 3.6
-      run: |
-        source activate base
-        conda create -n py36 -c conda-forge -c local python=3.6 py-bussilab pytest
-        source activate py36
-        pytest -v
     - name: Test 3.7
       run: |
         source activate base
