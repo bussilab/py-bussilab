@@ -441,7 +441,7 @@ def _wham(**args):
 @arg("--python-exec", help="python executable", default="")
 @arg("-S", "--sockname", help="screen sockname", default="(present working dir):jupyter-server")
 @arg("--no-screen", help="do not run screen", action="store_true")
-@arg("--keep-ld-library-path", help="propagate LD_LIBRARY_PATH through screen", action="store_true")
+@arg("--keep-ld-library-path", help="(ignored, this is the default now)", action="store_true")
 @arg("--detach", help="detach screen", action="store_true")
 def _jrun(**kargs):
     """
@@ -563,7 +563,7 @@ def _notify(**kargs):
 @arg("--screen-cmd", help="screen command", default="screen")
 @arg("--screen-log", help="screen logfile (no logfile by default)", default="")
 @arg("--no-screen", help="do not run screen", action="store_true")
-@arg("--keep-ld-library-path", help="propagate LD_LIBRARY_PATH through screen", action="store_true")
+@arg("--keep-ld-library-path", help="(ignored, this is the default now)", action="store_true")
 @arg("-S", "--sockname", help="screen sockname", default="(path to cron file):cron")
 @arg("--python-exec", help="python executable", default="")
 @arg("--detach", help="detach screen", action="store_true")
