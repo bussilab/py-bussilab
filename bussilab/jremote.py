@@ -131,9 +131,9 @@ def remote(server: str,
             open_cmd = "xdg-open"
         else:
             raise Exception("Unknown platform " + plat)
-    print("open_cmd:", open_cmd)
 
     open_cmd = open_cmd + " " + re.sub(":" + str(server_port), ":" + str(port), url)
+    print("open_cmd:", open_cmd)
     print("ssh:", ' '.join(ssh_cmd))
     if dry_run:
         print(open_cmd)
