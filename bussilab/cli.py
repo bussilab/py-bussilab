@@ -460,6 +460,7 @@ def _jrun(**kargs):
        running.
     """
     from . import jremote
+    kargs["keep_ld_library_path"]=True
     jremote.run_server(**kargs)
 
 @command("jremote", help="Run jupyter client",
@@ -571,6 +572,7 @@ def _notify(**kargs):
 @arg("--max-times", help="maximum number of calls", default=None, type=int)
 def _cron(**kargs):
     from . import cron
+    kargs["keep_ld_library_path"]=True
     cron.cron(**kargs)
 
 @command("required", help="print requirements",
