@@ -32,6 +32,7 @@ def _adjust_sockname(sockname):
 def run_server(dry_run: bool = False,
                port: int = 0,
                screen_cmd: str = "screen",
+               screen_log: str = "",
                no_screen: bool = False,
                keep_ld_library_path: bool = True,
                python_exec: str = "",
@@ -51,6 +52,10 @@ def run_server(dry_run: bool = False,
     cmd = ""
     if not no_screen:
         cmd += screen_cmd
+        if screen_log != "":
+            cmd += " -L"
+            if screen_log != "screenlog.0":
+              cmd +=" -Logfile " + screen_log
         if detach:
             cmd += " -d"
         cmd += " -m -S " + _adjust_sockname(sockname) + "-" + str(port) + " "

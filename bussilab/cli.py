@@ -438,6 +438,7 @@ def _wham(**args):
      help="show command instead of executing it")
 @arg("--port", help="set port", default=0)
 @arg("--screen-cmd", help="screen command", default="screen")
+@arg("--screen-log", help="screen logfile (no logfile by default)", default="")
 @arg("--python-exec", help="python executable", default="")
 @arg("-S", "--sockname", help="screen sockname", default="(present working dir):jupyter-server")
 @arg("--no-screen", help="do not run screen", action="store_true")
