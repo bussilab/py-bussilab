@@ -83,30 +83,44 @@ def cron(*,
         if python_exec == "":
             python_exec = sys.executable
         print("python_exec:", python_exec)
-        cmd = screen_cmd
+        cmd = []
+        cmd.extend(screen_cmd.split()) # allows screen_cmd to contain space separated options
         if detach:
-            cmd += " -d"
+            cmd.append("-d")
         if screen_log != "":
-            cmd += " -L"
+            cmd.append("-L")
             if screen_log != "screenlog.0":
-              cmd +=" -Logfile " + screen_log
-        cmd += " -m -S " +  _adjust_sockname(sockname,cron_file)
+              cmd.append("-Logfile")
+              cmd.append(screen_log)
+        cmd.append("-m")
+        cmd.append("-S")
+        cmd.append(_adjust_sockname(sockname,cron_file))
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
-            cmd += " env LD_LIBRARY_PATH='"
-            cmd += os.environ["LD_LIBRARY_PATH"]
-            cmd += "'"
-        cmd +=" "+ python_exec + " -m bussilab cron --no-screen"
-        cmd +=" --period " + str(period)
+            cmd.append("env")
+            cmd.append("LD_LIBRARY_PATH=" + os.environ["LD_LIBRARY_PATH"])
+        cmd.extend(python_exec.split()) # allows python_exec to contain space separated options
+        cmd.append("-m")
+        cmd.append("bussilab")
+        cmd.append("cron")
+        cmd.append("--no-screen")
+        cmd.append("--period")
+        cmd.append(str(period))
         if len(cron_file)>0:
-            cmd += " --cron-file " + cron_file
+            cmd.append("--cron-file")
+            cmd.append(cron_file)
         if quick_start:
-            cmd += " --quick-start"
+            cmd.append("--quick-start")
         if max_times is not None:
-            cmd += " --max-times " + str(max_times)
+            cmd.append("--max-times")
+            cmd.append(str(max_times))
         print("cmd:",cmd)
-        ret=os.system(cmd)
-        if ret != 0:
-            msg = "Execution of '" + cmd + "' failed. Perhaps '" + screen_cmd + "' command is not available on your system."
-            if screen_log !="" and screen_log != "screenlog.0":
-                msg += " Notice that some screen versions do not support a logfile with a name different from screenlog.0"
-            raise RuntimeError(msg)
+        
+        try:
+            ret=subprocess.call(cmd)
+            if ret != 0:
+                msg = "An error occurred."
+                if screen_log !="" and screen_log != "screenlog.0":
+                    msg += " Notice that some screen versions do not support a logfile with a name different from screenlog.0"
+                raise RuntimeError(msg)
+        except OSError as e:
+            raise RuntimeError("Execution of failed. Perhaps '" + screen_cmd + "' command is not available on your system.")

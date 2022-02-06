@@ -49,26 +49,32 @@ def run_server(dry_run: bool = False,
     if port == 0:
         port = find_free_port()
     print("port:", port)
-    cmd = ""
+    cmd = []
     if not no_screen:
-        cmd += screen_cmd
-        if screen_log != "":
-            cmd += " -L"
-            if screen_log != "screenlog.0":
-              cmd +=" -Logfile " + screen_log
+        cmd.extend(screen_cmd.split()) # allows screen_cmd to contain space separated options
         if detach:
-            cmd += " -d"
-        cmd += " -m -S " + _adjust_sockname(sockname) + "-" + str(port) + " "
-    if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
-        cmd += "env LD_LIBRARY_PATH='"
-        cmd += os.environ["LD_LIBRARY_PATH"]
-        cmd += "' "
-    cmd += python_exec + " -m jupyter notebook --no-browser "
-    cmd += "--port=" + str(port)
+            cmd.append("-d")
+        if screen_log != "":
+            cmd.append("-L")
+            if screen_log != "screenlog.0":
+              cmd.append("-Logfile")
+              cmd.append(screen_log)
+        cmd.append("-m")
+        cmd.append("-S")
+        cmd.append(_adjust_sockname(sockname) + "-" + str(port))
+        if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
+            cmd.append("env")
+            cmd.append("LD_LIBRARY_PATH=" + os.environ["LD_LIBRARY_PATH"])
+    cmd.extend(python_exec.split()) # allows python_exec to contain space separated options
+    cmd.append("-m")
+    cmd.append("jupyter")
+    cmd.append("notebook")
+    cmd.append("--no-browser")
+    cmd.append("--port=" + str(port))
     print("cmd:", cmd)
     if dry_run:
         return
-    os.system(cmd)
+    subprocess.call(cmd)
 
 def remote(server: str,
            python_exec: str = "python",
