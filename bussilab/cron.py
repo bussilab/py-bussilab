@@ -122,5 +122,5 @@ def cron(*,
                 if screen_log !="" and screen_log != "screenlog.0":
                     msg += " Notice that some screen versions do not support a logfile with a name different from screenlog.0"
                 raise RuntimeError(msg)
-        except OSError as e:
+        except OSError:
             raise RuntimeError("Execution of failed. Perhaps '" + screen_cmd + "' command is not available on your system.")
