@@ -134,26 +134,30 @@ def remote(server: str,
 
     ssh_cmd = ["ssh", "-NL", str(port) + ":localhost:" + str(server_port), server]
 
+    xopen_cmd = [] # list rather than string
+
     if open_cmd == "":
         plat = platform.system()
         if plat == "Darwin":
-            open_cmd = "open"
+            xopen_cmd.append("open")
         elif plat == "Linux":
-            open_cmd = "xdg-open"
+            xopen_cmd.append("xdg-open")
         else:
             raise Exception("Unknown platform " + plat)
+    else:
+        xopen_cmd = [open_cmd]
 
-    open_cmd = open_cmd + " " + re.sub(":" + str(server_port), ":" + str(port), url)
-    print("open_cmd:", open_cmd)
+    xopen_cmd.append(re.sub(":" + str(server_port), ":" + str(port), url))
+    print("open_cmd:", ' '.join(xopen_cmd))
     print("ssh:", ' '.join(ssh_cmd))
     if dry_run:
-        print(open_cmd)
+        print(xopen_cmd)
     else:
         ssh = subprocess.Popen(ssh_cmd)
         try:
             print("Don't kill this terminal or you will be disconnected!")
             time.sleep(1)
-            os.system(open_cmd)
+            subprocess.call(xopen_cmd)
             print("Use CTRL+c to kill the connection")
         except KeyboardInterrupt:
             print("Interrupted")
