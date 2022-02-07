@@ -93,6 +93,8 @@ def cron(*,
               cmd.append("-Logfile")
               cmd.append(screen_log)
         cmd.append("-m")
+        cmd.append("-h")
+        cmd.append("100000") # scrollback
         cmd.append("-S")
         cmd.append(_adjust_sockname(sockname,cron_file))
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
