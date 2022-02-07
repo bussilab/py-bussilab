@@ -1,5 +1,6 @@
 import subprocess
 import re
+import secrets
 from typing import Optional, List
 
 from . import coretools
@@ -59,7 +60,10 @@ def workstations(wks: Optional[List] = None, short: bool = True):
         else:
             raise TypeError()
 
-        cmd = "top -n 1 -b | head -n 3 | tail -n 1;"
+        # this is required to allow discarding possible initial login messages
+        token=secrets.token_hex()
+        cmd = "echo " + token + ";"
+        cmd += "top -n 1 -b | head -n 3 | tail -n 1;"
         cmd += "df -h " + disk + " | tail -n 1;"
         cmd += "df -h " + tmpdisk + " | tail -n 1;"
 
@@ -75,6 +79,11 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                universal_newlines=True,
                timeout = 20,
                check = True).stdout.split('\n')
+            for i in range(len(out)):
+                if out[i]==token:
+                   break
+            print(out)
+            out=out[i+1:]
             cpu_fields = _parse_cpu(out[0].split())
             msg += " CPU"
             if cpu_fields["id"] > 75:
