@@ -11,8 +11,10 @@ from . import coretools
 def _time_to_next_event(period: int):
     now=time.localtime()
     seconds=now.tm_hour*3600 + now.tm_min*60 + now.tm_sec
+    seconds_=seconds
     seconds = seconds%period
-    return period-seconds
+    # also returns predicted time for next event
+    return period-seconds,seconds_+period-seconds
 
 def _now():
     return '{}'.format(datetime.datetime.now()) + ":"
@@ -29,7 +31,8 @@ def _adjust_sockname(sockname,cron_file):
     return sockname
 
 def _run(cron_file: str,
-         period: int):
+         period: int,
+         event: int):
     try:
         print(_now(),"Running now")
         if len(cron_file) > 0:
@@ -48,6 +51,18 @@ def _run(cron_file: str,
                if not "type" in c:
                    c["type"]="python"
 
+               if "delay" in c and not "skip" in c:
+                   raise RuntimeError("delay can only be used with skip")
+
+               if "skip" in c:
+                   skip = int(c["skip"])
+                   if "delay" in c:
+                       delay=int(c["delay"])
+                   else:
+                       delay=0
+                   if (event/period)%skip != delay%skip:
+                       continue
+
                if c["type"] == "python":
                    args = [sys.executable, "-c"]
                elif c["type"] == "bash":
@@ -55,7 +70,7 @@ def _run(cron_file: str,
                else:
                    raise RuntimeError("Unknown type " + config["cron"][i]["type"])
                args.append(config["cron"][i]["script"])
-               timeout=_time_to_next_event(period)//2+1
+               timeout=_time_to_next_event(period)[0]//2+1
                print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
                subprocess.run(args, timeout=timeout)
     except Exception as e:
@@ -90,9 +105,9 @@ def cron(*,
                     return
         while True:
             s=_time_to_next_event(period)
-            print(_now(),"Waiting " +str(s)+ " seconds for next scheduled event")
-            time.sleep(s)
-            _run(cron_file,period)
+            print(_now(),"Waiting " +str(s[0])+ " seconds for next scheduled event")
+            time.sleep(s[0])
+            _run(cron_file,period,s[1])
             counter += 1
             if max_times is not None:
                 if counter >= max_times:
