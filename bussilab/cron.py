@@ -59,9 +59,12 @@ def cron(*,
          python_exec: str = "",
          detach: bool = False,
          period: int = 3600,
-         max_times: Optional[int] = None
+         max_times: Optional[int] = None,
+         unique: bool = False
          ):
     if no_screen:
+        if unique:
+            raise RuntimeError("unique can only be used in screen mode")
         print(_now(),"start")
         counter=0
         if quick_start:
@@ -83,8 +86,29 @@ def cron(*,
         if python_exec == "":
             python_exec = sys.executable
         print("python_exec:", python_exec)
+
+        sockname = _adjust_sockname(sockname,cron_file)
+
         cmd = []
         cmd.extend(screen_cmd.split()) # allows screen_cmd to contain space separated options
+
+        if unique:
+           cmd1=cmd.copy() # do not modity cmd
+           cmd1.append("-ls")
+           try:
+               ll = subprocess.run(cmd1,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            universal_newlines=True,
+                            check=True).stdout.split('\n')
+           except subprocess.CalledProcessError:
+               ll = []
+
+           for l in ll:
+             if "." + sockname +"\t" in l:
+                 print("Another screen with socket name " + sockname + " is already present")
+                 return
+
         if detach:
             cmd.append("-d")
         if screen_log != "":
@@ -96,7 +120,7 @@ def cron(*,
         cmd.append("-h")
         cmd.append("100000") # scrollback
         cmd.append("-S")
-        cmd.append(_adjust_sockname(sockname,cron_file))
+        cmd.append(sockname)
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
             cmd.append("env")
             cmd.append("LD_LIBRARY_PATH=" + os.environ["LD_LIBRARY_PATH"])
