@@ -98,7 +98,7 @@ def cron(*,
         print(_now(),"start")
         counter=0
         if quick_start:
-            _run(cron_file,period)
+            _run(cron_file,period,0)
             counter += 1
             if max_times is not None:
                 if counter >= max_times:
