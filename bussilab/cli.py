@@ -30,6 +30,9 @@ where `bias` is a file.
 # Support argument parsing:
 import argparse
 
+# Support deprecation warnings:
+import warnings
+
 # Support static type checks:
 from typing import Optional, Union, List, Callable, Dict, Tuple
 
@@ -461,6 +464,8 @@ def _jrun(**kargs):
        running.
     """
     from . import jremote
+    if kargs["keep_ld_library_path"]:
+        warnings.warn("--keep-ld-library-path is the default now - this flag might be removed in the future", FutureWarning)
     kargs["keep_ld_library_path"]=True
     jremote.run_server(**kargs)
 
@@ -574,6 +579,8 @@ def _notify(**kargs):
 @arg("--max-times", help="maximum number of calls", default=None, type=int)
 def _cron(**kargs):
     from . import cron
+    if kargs["keep_ld_library_path"]:
+        warnings.warn("--keep-ld-library-path is the default now - this flag might be removed in the future", FutureWarning)
     kargs["keep_ld_library_path"]=True
     cron.cron(**kargs)
 
