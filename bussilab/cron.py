@@ -25,7 +25,7 @@ def _adjust_sockname(sockname,cron_file):
         path_to_cron_file=str(coretools.config_path())
     path_to_cron_file=os.path.abspath(path_to_cron_file)
     path_to_cron_file=re.sub("[^-A-Za-z0-9.]",":",path_to_cron_file)
-    sockname=re.sub(r"\(path to cron file\)",path_to_cron_file,sockname)
+    sockname=re.sub(r"\(path\)",path_to_cron_file,sockname)
     return sockname
 
 def _run(cron_file: str,
@@ -55,7 +55,7 @@ def cron(*,
          screen_log: str = "",
          no_screen: bool = True,
          keep_ld_library_path: bool = True,
-         sockname: str = "(path to cron file):cron",
+         sockname: str = "(path):cron",
          python_exec: str = "",
          detach: bool = False,
          period: int = 3600,
