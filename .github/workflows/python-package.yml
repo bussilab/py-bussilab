@@ -82,6 +82,18 @@ jobs:
         python setup.py sdist
         python -m twine upload -u bussilabbot -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz
 
+  macsimple:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install
+      run: |
+        pip3 install --user .
+    - name: Test with pytest
+      run: |
+        pip3 install pytest
+        PYTHONPATH=$PWD python3 -m pytest tests
+
   macports:
     # The type of runner that the job will run on
     runs-on: macos-latest
