@@ -1,7 +1,7 @@
 cron:
-  - |
-    with open("cron_screen.out","a") as f:
-        print("test cron screen",file=f)
+  - script: |
+      with open("cron_screen.out","a") as f:
+          print("test cron screen",file=f)
   - type: "bash"
     script: |
       echo "test cron screen2" >> cron_screen2.out

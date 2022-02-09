@@ -44,9 +44,13 @@ def _run(cron_file: str,
                        "type": "python",
                        "script": config["cron"][i]
                    }
-               if config["cron"][i]["type"] == "python":
+               c=config["cron"][i]
+               if not "type" in c:
+                   c["type"]="python"
+
+               if c["type"] == "python":
                    args = [sys.executable, "-c"]
-               elif config["cron"][i]["type"] == "bash":
+               elif c["type"] == "bash":
                    args = ["bash", "--noprofile", "--norc", "-c"]
                else:
                    raise RuntimeError("Unknown type " + config["cron"][i]["type"])
