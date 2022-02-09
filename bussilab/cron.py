@@ -39,7 +39,18 @@ def _run(cron_file: str,
             config=coretools.config()
         if "cron" in config:
             for i in range(len(config["cron"])):
-               args = [sys.executable, "-c", config["cron"][i]]
+               if isinstance(config["cron"][i],str):
+                   config["cron"][i]={
+                       "type": "python",
+                       "script": config["cron"][i]
+                   }
+               if config["cron"][i]["type"] == "python":
+                   args = [sys.executable, "-c"]
+               elif config["cron"][i]["type"] == "bash":
+                   args = ["bash", "--noprofile", "--norc", "-c"]
+               else:
+                   raise RuntimeError("Unknown type " + config["cron"][i]["type"])
+               args.append(config["cron"][i]["script"])
                timeout=_time_to_next_event(period)//2+1
                print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
                subprocess.run(args, timeout=timeout)
