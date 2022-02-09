@@ -125,19 +125,13 @@ def cron(*,
         if unique:
            cmd1=cmd.copy() # do not modity cmd
            cmd1.append("-ls")
-           try:
-               ll = subprocess.run(cmd1,
+           for l in subprocess.run(cmd1, # do not check errors here since screen -ls fails on MacOS
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
-                            universal_newlines=True,
-                            check=True).stdout.split('\n')
-           except subprocess.CalledProcessError:
-               ll = []
-
-           for l in ll:
-             if "." + sockname +"\t" in l:
-                 print("Another screen with socket name " + sockname + " is already present")
-                 return
+                            universal_newlines=True).stdout.split('\n'):
+               if "." + sockname +"\t" in l:
+                   print("Another screen with socket name " + sockname + " is already present")
+                   return
 
         if detach:
             cmd.append("-d")
