@@ -6,6 +6,7 @@ import subprocess
 from typing import Optional
 import yaml
 import re
+import shlex
 from . import coretools
 
 def _time_to_next_event(period: int):
@@ -120,7 +121,7 @@ def cron(*,
         sockname = _adjust_sockname(sockname,cron_file)
 
         cmd = []
-        cmd.extend(screen_cmd.split()) # allows screen_cmd to contain space separated options
+        cmd.extend(shlex.split(screen_cmd)) # allows screen_cmd to contain space separated options
 
         if unique:
            cmd1=cmd.copy() # do not modity cmd
@@ -146,9 +147,9 @@ def cron(*,
         cmd.append("-S")
         cmd.append(sockname)
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
-            cmd.append("env")
+            cmd.append("/usr/bin/env")
             cmd.append("LD_LIBRARY_PATH=" + os.environ["LD_LIBRARY_PATH"])
-        cmd.extend(python_exec.split()) # allows python_exec to contain space separated options
+        cmd.extend(shlex.split(python_exec)) # allows python_exec to contain space separated options
         cmd.append("-m")
         cmd.append("bussilab")
         cmd.append("cron")

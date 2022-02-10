@@ -15,6 +15,7 @@ import subprocess
 import re
 import platform
 import time
+import shlex
 
 def find_free_port():
     """Returns the number of a free port."""
@@ -52,7 +53,7 @@ def run_server(dry_run: bool = False,
     print("port:", port)
     cmd = []
     if not no_screen:
-        cmd.extend(screen_cmd.split()) # allows screen_cmd to contain space separated options
+        cmd.extend(shlex.split(screen_cmd)) # allows screen_cmd to contain space separated options
         if detach:
             cmd.append("-d")
         if screen_log != "":
@@ -66,9 +67,9 @@ def run_server(dry_run: bool = False,
         cmd.append("-S")
         cmd.append(_adjust_sockname(sockname,port))
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
-            cmd.append("env")
+            cmd.append("/usr/bin/env")
             cmd.append("LD_LIBRARY_PATH=" + os.environ["LD_LIBRARY_PATH"])
-    cmd.extend(python_exec.split()) # allows python_exec to contain space separated options
+    cmd.extend(shlex.split(python_exec)) # allows python_exec to contain space separated options
     cmd.append("-m")
     cmd.append("jupyter")
     cmd.append("notebook")

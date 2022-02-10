@@ -33,6 +33,9 @@ import argparse
 # Support deprecation warnings:
 import warnings
 
+# Support split
+import shlex
+
 # Support static type checks:
 from typing import Optional, Union, List, Callable, Dict, Tuple
 
@@ -260,7 +263,7 @@ def cli(arguments: Union[str, List[str]] = "",
        ----------
        arguments : str or list
            Command line arguments. If a string is passed, it is first split using
-           spaces as separators.
+           shlex.split()
 
        prog : str
            Name of the calling program. It is used to build help texts. **Mostly for internal use**.
@@ -287,7 +290,7 @@ def cli(arguments: Union[str, List[str]] = "",
 
     # allow passing a single string
     if isinstance(arguments, str):
-        arguments = arguments.split()
+        arguments = shlex.split(arguments)
 
     func = None
 
