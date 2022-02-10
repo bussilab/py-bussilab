@@ -82,7 +82,6 @@ def workstations(wks: Optional[List] = None, short: bool = True):
             for i in range(len(out)):
                 if out[i]==token:
                    break
-            print(out)
             out=out[i+1:]
             cpu_fields = _parse_cpu(out[0].split())
             msg += " CPU"
