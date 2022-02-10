@@ -11,7 +11,7 @@ from . import coretools
 
 def _time_to_next_event(period: int):
     now=time.localtime()
-    seconds=now.tm_hour*3600 + now.tm_min*60 + now.tm_sec
+    seconds=now.tm_wday*24*3600+now.tm_hour*3600 + now.tm_min*60 + now.tm_sec
     seconds_=seconds
     seconds = seconds%period
     # also returns predicted time for next event
