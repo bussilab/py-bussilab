@@ -578,6 +578,7 @@ def _notify(**kargs):
 @arg("--python-exec", help="python executable", default="")
 @arg("--detach", help="detach screen", action="store_true")
 @arg("--unique", help="allow only one screen with this socket", action="store_true")
+@arg("--window", help="run a new window within the same screen", action="store_true")
 @arg("--period", help="period (seconds)", default=3600, type=int)
 @arg("--max-times", help="maximum number of calls", default=None, type=int)
 def _cron(**kargs):
