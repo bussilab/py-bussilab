@@ -5,11 +5,12 @@ Module implementing a small tool for installing and updating packages with pip.
 import subprocess
 import sys
 
-from typing import List, Union
+from typing import List, Union, Optional
 
 def install(packages: Union[str, List[str]], *,
             upgrade: bool = False,
-            user: bool = False):
+            user: bool = False,
+            timeout: Optional[int] = None):
     """Install one or more packages with pip.
 
        Install packages making sure they get installed with the currently used
@@ -39,9 +40,10 @@ def install(packages: Union[str, List[str]], *,
     else:
         args.extend(packages)
     print("calling ", args)
-    subprocess.check_call(args)
+    subprocess.check_call(args, timeout=timeout)
 
-def upgrade_all(user: bool = False):
+def upgrade_all(user: bool = False,*,
+                timeout: Optional[int] = None):
     """Upgrade all installed packages using pip.
 
        Warning: it assumes all available packages are installed with pip.
@@ -59,4 +61,9 @@ def upgrade_all(user: bool = False):
             "pkg_resources not found, you should install setuptools"
             )
     packages = [dist.project_name for dist in pkg_resources.working_set]  # pylint: disable=not-an-iterable
-    install(packages, user=user, upgrade=True)
+    install(packages, user=user, upgrade=True, timeout=timeout)
+
+def upgrade_self(*,
+                 user: bool = False,
+                 timeout: Optional[int] = None):
+    install("bussilab", user=user, timeout=timeout, upgrade=True)
