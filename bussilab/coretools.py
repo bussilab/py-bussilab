@@ -165,12 +165,12 @@ class TestCase(unittest.TestCase):
         try:
             f1=open(file1, "r")
         except FileNotFoundError:
-            self.fail("file " +file1 + " was not found")
+            self.fail("file " +str(file1) + " was not found")
 
         try:
             f2=open(file2, "r")
         except FileNotFoundError:
-            self.fail("file " +file2 + " was not found")
+            self.fail("file " +str(file2) + " was not found")
 
         with f1:
             with f2:
