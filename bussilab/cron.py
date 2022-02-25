@@ -115,6 +115,14 @@ def _reboot(*,
             if args["max_times"] is not None:
                 args["max_times"]-=iterations
 
+        screen_ver=subprocess.run(["screen","-v"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout.split()[2].split(".")
+        if int(screen_ver[0])<4:
+            print("screen version",screen_ver,"does not support reboot")
+            return
+        if int(screen_ver[0])==4 and int(screen_ver[1])<1:
+            print("screen version",screen_ver,"does not support reboot")
+            return
+
         # move this process to another window
         ret=subprocess.call([args["screen_cmd"],"-X","number","20"]) # some high number, to make space for the new window
         if ret!=0:
@@ -189,6 +197,7 @@ def cron(*,
               "screen_cmd"  : screen_cmd,
               "period"      : period,
               "cron_file"   : cron_file,
+              "detach"      : detach,
               "max_times"   : max_times
             }}
 
