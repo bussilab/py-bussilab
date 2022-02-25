@@ -258,7 +258,7 @@ _required_ = [
     'numba',
     'numpy',
     'scipy',
-    'slackclient>2',
+    'slack-sdk',
     'pyyaml',
     'typing_extensions'
 ]
@@ -404,7 +404,10 @@ def describe_submodule(module: str) -> str:
 
 def required_macports(pyver="") -> str:
     import re
-    return re.sub("py-", "py" + pyver + '-', ' '.join(_macports_required_))
+    req = re.sub("py-", "py" + pyver + '-', ' '.join(_macports_required_))
+    if pyver=="36" or pyver=="37":
+        req = re.sub("-slack-sdk","-slackclient",req)
+    return req
 
 def required_conda() -> str:
     return str(_required_)
