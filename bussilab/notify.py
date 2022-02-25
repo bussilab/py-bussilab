@@ -290,12 +290,16 @@ def notify(message: str = "",
             file_title += message +" "
         if footer:
             file_title += footer_text
-        for i in range(5):
+
+        attempts=5
+        for i in range(attempts):
             try:
                 response = client.files_upload(file=file,title=file_title,channels=channel)
                 break
             except SlackApiError:
-                print("retrying ...",i)
+                if(i+1==attempts):
+                    raise
+                print("retrying ...",i+1)
     else:
         response = client.chat_postMessage(
                    blocks=blocks,
