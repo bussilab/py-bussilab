@@ -167,6 +167,9 @@ def cron(*,
                     print("maximum iterations done")
                     return
         while True:
+            if max_times is not None:
+                if counter >= max_times:
+                    return
             s=_time_to_next_event(period)
             print(_now(),"Waiting " +str(s[0])+ " seconds for next scheduled event")
             time.sleep(s[0])
@@ -174,9 +177,6 @@ def cron(*,
             if isinstance(r,_reboot_now):
                 return
             counter += 1
-            if max_times is not None:
-                if counter >= max_times:
-                    return
     else:
 
         # this dictionary is passed as an environment variable
