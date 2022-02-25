@@ -1,8 +1,11 @@
 import unittest
 
+import os
 import numpy as np
 
 from bussilab.ann import ANN
+from bussilab.coretools import TestCase
+from bussilab.coretools import cd
 
 def derivatives(ann,n=100,prefactor=1e-10,vector=True):
     p=[]
@@ -23,7 +26,7 @@ def derivatives(ann,n=100,prefactor=1e-10,vector=True):
     p=np.array(p)/prefactor
     return np.average((p[:,0]-p[:,1])**2)
 
-class TestANN(unittest.TestCase):
+class TestANN(TestCase):
     def test_ann1(self):
         np.random.seed(1977)
         self.assertLess(derivatives(ANN([10],cuda=False)),1e-10)
@@ -119,6 +122,17 @@ class TestANN(unittest.TestCase):
         self.backprop([10,10,10,10],"relu")
     def test_backprop2r(self):
         self.backprop([10,8,6,4,2],"relu")
+
+    def test_plumed(self):
+        ann=ANN([3,2],cuda=False)
+        ann.setpar(np.array(range(ann.npar)))
+        with cd(os.path.dirname(os.path.abspath(__file__))):
+            ann.dumpPlumed("ann_plumed.dat","ann")
+            ann.dumpPlumed("ann_plumed_combine.dat","combine","pref","x1,x2,x3")
+            self.assertEqualFile("ann_plumed.dat")
+            self.assertEqualFile("ann_plumed_combine.dat")
+            os.remove("ann_plumed.dat")
+            os.remove("ann_plumed_combine.dat")
 
 try:
     import cudamat

@@ -1,0 +1,11 @@
+#! FIELDS w0 w1 w2
+0 2 4
+1 3 5
+#! FIELDS b0 b1
+8 9
+#! FIELDS activation0 activation1
+softplus softplus
+#! FIELDS w0 w1
+6 7
+#! FIELDS b0
+10
