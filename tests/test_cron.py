@@ -25,10 +25,16 @@ class TestCron(TestCase):
                 os.remove("screenlog.0")
             except FileNotFoundError:
                 pass
+            try:
+                os.remove("cron_reboot.out")
+            except FileNotFoundError:
+                pass
             # this is asynchronous
             cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog.0 --unique")
             # the second instance will not be run (--unique)
             cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog.0 --unique")
+            # also this is asynchronoous
+            cli("cron --cron-file cron_reboot.yml --period 1 --max-times 4 --detach --screen-log screenlog.0")
             now=time.time()
             # this is synchronous, and will take some time
             cli("cron --cron-file cron.yml --period 2 --max-times 2 --no-screen")
@@ -42,9 +48,11 @@ class TestCron(TestCase):
             self.assertEqualFile("cron.out")
             self.assertEqualFile("cron_screen.out")
             self.assertEqualFile("cron_screen2.out")
+            self.assertEqualFile("cron_reboot.out")
             os.remove("cron.out")
             os.remove("cron_screen.out")
             os.remove("cron_screen2.out")
+            os.remove("cron_reboot.out")
             os.remove("screenlog.0")
 
 if __name__ == "__main__":
