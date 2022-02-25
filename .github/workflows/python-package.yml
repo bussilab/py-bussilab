@@ -92,7 +92,7 @@ jobs:
     - name: Test with pytest
       run: |
         pip3 install pytest
-        PYTHONPATH=$PWD python3 -m pytest tests
+        pytest -v
 
   macports:
     # The type of runner that the job will run on
