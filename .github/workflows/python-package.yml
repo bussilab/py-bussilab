@@ -97,6 +97,10 @@ jobs:
   macports:
     # The type of runner that the job will run on
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -110,15 +114,13 @@ jobs:
         source ./macports-ci install
     - name: Setup environment
       run: |
-        awk '{
-          if($1=="_macports_py_" && $2=="=") {
-            a=$3;
-            gsub("\"","",a);
-            print("MACPORTS_PY=" a )
-            gsub("\\.","",a);
-            print("MACPORTS_PY_ND=" a )
-          }
-        }' bussilab/__init__.py >> $GITHUB_ENV
+        awk 'BEGIN{
+          a="${{ matrix.python-version }}"
+          gsub("\"","",a);
+          print("MACPORTS_PY=" a )
+          gsub("\\.","",a);
+          print("MACPORTS_PY_ND=" a )
+        }' >> $GITHUB_ENV
     - name: Install requirements and set paths
       run: |
         sudo port install python$MACPORTS_PY_ND py$MACPORTS_PY_ND-pip py$MACPORTS_PY_ND-setuptools
@@ -128,7 +130,7 @@ jobs:
         # instead of the correct
         # /Users/runner/Library/Python/3.9/lib/python3.9/site-packages
         # to be checked
-        echo PYTHONPATH="$(python$MACPORTS_PY -c 'import site; import re; print(re.sub("python/","python3.9/",site.USER_SITE))'):$PYTHONPATH" >> $GITHUB_ENV
+        echo PYTHONPATH="$(python$MACPORTS_PY -c 'import site; import re; print(re.sub("python/","python'${MACPORTS_PY}'/",site.USER_SITE))'):$PYTHONPATH" >> $GITHUB_ENV
     - name: Install package
       run: |
         pip-$MACPORTS_PY install --user --no-deps .
