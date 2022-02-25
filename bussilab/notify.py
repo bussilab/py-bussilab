@@ -74,10 +74,12 @@ try:
     # slack client 3
     from slack_sdk import WebClient
     from slack_sdk.web.base_client import SlackResponse
+    from slack_sdk.errors import SlackApiError
 except ModuleNotFoundError:
     # slack client 2
     from slack import WebClient
     from slack.web.base_client import SlackResponse
+    from slack.errors import SlackApiError
 
 from . import coretools
 
@@ -288,7 +290,12 @@ def notify(message: str = "",
             file_title += message +" "
         if footer:
             file_title += footer_text
-        response = client.files_upload(file=file,title=file_title,channels=channel)
+        for i in range(5):
+            try:
+                response = client.files_upload(file=file,title=file_title,channels=channel)
+                break
+            except SlackApiError:
+                print("retrying ...",i)
     else:
         response = client.chat_postMessage(
                    blocks=blocks,
