@@ -20,6 +20,12 @@ _screenrcfile = """
   defscrollback 100000
 """
 
+def _screen_version(screen_cmd):
+    cmd=shlex.split(screen_cmd)
+    cmd.append("-v")
+    screen_ver=subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout.split()[2].split(".")
+    return int(screen_ver[0]),int(screen_ver[1])
+
 def _time_to_next_event(period: int):
     now=time.localtime()
     seconds=now.tm_wday*24*3600+now.tm_hour*3600 + now.tm_min*60 + now.tm_sec
@@ -115,13 +121,9 @@ def _reboot(*,
             if args["max_times"] is not None:
                 args["max_times"]-=iterations
 
-        cmd=shlex.split(args["screen_cmd"])
-        cmd.append("-v")
-        screen_ver=subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True).stdout.split()[2].split(".")
-        if int(screen_ver[0])<4:
-            print("screen version",screen_ver,"does not support reboot")
-            return
-        if int(screen_ver[0])==4 and int(screen_ver[1])<1:
+
+        screen_ver=_screen_version(args["screen_cmd"])
+        if screen_ver < (4,1):
             print("screen version",screen_ver,"does not support reboot")
             return
 
