@@ -167,47 +167,6 @@ bussilab check --import
 The result will depend on which of the required packages are already installed on
 your system.
 
-### Run without installing
-
-You might want to use this module without installing it. Since the module is
-written in pure python,[^pure_python] it can be used by just adding its path to `PYTHONPATH`
-and the `bin` directory to `PATH`:
-```bash
-export PATH="/path/to/bussilab/bin:$PATH"
-export PYTHONPATH="/path/to/bussilab:$PYTHONPATH"
-```
-This is convenient if you want to use the development version of this package.
-
-[^pure_python]: This might change in the future.
-
-### Running tests
-
-You can run the tests using `pytest`:
-```bash
-pip install pytest
-pytest
-```
-
-All tests should succeed.
-
-### Running jupyter examples from the command line
-
-You can rerun all the jupyter examples from the command line:
-```bash
-cd examples
-pip install jupyter jupyter_contrib_nbextensions matplotlib
-./rerun.sh
-```
-
-### Rendering jupyter examples as html from the command line
-
-You can render all the jupyter examples as html from the command line:
-```bash
-cd examples
-pip install jupyter nbconvert
-./render.sh
-```
-
 ### Building documentation
 
 You can build the documentation using `pdoc3`:
@@ -216,9 +175,44 @@ pip install pdoc3
 pdoc3 -f --html -o doc/ bussilab
 ```
 
-Documentation will be found in `doc/bussilab/index.html`.
+Documentation will be visible at `doc/bussilab/index.html`.
+This is normally not necessary, since
+the pre-built documentation of the latest version can be found at [this link](https://bussilab.github.io/doc-py-bussilab),
+but can be useful to test changes to the documentation before pushing them to GitHub.
 
-### Static analysis of the code
+### Implementing your modifications
+
+If you want to modify the Python source code you should download it from GitHub:
+
+```bash
+git clone https://github.com/bussilab/py-bussilab.git
+cd py-bussilab
+```
+
+Since the module is
+written in pure python,[^pure_python] it can be used by just adding its path to `PYTHONPATH`
+and the `bin` directory to `PATH`:
+```bash
+export PATH="/path/to/py-bussilab/bin:$PATH"
+export PYTHONPATH="/path/to/py-bussilab:$PYTHONPATH"
+```
+
+[^pure_python]: This might change in the future.
+
+### Testing the code
+
+If you modified the code, it is recommended to test that your changes did not break
+existing features.
+
+You can run the tests using `pytest`:
+```bash
+pip install pytest
+pytest
+```
+All tests should succeed. Notice that the tests will import the `bussilab` module.
+Thus, if you want the version modified by you to be tested (and not another version
+that you might have installed with `pip` already) you should properly set
+the `PYTHONPATH` variable as explained above.
 
 Static types can be checked using `mypy`:
 ```bash
@@ -240,6 +234,23 @@ pip install pylint
 pylint -E bussilab
 ```
 This check should succeed.
+
+### Running and rendering jupyter examples from the command line
+
+The GitHub repository also contains jupyter examples.
+You can rerun all the jupyter examples from the command line:
+```bash
+cd examples
+pip install jupyter jupyter_contrib_nbextensions matplotlib
+./rerun.sh
+```
+
+You can render all the jupyter examples as html from the command line:
+```bash
+cd examples
+pip install jupyter nbconvert
+./render.sh
+```
 
 """
 
