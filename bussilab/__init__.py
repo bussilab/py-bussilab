@@ -6,6 +6,7 @@ separate packages.
 Source code is on [GitHub](https://github.com/bussilab/py-bussilab).
 Submodules are listed at the end of the current page.
 Command-line tools are described at [this page](cli_documentation.html).
+A test pdf manual is available [here](../bussilab.pdf).
 This is the documentation for version __version__.
 
 # Install
