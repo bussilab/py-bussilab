@@ -69,7 +69,7 @@ jobs:
         mkdir doc/examples
         cp examples/*html doc/examples/
         ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
-        ( sudo apt-get install pandoc && pdoc3 -f --pdf bussilab > bussilab.md && pandoc --metadata=title:"Py-Bussilab Documentation" --from=markdown+abbreviations+tex_math_single_backslash --pdf-engine=xelatex --toc --toc-depth=4 --output=docs/bussilab.pdf bussilab.md )
+        ( sudo apt-get install --install-suggests pandoc && pdoc3 -f --pdf bussilab > bussilab.md && pandoc --metadata=title:"Py-Bussilab Documentation" --from=markdown+abbreviations+tex_math_single_backslash --pdf-engine=xelatex --toc --toc-depth=4 --output=docs/bussilab.pdf bussilab.md )
     - name: Push doc
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10' && github.ref == 'refs/heads/master' }}
       env:
