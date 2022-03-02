@@ -47,16 +47,14 @@ class MaxentResult(coretools.Result):
 # Internal tool
 # should be called before sum() calls in cudamat
 def _ensure_ones(min_size):
-    import cudamat # pylint: disable=import-error
-    min_size=min(1024*256,min_size)
-    if not hasattr(cudamat.CUDAMatrix, 'ones'):
-        cudamat.CUDAMatrix.ones = cudamat.empty((min_size, 1)).assign(1.0)
-    else:
-        if not isinstance(cudamat.CUDAMatrix.ones,cudamat.CUDAMatrix):
-            cudamat.CUDAMatrix.ones = cudamat.empty((min_size, 1)).assign(1.0)
-        elif cudamat.CUDAMatrix.ones.shape[0]<min_size:
-            cudamat.CUDAMatrix.ones = cudamat.empty((min_size, 1)).assign(1.0)
+    if cm.CUDAMatrix.ones.shape[0]<min_size:
+        cm.CUDAMatrix.ones = cm.empty((min_size, 1)).assign(1.0)
 
+def _ensure_cm_init():
+    if not hasattr(cm.CUDAMatrix, 'ones'):
+        cm.cublas_init()
+    elif not isinstance(cm.CUDAMatrix.ones,cm.CUDAMatrix):
+        cm.cublas_init()
 
 # Internal tool to compute averages over trajectory.
 # Does not access external data.
@@ -214,11 +212,12 @@ def maxent(
     if cuda:
         if not _HAS_CUDAMAT:
             raise ValueError("Cudamat not available, can only run ANN with numpy")
-        if not isinstance(traj,cm.CUDAMatrix):
+        _ensure_cm_init()
+        if isinstance(traj,cm.CUDAMatrix):
+            cu_traj=traj
+        else:
             traj = coretools.ensure_np_array(traj)
             cu_traj=cm.CUDAMatrix(traj)
-        else:
-            cu_traj=traj
     else:
         traj = coretools.ensure_np_array(traj)
 
