@@ -194,6 +194,8 @@ def maxent(
         cuda = _HAS_CUDAMAT
 
     if cuda:
+        if not _HAS_CUDAMAT:
+            raise ValueError("Cudamat not available, can only run ANN with numpy")
         if not isinstance(traj,cm.CUDAMatrix):
             traj = coretools.ensure_np_array(traj)
             cu_traj=cm.CUDAMatrix(traj)
