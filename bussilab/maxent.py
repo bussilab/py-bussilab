@@ -48,7 +48,7 @@ class MaxentResult(coretools.Result):
 # should be called before sum() calls in cudamat
 def _ensure_ones(min_size):
     import cudamat
-    mins_size=min(1024*256,min_size)
+    min_size=min(1024*256,min_size)
     if not hasattr(cudamat.CUDAMatrix, 'ones'):
         cudamat.CUDAMatrix.ones = cudamat.empty((min_size, 1)).assign(1.0)
     else:
