@@ -61,7 +61,7 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 bussilab bin --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Doc
-      if: ${{ matrix.os == 'ubuntu-latest' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.10' }}
       run: |
         pip install --upgrade pdoc3 jupyter nbconvert
         pdoc3 -f --html -o doc/ bussilab
