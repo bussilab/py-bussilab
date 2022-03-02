@@ -12,6 +12,12 @@ try:
 except ModuleNotFoundError:
     _HAS_CUDAMAT=False
 
+def _ensure_cm_init():
+    if not hasattr(cm.CUDAMatrix, 'ones'):
+        cm.cublas_init()
+    elif not isinstance(cm.CUDAMatrix.ones,cm.CUDAMatrix):
+        cm.cublas_init()
+
 from . import coretools
 from .coretools import ensure_np_array
 
@@ -42,6 +48,9 @@ class ANN:
 
         if cuda is None:
             cuda = _HAS_CUDAMAT
+
+        if cuda:
+            _ensure_cm_init()
 
         self.cuda=cuda
 
