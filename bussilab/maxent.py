@@ -44,6 +44,19 @@ class MaxentResult(coretools.Result):
         self.nit = nit
         """`int` reporting the number of iterations in the minimization procedure."""
 
+# Internal tool
+# should be called before sum() calls in cudamat
+def _ensure_ones(min_size):
+    import cudamat
+    mins_size=min(1024*256,min_size)
+    if not hasattr(cudamat.CUDAMatrix, 'ones'):
+        cudamat.CUDAMatrix.ones = cudamat.empty((min_size, 1)).assign(1.0)
+    else:
+        if not isinstance(cudamat.CUDAMatrix.ones,cudamat.CUDAMatrix):
+            cudamat.CUDAMatrix.ones = cudamat.empty((min_size, 1)).assign(1.0)
+        elif cudamat.CUDAMatrix.ones.shape[0]<min_size:
+            cudamat.CUDAMatrix.ones = cudamat.empty((min_size, 1)).assign(1.0)
+
 
 # Internal tool to compute averages over trajectory.
 # Does not access external data.
@@ -62,6 +75,7 @@ def _heavy_part(logW: np.ndarray,
         if weights:
             save_logW_ME=logW_ME.copy()
         cm.exp(logW_ME)
+        _ensure_ones(logW_ME.shape[0])
         Z=logW_ME.sum(0).asarray()[0,0]
         averages = cm.dot(logW_ME.transpose(),traj).asarray()[0,:]
         averages=np.array(averages,dtype="float64")/Z

@@ -82,7 +82,6 @@ class TestMaxent(unittest.TestCase):
 try:
     import cudamat
     _has_cudamat=True
-    cudamat.cublas_init()
 except ModuleNotFoundError:
     _has_cudamat=False
 
