@@ -180,6 +180,7 @@ def maxent(
 
     if cuda:
         if not isinstance(traj,cm.CUDAMatrix):
+            traj = coretools.ensure_np_array(traj)
             cu_traj=cm.CUDAMatrix(traj)
         else:
             cu_traj=traj
