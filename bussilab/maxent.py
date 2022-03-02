@@ -7,6 +7,13 @@ import numpy as np
 from scipy.optimize import minimize
 from . import coretools
 
+try:
+    import cudamat as cm  # pylint: disable=import-error
+    _HAS_CUDAMAT=True
+except ModuleNotFoundError:
+    _HAS_CUDAMAT=False
+
+
 class MaxentResult(coretools.Result):
     """Result of a `bussilab.maxent.maxent` calculation."""
     def __init__(self,
@@ -44,20 +51,40 @@ class MaxentResult(coretools.Result):
 def _heavy_part(logW: np.ndarray,
                 traj: np.ndarray,
                 l: np.ndarray,
-                weights: bool = False):
-    logW_ME = logW-np.dot(traj, l)  # maxent correction
-    shift_ME = np.max(logW_ME)  # shift to avoid overflow
-    W_ME = np.exp(logW_ME - shift_ME)
-    # Partition function:
-    Z = np.sum(W_ME)
-    # Averages:
-    averages = np.dot(W_ME, traj) / Z
-    logZ = np.log(Z) + shift_ME
-    if not weights:
-        return (logZ, averages)
-    # only return weights if requested:
-    logW_ME -= np.log(Z)+shift_ME
-    return (logZ, averages, logW_ME)
+                weights: bool = False,
+                cuda: bool = False):
+    if cuda:
+        cu_minus_l=cm.CUDAMatrix(np.reshape(-l,(-1,1)))
+        logW_ME = cm.dot(traj,cu_minus_l)
+        logW_ME.add(logW)
+        shift_ME = logW_ME.max(0).asarray()[0,0]
+        logW_ME.subtract(float(shift_ME))
+        if weights:
+            save_logW_ME=logW_ME.copy()
+        cm.exp(logW_ME)
+        Z=logW_ME.sum(0).asarray()[0,0]
+        averages = cm.dot(logW_ME.transpose(),traj).asarray()[0,:]
+        averages=np.array(averages,dtype="float64")/Z
+        logZ = np.log(Z) + shift_ME
+        if not weights:
+            return (logZ, averages)
+        save_logW_ME.subtract(float(np.log(Z)))
+        return (logZ, averages, save_logW_ME.asarray()[:,0])
+    else:
+        logW_ME = logW-np.dot(traj, l)  # maxent correction
+        shift_ME = np.max(logW_ME)  # shift to avoid overflow
+        W_ME = np.exp(logW_ME - shift_ME)
+        # Partition function:
+        Z = np.sum(W_ME)
+        # Averages:
+        averages = np.dot(W_ME, traj) / Z
+        logZ = np.log(Z) + shift_ME
+        if not weights:
+            return (logZ, averages)
+        # only return weights if requested:
+        logW_ME -= np.log(Z)+shift_ME
+        return (logZ, averages, logW_ME)
+
 
 def maxent(
         traj,
@@ -72,7 +99,8 @@ def maxent(
         method: str = "L-BFGS-B",
         regularization: Optional[Callable] = None,
         tol: Optional[float] = None,
-        options=None):
+        options=None,
+        cuda=False):
     """Tool that computes new weights to enforce reference values.
 
        This tools process a an array containing the observables computed along a trajectory and
@@ -147,7 +175,19 @@ def maxent(
 
     """
 
-    traj = coretools.ensure_np_array(traj)
+    if cuda is None:
+        cuda = _HAS_CUDAMAT
+
+    if cuda:
+        if not isinstance(traj,cm.CUDAMatrix):
+            traj = coretools.ensure_np_array(traj)
+            cu_traj=cm.CUDAMatrix(traj)
+        else:
+            cu_traj=traj
+            print(cu_traj.shape)
+    else:
+        traj = coretools.ensure_np_array(traj)
+
     lambdas = coretools.ensure_np_array(lambdas)
 
     nframes = traj.shape[0]
@@ -245,6 +285,9 @@ def maxent(
     W0 = np.exp(logW - shift0)
     logZ0 = np.log(np.sum(W0)) + shift0
 
+    if cuda:
+        cu_logW=cm.CUDAMatrix(np.reshape(logW,(-1,1)))
+
     # function to be minimized
     def func(l):
 
@@ -267,10 +310,16 @@ def maxent(
         else:
             ll = l
 
-        logZ, averages = _heavy_part(logW, traj, ll)
+
+        if cuda:
+            logZ, averages = _heavy_part(cu_logW, cu_traj, ll, cuda=cuda)
+        else:
+            logZ, averages = _heavy_part(logW, traj, ll, cuda=cuda)
+
 
         f = logZ - logZ0
         der = -averages
+
 
         if regularization is not None:
             reg = regularization(ll)
@@ -346,10 +395,13 @@ def maxent(
         lambdas = res.x
 
     # recompute weights at the end
-    logZ, averages, logW_ME = _heavy_part(logW, traj, lambdas, weights=True)
+    if cuda:
+        logZ, averages, logW_ME = _heavy_part(cu_logW, cu_traj, lambdas, weights=True, cuda=cuda)
+    else:
+        logZ, averages, logW_ME = _heavy_part(logW, traj, lambdas, weights=True)
 
     if verbose:
-        sys.stderr.write("MAXENT: end")
+        sys.stderr.write("MAXENT: end\n")
 
     return MaxentResult(
         logW_ME=logW_ME,

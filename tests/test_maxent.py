@@ -79,5 +79,30 @@ class TestMaxent(unittest.TestCase):
         self.assertAlmostEqual(np.sum((m.averages-[0.33333333, 0.333333333])**2), 0.0)
         self.assertAlmostEqual(np.sum((m.lambdas-[0.0, 0.0])**2), 0.0)
 
+try:
+    import cudamat
+    _has_cudamat=True
+    cudamat.cublas_init()
+except ModuleNotFoundError:
+    _has_cudamat=False
+
+if _has_cudamat:
+    class TestCuda(unittest.TestCase):
+        def test(self):
+            import numpy as np
+            traj = [[0, 0], [1, 0], [0, 1]]
+            m = maxent(traj, ((0.3, 1.0), (-np.inf, 0.4)),cuda=True)
+            self.assertTrue(m.success)
+            self.assertAlmostEqual(np.sum((m.logW_ME-[-1.0986122, -1.0986122, -1.0986122])**2), 0.0)
+            self.assertAlmostEqual(np.sum((m.averages-[0.33333333, 0.333333333])**2), 0.0)
+            self.assertAlmostEqual(np.sum((m.lambdas-[0.0, 0.0])**2), 0.0)
+
+            cu_traj=cudamat.CUDAMatrix(np.array(traj))
+            m = maxent(cu_traj, ((0.3, 1.0), (-np.inf, 0.4)),cuda=True)
+            self.assertTrue(m.success)
+            self.assertAlmostEqual(np.sum((m.logW_ME-[-1.0986122, -1.0986122, -1.0986122])**2), 0.0)
+            self.assertAlmostEqual(np.sum((m.averages-[0.33333333, 0.333333333])**2), 0.0)
+            self.assertAlmostEqual(np.sum((m.lambdas-[0.0, 0.0])**2), 0.0)
+
 if __name__ == "__main__":
     unittest.main()
