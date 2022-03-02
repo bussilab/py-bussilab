@@ -59,6 +59,8 @@ def _heavy_part(logW: np.ndarray,
         logW_ME.add(logW)
         shift_ME = logW_ME.max(0).asarray()[0,0]
         logW_ME.subtract(float(shift_ME))
+        if weights:
+            save_logW_ME=logW_ME.copy()
         cm.exp(logW_ME)
         Z=logW_ME.sum(0).asarray()[0,0]
         averages = cm.dot(logW_ME.transpose(),traj).asarray()[0,:]
@@ -66,8 +68,8 @@ def _heavy_part(logW: np.ndarray,
         logZ = np.log(Z) + shift_ME
         if not weights:
             return (logZ, averages)
-        logW_ME.subtract(float(logZ))
-        return (logZ, averages, logW_ME.asarray()[:,0])
+        save_logW_ME.subtract(float(np.log(Z)))
+        return (logZ, averages, save_logW_ME.asarray()[:,0])
     else:
         logW_ME = logW-np.dot(traj, l)  # maxent correction
         shift_ME = np.max(logW_ME)  # shift to avoid overflow
@@ -176,7 +178,15 @@ def maxent(
     if cuda is None:
         cuda = _HAS_CUDAMAT
 
-    traj = coretools.ensure_np_array(traj)
+    if cuda:
+        if not isinstance(traj,cm.CUDAMatrix):
+            cu_traj=cm.CUDAMatrix(traj)
+        else:
+            cu_traj=traj
+            print(cu_traj.shape)
+    else:
+        traj = coretools.ensure_np_array(traj)
+
     lambdas = coretools.ensure_np_array(lambdas)
 
     nframes = traj.shape[0]
@@ -275,7 +285,6 @@ def maxent(
     logZ0 = np.log(np.sum(W0)) + shift0
 
     if cuda:
-        cu_traj=cm.CUDAMatrix(traj)
         cu_logW=cm.CUDAMatrix(np.reshape(logW,(-1,1)))
 
     # function to be minimized
@@ -344,7 +353,6 @@ def maxent(
         f += np.dot(l, fullreference)
         der += fullreference
 
-
         return(f, der)
 
 
@@ -392,7 +400,7 @@ def maxent(
         logZ, averages, logW_ME = _heavy_part(logW, traj, lambdas, weights=True)
 
     if verbose:
-        sys.stderr.write("MAXENT: end")
+        sys.stderr.write("MAXENT: end\n")
 
     return MaxentResult(
         logW_ME=logW_ME,
