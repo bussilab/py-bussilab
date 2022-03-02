@@ -212,7 +212,7 @@ pytest
 ```
 All tests should succeed. Notice that the tests will import the `bussilab` module.
 Thus, if you want the version modified by you to be tested (and not another version
-that you might have installed with `pip` already) you should properly set
+that you might have installed with pip already) you should properly set
 the `PYTHONPATH` variable as explained above.
 
 Static types can be checked using `mypy`:

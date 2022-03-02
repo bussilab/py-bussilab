@@ -155,8 +155,9 @@ def maxent(
 
            A function that takes as argument the current lambdas and return an tuple
            containing the regularization function and its derivatives. For instance,
-           passing a function defined as `def reg(x): return
-           (1e-4*0.5*np.sum(x**2),1e-4*x)` is equivalent to passing `l2=1e-4`.
+           passing a function defined as
+           `def reg(x): return (0.0001*0.5*np.sum(x**2),0.0001*x)`
+           is equivalent to passing `l2=0.0001`.
 
        verbose : bool
            If True, progress informations are written on stdout.
