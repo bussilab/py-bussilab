@@ -127,6 +127,8 @@ def maxent(
        traj : array_like
            A 2D array (lists or tuples are internally converted to numpy arrays).
            `traj[i,j]` is j-th observable computed in the i-th frame.
+           If traj is a CUDAMatrix object, then cudamat is used irrespectively of the
+           bool parameter `cuda`.
 
        reference : array_like
 
@@ -188,10 +190,26 @@ def maxent(
        options : dict
            Arbitrary options passed to `scipy.optimize.minimize`.
 
+       cuda : bool or None (default False)
+           Use cuda. If None, chosen based on the availability of the cudamat library.
+
+       Notes on using CUDA
+       -------------------
+
+       Note that for normal datasets the cost of transfering the traj object to
+       the GPU dominates. It it however possible to transfer the traj object first to the GPU
+       with `cu_traj=cm.CUDAMatrix(traj)` and then reuse it for multiple calls
+       (e.g. for a hyper parameter scan).
+
     """
 
     if cuda is None:
         cuda = _HAS_CUDAMAT
+
+    # when a cudamatrix is passed, cuda is enabled by default
+    if _HAS_CUDAMAT:
+        if isinstance(traj,cm.CUDAMatrix):
+            cuda=True
 
     if cuda:
         if not _HAS_CUDAMAT:
@@ -201,7 +219,6 @@ def maxent(
             cu_traj=cm.CUDAMatrix(traj)
         else:
             cu_traj=traj
-            print(cu_traj.shape)
     else:
         traj = coretools.ensure_np_array(traj)
 
