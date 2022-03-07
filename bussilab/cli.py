@@ -484,6 +484,7 @@ def _jrun(**kargs):
 @arg("--python-exec",
      help="remote python executable (e.g. module load python3 python-home; python)",
      default="python")
+@arg("--server-url", help="URL on server (default: choose interactively)", default="")
 @arg("--open-cmd", help="open command (detected automatically by default)", default="")
 def _jremote(**kargs):
     """

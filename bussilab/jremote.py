@@ -84,6 +84,7 @@ def remote(server: str,
            python_exec: str = "python",
            dry_run: bool = False,
            list_only: bool = False,
+           server_url: str ="",
            port: int = 0,
            index: int = 0,
            open_cmd: str = ""):
@@ -96,34 +97,37 @@ def remote(server: str,
     if dry_run and list_only:
         return
 
-    ll = []
-    ll_localhost = []
-    args = ['ssh', server, cmd]
+    if server_url == "":
+        ll = []
+        ll_localhost = []
+        args = ['ssh', server, cmd]
 
-    for l in subprocess.run(args,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            universal_newlines=True,
-                            check=True).stdout.split('\n'):
-        if re.match("^http", l):
-            ll.append(re.sub("localhost", server, l))
-            ll_localhost.append(l)
+        for l in subprocess.run(args,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                universal_newlines=True,
+                                check=True).stdout.split('\n'):
+            if re.match("^http", l):
+                ll.append(re.sub("localhost", server, l))
+                ll_localhost.append(l)
 
-    for i in range(len(ll)):
-        print(str(i+1)+") "+ll[i])
+        for i in range(len(ll)):
+            print(str(i+1)+") "+ll[i])
 
-    if list_only:
-        return
+        if list_only:
+            return
 
-    if len(ll_localhost) == 1:
-        index = 1
+        if len(ll_localhost) == 1:
+            index = 1
 
-    if index == 0:
-        sys.stdout.write("Choose a notebook or interrupt (^c):")
-        sys.stdout.flush()
-        index = int(sys.stdin.readline())
+        if index == 0:
+            sys.stdout.write("Choose a notebook or interrupt (^c):")
+            sys.stdout.flush()
+            index = int(sys.stdin.readline())
 
-    url = ll_localhost[index-1].split()[0]
+        url = ll_localhost[index-1].split()[0]
+    else:
+        url = server_url
 
     print("Chosen url:", url)
 
