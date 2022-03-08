@@ -4,9 +4,10 @@ env
 /*.ipy*
 *.egg-info
 *venv
-/tmp
+/tmp*
 .ipynb*
 /doc
 .mypy_cache
 .coverage
 /dist
+.DS_Store
