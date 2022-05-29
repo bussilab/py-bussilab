@@ -31,7 +31,7 @@ def max_clique(adj,weights=None,use_networkit=False):
     cliques=[]
     ww=[]
     if use_networkit:
-        import networkit
+        import networkit # pylint: disable=import-error
         graph=networkit.nxadapter.nx2nk(networkx.Graph(adj))
         graph.removeSelfLoops()
         while graph.numberOfNodes()>0:
