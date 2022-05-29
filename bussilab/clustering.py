@@ -24,26 +24,50 @@ class ClusteringResult(Result):
         self.weights = weights
         """`list` containing the weights of the clusters."""
 
-def max_clique(adj,weights=None):
+def max_clique(adj,weights=None,use_networkit=False):
     """Same algorithm as in Reisser, et al, NAR (2020)."""
     # weights: optional weights
     # if adj is a graph, it will be copied
-    graph=networkx.Graph(adj)
     cliques=[]
     ww=[]
-    while graph.number_of_nodes()>0:
-        maxw=0.0
-        for i in networkx.algorithms.clique.find_cliques(graph):
-            if weights is not None:
-                w=np.sum(weights[i])
+    if use_networkit:
+        import networkit
+        graph=networkit.nxadapter.nx2nk(networkx.Graph(adj))
+        graph.removeSelfLoops()
+        while graph.numberOfNodes()>0:
+            if weights is None:
+                cl=networkit.clique.MaximalCliques(graph,maximumOnly=True)
+                cl.run()
+                maxi=cl.getCliques()[0]
+                maxw=len(maxi)
             else:
-                w=len(i)
-            if w > maxw:
-                maxi=i
-                maxw=w
-        cliques.append(maxi)
-        ww.append(maxw)
-        graph.remove_nodes_from(maxi)
+                cl=networkit.clique.MaximalCliques(graph)
+                cl.run()
+                maxw=0.0
+                for i in cl.getCliques():
+                    w=np.sum(weights[i])
+                    if w > maxw:
+                        maxi=i
+                        maxw=w
+            cliques.append(maxi)
+            ww.append(maxw)
+            for i in maxi:
+                graph.removeNode(i)
+    else:
+        graph=networkx.Graph(adj)
+        while graph.number_of_nodes()>0:
+            maxw=0.0
+            for i in networkx.algorithms.clique.find_cliques(graph):
+                if weights is not None:
+                    w=np.sum(weights[i])
+                else:
+                    w=len(i)
+                if w > maxw:
+                    maxi=i
+                    maxw=w
+            cliques.append(maxi)
+            ww.append(maxw)
+            graph.remove_nodes_from(maxi)
     return ClusteringResult(method="max_clique",clusters=cliques, weights=ww)
 
 def daura(adj,weights=None):
