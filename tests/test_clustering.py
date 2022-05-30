@@ -14,15 +14,15 @@ class TestClustering(TestCase):
         cl=max_clique(adj)
         self.assertEqual(cl.method,"max_clique")
         self.assertEqual(cl.weights,[32, 13, 5])
-        ref=[[31, 30, 28, 29, 27, 25, 26, 23, 24, 22, 20, 21, 18, 19, 16, 17, 13, 14, 15, 10, 11, 12, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4], [38, 39, 40, 41, 42, 43, 44, 37, 35, 36, 34, 33, 32], [45, 48, 49, 46, 47]]
+        ref=[range(32), range(32,45), range(45,50)]
         # compare sets, since order is irrelevant
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
-        weights=np.array(range(50))+1
+        weights=np.hstack((np.ones(32),3*np.ones(13),8*np.ones(5)))
         cl=max_clique(adj,weights)
-        self.assertEqual(cl.weights,[546, 546, 99, 69, 15])
-        ref=[[45, 38, 39, 40, 41, 42, 43, 44, 37, 35, 36, 47, 46], [13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 10, 11, 12, 5, 6, 7, 8, 9, 32], [48, 49], [33, 34], [0, 1, 2, 3, 4]]
+        self.assertEqual(cl.weights,[61, 32, 18])
+        ref=[range(38,50), range(0,32), range(32,38)]
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
@@ -35,7 +35,7 @@ class TestClustering(TestCase):
         self.assertEqual(adj.shape,dist.shape)  # check that adj has not been resized
         self.assertEqual(cl.method,"daura")
         self.assertEqual(cl.weights,[32, 13, 5])
-        ref=[[31, 30, 28, 29, 27, 25, 26, 23, 24, 22, 20, 21, 18, 19, 16, 17, 13, 14, 15, 10, 11, 12, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4], [38, 39, 40, 41, 42, 43, 44, 37, 35, 36, 34, 33, 32], [45, 48, 49, 46, 47]]
+        ref=[range(32), range(32,45), range(45,50)]
         # compare sets, since order is irrelevant
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
@@ -89,17 +89,17 @@ if _has_networkit:
             adj=np.int_(dist<1000)
             cl=max_clique(adj,use_networkit=True)
             self.assertEqual(cl.method,"max_clique")
+            print("nk",cl)
             self.assertEqual(cl.weights,[32, 13, 3, 2])
-            ref=[[31, 30, 28, 29, 27, 25, 26, 23, 24, 22, 20, 21, 18, 19, 16, 17, 13, 14, 15, 10, 11, 12, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4], [38, 39, 40, 41, 42,
-            43, 44, 37, 35, 36, 34, 45, 46], [48, 49, 47], [32,33]]
+            ref=[range(32), range(34,47), range(47,50),(32,33)]
             # compare sets, since order is irrelevant
             for i in range(len(cl.clusters)):
                 self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
-            weights=np.array(range(50))+1
+            weights=np.hstack((np.ones(32),3*np.ones(13),8*np.ones(5)))
             cl=max_clique(adj,weights,use_networkit=True)
-            self.assertEqual(cl.weights,[546, 546, 99, 69, 15])
-            ref=[[32, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31], [47, 35, 45, 36, 43, 46, 37, 42, 38, 41, 39, 40, 44], [48, 49], [33, 34], [0, 4, 1, 2, 3]]
+            self.assertEqual(cl.weights,[61, 32, 18])
+            ref=[range(38,50), range(0,32), range(32,38)]
             for i in range(len(cl.clusters)):
                 self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
