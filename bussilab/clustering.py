@@ -24,7 +24,7 @@ class ClusteringResult(Result):
         self.weights = weights
         """`list` containing the weights of the clusters."""
 
-def max_clique(adj,weights=None,use_networkit=False):
+def max_clique(adj,weights=None,use_networkit=False,min_size=1,max_clusters=None):
     """Same algorithm as in Reisser, et al, NAR (2020)."""
     # weights: optional weights
     # if adj is a graph, it will be copied
@@ -49,8 +49,13 @@ def max_clique(adj,weights=None,use_networkit=False):
                     if w > maxw:
                         maxi=i
                         maxw=w
+            if maxw<min_size:
+                break
             cliques.append(maxi)
             ww.append(maxw)
+            if max_clusters is not None:
+                if len(cliques)>=max_clusters:
+                    break
             for i in maxi:
                 graph.removeNode(i)
     else:
@@ -65,8 +70,13 @@ def max_clique(adj,weights=None,use_networkit=False):
                 if w > maxw:
                     maxi=i
                     maxw=w
+            if maxw<min_size:
+                break
             cliques.append(maxi)
             ww.append(maxw)
+            if max_clusters is not None:
+                if len(cliques)>=max_clusters:
+                    break
             graph.remove_nodes_from(maxi)
     return ClusteringResult(method="max_clique",clusters=cliques, weights=ww)
 
