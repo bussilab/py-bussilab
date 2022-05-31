@@ -24,8 +24,44 @@ class ClusteringResult(Result):
         self.weights = weights
         """`list` containing the weights of the clusters."""
 
-def max_clique(adj,weights=None,*,use_networkit=False,min_size=0,max_clusters=None):
-    """Same algorithm as in Reisser, et al, NAR (2020)."""
+def max_clique(adj,weights=None,*,min_size=0,max_clusters=None,use_networkit=False):
+    """Clustering algorithm used in [Reisser et al, NAR (2020)](https://doi.org/10.1093/nar/gkz1184).
+
+       Parameters
+       ----------
+
+       adj : array_like, square matrix
+
+           adj[i,j] contains 1 (or True) if frames i and j are adjacent, 0 (or False) otherwise.
+
+       weights : array_like, optional
+
+           weights[i] contains the weight of the i-th frame.
+
+       min_size : number
+
+           Minimum cluster size. Clusters smaller than this size are not reported.
+           When using weights, the cluster size is defined as the sum of the weights of
+           the members of the cluster.
+
+       max_clusters : int
+
+           Maximum number of clusters.
+
+       use_networkit : bool, optional
+
+           if True, use a networkit implementation that seems to be faster.
+           It requires python package networkit to be installed in advance!
+
+       Example
+       -------
+
+       ```
+       import scipy.spatial.distance as distance
+       dist=distance.squareform(distance.pdist(trajectory))
+       clustering.max_clique(dist<0.7)
+       ```
+    """
     # weights: optional weights
     # if adj is a graph, it will be copied
     cliques=[]
@@ -81,7 +117,38 @@ def max_clique(adj,weights=None,*,use_networkit=False,min_size=0,max_clusters=No
     return ClusteringResult(method="max_clique",clusters=cliques, weights=ww)
 
 def daura(adj,weights=None,*,min_size=0,max_clusters=None):
-    """Same algorithm as in Daura et al, Angew. Chemie (1999)."""
+    """Clustering algorithm introduced in Daura et al, Angew. Chemie (1999).
+
+       Parameters
+       ----------
+
+       adj : array_like, square matrix
+
+           adj[i,j] contains 1 (or True) if frames i and j are adjacent, 0 (or False) otherwise.
+
+       weights : array_like, optional
+
+           weights[i] contains the weight of the i-th frame.
+
+       min_size : number
+
+           Minimum cluster size. Clusters smaller than this size are not reported.
+           When using weights, the cluster size is defined as the sum of the weights of
+           the members of the cluster.
+
+       max_clusters : int
+
+           Maximum number of clusters.
+
+       Example
+       -------
+
+       ```
+       import scipy.spatial.distance as distance
+       dist=distance.squareform(distance.pdist(trajectory))
+       clustering.daura(dist<0.7)
+       ```
+    """
     adj=adj.copy()  # take a copy (adj is modified while clustering)
     indexes=np.arange(len(adj))
     clusters=[]
@@ -121,6 +188,43 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
 
        The implementation included here, at variance with the original one, allows passing weights
        and can be used with arbitrary metrics.
+
+       Parameters
+       ----------
+
+       distances : array_like, square matrix
+
+           distances[i,j] contains the distance between i and j frame.
+
+       cutoff : number
+
+           maximum distance for two frames to be included in the same cluster
+
+       weights : array_like, optional
+
+           weights[i] contains the weight of the i-th frame.
+
+       min_size : number
+
+           Minimum cluster size. Clusters smaller than this size are not reported.
+           When using weights, the cluster size is defined as the sum of the weights of
+           the members of the cluster.
+
+       max_clusters : int
+
+           Maximum number of clusters.
+
+       WARNING: irrespectively of min_size, the current implementation does not report
+       clusters with a single member
+
+       Example
+       -------
+
+       ```
+       import scipy.spatial.distance as distance
+       dist=distance.squareform(distance.pdist(trajectory))
+       clustering.qt(dist,0.7)
+       ```
     """
     clusters=[]
     ww=[]
