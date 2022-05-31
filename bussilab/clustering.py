@@ -171,7 +171,6 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
             if new_len_precluster > len_precluster:
                 len_precluster = new_len_precluster
                 max_precluster = precluster
-                max_node = biggest_node
                 degrees = ma.masked_less(degrees, len_precluster)
             if not degrees.max():
                 break
