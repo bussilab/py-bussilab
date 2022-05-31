@@ -93,7 +93,7 @@ jobs:
       # 3.8:  segfaults when importing bussilab/potts.py due to a problem with numba.jit
       # 3.10: py310-numba not available yet
       matrix:
-        python-version: ["3.7", "3.9"]
+        python-version: ["3.7", "3.8", "3.9", "3.10"]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
