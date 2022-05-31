@@ -24,7 +24,7 @@ class ClusteringResult(Result):
         self.weights = weights
         """`list` containing the weights of the clusters."""
 
-def max_clique(adj,weights=None,use_networkit=False,min_size=1,max_clusters=None):
+def max_clique(adj,weights=None,*,use_networkit=False,min_size=0,max_clusters=None):
     """Same algorithm as in Reisser, et al, NAR (2020)."""
     # weights: optional weights
     # if adj is a graph, it will be copied
@@ -103,3 +103,102 @@ def daura(adj,weights=None):
             weights=np.delete(weights,ii)
         indexes=np.delete(indexes,ii)
     return ClusteringResult(method="daura",clusters=clusters, weights=ww)
+
+def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
+    """Quality threshold clustering.
+
+       The method is explained in the [original paper](https://doi.org/10.1101/gr.9.11.1106).
+       The implementation has been adapted from [this one](https://github.com/rglez/QT),
+       which is also released under a GPL licence.
+       Thus, if you use this algorithm please cite [this article](https://doi.org/10.1021/acs.jcim.9b00558),
+       which also discusses the imporant differences between this algorithm and the Daura et al algorithm
+       in the context of analysing molecular dynamics simulations.
+
+       The implementation included here, at variance with the original one, allows passing weights
+       and can be used with arbitrary metrics.
+    """
+    clusters=[]
+    ww=[]
+    import numpy.ma as ma
+    if weights is not None:
+        weights=weights.copy()
+    matrix=distances.copy()
+    N=len(matrix)
+    matrix[matrix > cutoff] = np.inf
+    matrix[matrix == 0] = np.inf
+    if weights is None:
+        degrees = (matrix < np.inf).sum(axis=0)
+    else:
+        degrees = np.sum((matrix < np.inf) * weights,axis=0)
+
+    # =============================================================================
+    # QT algotithm
+    # =============================================================================
+
+    clusters_arr = np.ndarray(N, dtype=np.int64)
+    clusters_arr.fill(-1)
+
+    ncluster = 0
+    while True:
+        # This while executes for every cluster in trajectory ---------------------
+        len_precluster = 0
+        while True:
+            # This while executes for every potential cluster analyzed ------------
+            biggest_node = degrees.argmax()
+            precluster = []
+            precluster.append(biggest_node)
+            candidates = np.where(matrix[biggest_node] < np.inf)[0]
+            next_ = biggest_node
+            distances = matrix[next_][candidates]
+            while True:
+                # This while executes for every node of a potential cluster -------
+                next_ = candidates[distances.argmin()]
+                precluster.append(next_)
+                post_distances = matrix[next_][candidates]
+                mask = post_distances > distances
+                distances[mask] = post_distances[mask]
+                if (distances == np.inf).all():
+                    break
+            degrees[biggest_node] = 0
+            # This section saves the maximum cluster found so far -----------------
+            if weights is None:
+                new_len_precluster=len(precluster)
+            else:
+                new_len_precluster=np.sum(weights[precluster])
+
+            # break degeneracy picking the cluster with largest diameter
+
+            if new_len_precluster > len_precluster:
+                len_precluster = new_len_precluster
+                max_precluster = precluster
+                max_node = biggest_node
+                degrees = ma.masked_less(degrees, len_precluster)
+            if not degrees.max():
+                break
+        # General break if min_size is reached -------------------------------------
+        if len_precluster < min_size:
+            break
+
+        # ---- Store cluster frames -----------------------------------------------
+        clusters_arr[max_precluster] = ncluster
+        ncluster += 1
+
+        clusters.append(max_precluster)
+        ww.append(len_precluster)
+
+        if max_clusters is not None:
+            if ncluster >= max_clusters:
+                break
+
+
+        # ---- Update matrix & degrees (discard found clusters) -------------------
+        matrix[max_precluster, :] = np.inf
+        matrix[:, max_precluster] = np.inf
+
+        if weights is None:
+            degrees = (matrix < np.inf).sum(axis=0)
+        else:
+            degrees = np.sum((matrix < np.inf) * weights,axis=0)
+        if (degrees == 0).all():
+            break
+    return ClusteringResult(method="qt",clusters=clusters, weights=ww)

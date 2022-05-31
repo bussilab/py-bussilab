@@ -74,6 +74,26 @@ class TestClustering(TestCase):
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
+    def test_qt(self):
+        from bussilab.clustering import qt
+        data=(np.array(range(50))**2).reshape(-1,1)
+        dist=distance.squareform(distance.pdist(data))
+        cl=qt(dist,1000)
+        self.assertEqual(cl.method,"qt")
+        self.assertEqual(cl.weights,[32, 13, 5])
+        ref=[range(32), range(32,45), range(45,50)]
+        # compare sets, since order is irrelevant
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+        weights=np.hstack((np.ones(32),3*np.ones(13),8*np.ones(5)))
+        cl=qt(dist,1000,weights)
+        self.assertEqual(cl.weights,[61, 32, 18])
+        ref=[range(38,50), range(0,32), range(32,38)]
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+
 try:
     import networkit
     _has_networkit=True
