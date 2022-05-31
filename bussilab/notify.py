@@ -88,16 +88,16 @@ from typing import cast
 _organization="bussilab"  # this is hardcoded for now
 
 def _parse_url(url: str):
-    if re.match(r"^https://.*\.slack\.com/archives/.*",url):
+    if re.match(r"^https://[^/]*\.slack\.com/archives/.*",url):
         organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
-        url=re.sub(r"^https://.*\.slack\.com/archives/","",url)
+        url=re.sub(r"^https://[^/]*\.slack\.com/archives/","",url)
         url=url[:-6]+"."+url[-6:]
         channel=re.sub("/p.*","",url)
         ts=re.sub(".*/p","",url)
         return { "type":"message", "ts":ts, "channel":channel, "organization":organization }
-    if re.match(r"^https://.*\.slack\.com/files/.*",url):
+    if re.match(r"^https://[^/]*\.slack\.com/files/.*",url):
         organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/files/.*","",url))
-        url=re.sub(r"^https://.*\.slack\.com/files/","",url)
+        url=re.sub(r"^https://[^/]*\.slack\.com/files/","",url)
         user=re.sub("/.*","",url)
         id=re.sub("^"+user+"/","",url)
         id=re.sub("/.*","",id)
@@ -205,9 +205,9 @@ def notify(message: str = "",
             if config is None:
                 config = coretools.config()
             channel=config["notify"]["channel"]
-        if re.match(r"^https://.*\.slack\.com/archives/.*", channel):
+        if re.match(r"^https://[^/]*\.slack\.com/archives/.*", channel):
             organization = re.sub("^https://","", re.sub(r"\.slack\.com/archives/.*","",channel))
-            channel=re.sub(r"^https://.*\.slack\.com/archives/","",channel)
+            channel=re.sub(r"^https://[^/]*\.slack\.com/archives/","",channel)
         else:
             # this is needed to set organization correctly (so as to build the
             # proper link) when passing the name of a channel
