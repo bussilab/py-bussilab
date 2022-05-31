@@ -80,7 +80,7 @@ def max_clique(adj,weights=None,*,use_networkit=False,min_size=0,max_clusters=No
             graph.remove_nodes_from(maxi)
     return ClusteringResult(method="max_clique",clusters=cliques, weights=ww)
 
-def daura(adj,weights=None):
+def daura(adj,weights=None,*,min_size=0,max_clusters=None):
     """Same algorithm as in Daura et al, Angew. Chemie (1999)."""
     adj=adj.copy()  # take a copy (adj is modified while clustering)
     indexes=np.arange(len(adj))
@@ -94,9 +94,14 @@ def daura(adj,weights=None):
         else:
             d=np.sum(adj,axis=0)
         n=np.argmax(d)
+        if d[n]<min_size:
+            break
         ww.append(d[n])
         ii=np.where(adj[n]>0)[0]
         clusters.append(indexes[ii])
+        if max_clusters:
+            if len(clusters) >= max_clusters:
+                break
         adj=np.delete(adj,ii,axis=0)
         adj=np.delete(adj,ii,axis=1)
         if weights is not None:
@@ -165,8 +170,6 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
                 new_len_precluster=len(precluster)
             else:
                 new_len_precluster=np.sum(weights[precluster])
-
-            # break degeneracy picking the cluster with largest diameter
 
             if new_len_precluster > len_precluster:
                 len_precluster = new_len_precluster
