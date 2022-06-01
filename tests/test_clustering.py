@@ -196,6 +196,7 @@ class TestClustering(TestCase):
     def test_qt2(self):
         from bussilab.clustering import qt
         dist=distance.squareform(distance.pdist(dataset1()))
+        dist[0,0]=1e-3 # this is to check that qt() ignores the diagonal terms
         cl=qt(dist,3)
         ref=[[13, 6, 21, 4, 27, 23, 2, 5, 15, 1, 17], [3, 19, 28, 24, 8, 0, 26, 14], [7, 22, 11], [12, 29], [25, 16], [18, 20]]
         refw=[11, 8, 3, 2, 2, 2]

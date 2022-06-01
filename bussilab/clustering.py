@@ -232,6 +232,7 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
     if weights is not None:
         weights=weights.copy()
     matrix=distances.copy()
+    np.fill_diagonal(matrix,0)
     N=len(matrix)
     matrix[matrix > cutoff] = np.inf
     matrix[matrix == 0] = np.inf
