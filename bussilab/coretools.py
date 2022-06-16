@@ -111,7 +111,7 @@ class Result(dict):
         return list(sorted(self.keys()))
 
 @contextmanager
-def cd(newdir: os.PathLike):
+def cd(newdir: os.PathLike, *, create: bool = False):
     """Context manager to temporarily change working directory.
 
        Can be used to change working directory temporarily making sure that at the
@@ -124,6 +124,10 @@ def cd(newdir: os.PathLike):
        newdir : path
            Path to the desired directory.
 
+       create : bool (default False)
+           Create directory first.
+           If the directory exists already, no error is reported
+
        Examples
        --------
 
@@ -135,7 +139,13 @@ def cd(newdir: os.PathLike):
        ```
     """
     prevdir = os.getcwd()
-    os.chdir(os.path.expanduser(newdir))
+    path = os.path.expanduser(newdir)
+    if create:
+        try:
+            os.mkdir(path)
+        except FileExistsError:
+            pass
+    os.chdir(path)
     try:
         yield
     finally:

@@ -154,6 +154,24 @@ class Test(unittest.TestCase):
 
         self.assertIsInstance(bussilab.list_submodules(),list)
 
+    def test_cd(self):
+        import bussilab
+        import os
+        class test_raise(Exception):
+            pass
+        with coretools.cd(os.path.dirname(os.path.abspath(__file__))):
+            try:
+                with coretools.cd("test_dir",create=True):
+                    with open("test_file","w") as f:
+                        print("content",file=f)
+                raise test_raise # test if directory is changed back
+            except test_raise:
+                pass
+            with open("test_dir/test_file") as f:
+                for l in f:
+                    self.assertEqual(l,"content\n")
+            os.remove("test_dir/test_file")
+            os.rmdir("test_dir")
 
 
 if __name__ == "__main__":
