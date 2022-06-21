@@ -121,9 +121,18 @@ def remote(server: str,
             index = 1
 
         if index == 0:
-            sys.stdout.write("Choose a notebook or interrupt (^c):")
-            sys.stdout.flush()
-            index = int(sys.stdin.readline())
+            while True:
+                sys.stdout.write("Choose a notebook or interrupt (^c):")
+                sys.stdout.flush()
+                iii = sys.stdin.readline()
+                try:
+                    index = int(iii)
+                except ValueError:
+                    print("Cannot parse " + iii.strip() + ", try again.")
+                if index>=1 and index<=len(ll_localhost):
+                    print(index)
+                    break
+                print("Index " + str(index) + " out of range, try again.")
 
         url = ll_localhost[index-1].split()[0]
     else:
