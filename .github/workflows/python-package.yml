@@ -156,6 +156,8 @@ jobs:
         export CPU_COUNT=2
         conda-build -c conda-forge conda
         rm -fr bussilab # make sure this is not imported by mistake in tests
+        ls -ltr $CONDA_PREFIX/conda-bld
+        ls -ltr $CONDA_PREFIX/conda-bld/*
     - name: Test 3.7
       run: |
         source activate base
