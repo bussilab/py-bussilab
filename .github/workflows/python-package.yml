@@ -186,6 +186,6 @@ jobs:
         CONDA_UPLOAD_TOKEN: ${{ secrets.CONDA_UPLOAD_TOKEN }}
       run: |
         source activate base
-        anaconda -t $CONDA_UPLOAD_TOKEN upload -u bussilab -l main $CONDA_PREFIX/conda-bld/*-64/py-bussilab*.tar.bz2 --force
+        anaconda -t $CONDA_UPLOAD_TOKEN upload -u bussilab -l main $CONDA_PREFIX/conda-bld/*/py-bussilab*.tar.bz2 --force
 
 
