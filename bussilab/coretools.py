@@ -141,10 +141,7 @@ def cd(newdir: os.PathLike, *, create: bool = False):
     prevdir = os.getcwd()
     path = os.path.expanduser(newdir)
     if create:
-        try:
-            os.mkdir(path)
-        except FileExistsError:
-            pass
+        pathlib.Path(path).mkdir(parents=True, exist_ok=True)
     os.chdir(path)
     try:
         yield
