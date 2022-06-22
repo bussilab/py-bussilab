@@ -198,8 +198,8 @@ class TestClustering(TestCase):
         dist=distance.squareform(distance.pdist(dataset1()))
         dist[0,0]=1e-3 # this is to check that qt() ignores the diagonal terms
         cl=qt(dist,3)
-        ref=[[13, 6, 21, 4, 27, 23, 2, 5, 15, 1, 17], [3, 19, 28, 24, 8, 0, 26, 14], [7, 22, 11], [12, 29], [25, 16], [18, 20]]
-        refw=[11, 8, 3, 2, 2, 2]
+        ref=[[13, 6, 21, 4, 27, 23, 2, 5, 15, 1, 17], [3, 19, 28, 24, 8, 0, 26, 14], [7, 22, 11], [12, 29], [25, 16], [18, 20], [9], [10]]
+        refw=[11, 8, 3, 2, 2, 2, 1, 1]
         self.assertEqual(cl.method,"qt")
         self.assertEqual(cl.weights,refw)
         for i in range(len(cl.clusters)):
@@ -207,8 +207,8 @@ class TestClustering(TestCase):
 
         weights=dataset1_weights()
         cl=qt(dist,3,weights)
-        ref=[[13, 6, 21, 4, 27, 23, 2, 5, 15, 1, 17], [16, 25, 24, 26, 3, 14, 0, 28], [11, 7, 10], [19, 9, 8], [18, 20], [29, 12]]
-        refw=[11.02202855414899, 8.010462049910068, 3.0068045945788784, 2.958498123817103, 2.0010990561741044, 1.9882334498903202]
+        ref=[[13, 6, 21, 4, 27, 23, 2, 5, 15, 1, 17], [16, 25, 24, 26, 3, 14, 0, 28], [11, 7, 10], [19, 9, 8], [18, 20], [29, 12], [22]]
+        refw=[11.02202855414899, 8.010462049910068, 3.0068045945788784, 2.958498123817103, 2.0010990561741044, 1.9882334498903202, 0.99441189]
         self.assertEqual(cl.method,"qt")
         self.assertAlmostEqual(np.sum((cl.weights-np.array(refw))**2),0.0)
         for i in range(len(cl.clusters)):
@@ -253,6 +253,29 @@ class TestClustering(TestCase):
         self.assertAlmostEqual(np.sum((cl.weights-np.array(refw))**2),0.0)
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+    def test_qt5(self):
+        from bussilab.clustering import qt
+        # test with identical points
+        dist=distance.squareform(distance.pdist([[1],[1],[1],[2],[2],[3]]))
+        cl=qt(dist,0.5)
+        ref=[[0,1,2],[3,4],[5],[6]]
+        refw=[3,2,1]
+        self.assertEqual(cl.method,"qt")
+        self.assertEqual(cl.weights,refw)
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+        dist=distance.squareform(distance.pdist([[1],[1],[1],[2],[2],[3],[4],[5]]))
+        weights=np.array([1,1,1,2,2,5,0.5,0.1])
+        cl=qt(dist,0.5,weights)
+        ref=[[5],[3,4],[0,1,2],[6],[7]]
+        refw=[5,4,3,0.5,0.1]
+        self.assertEqual(cl.method,"qt")
+        self.assertEqual(cl.weights,refw)
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+
 try:
     import networkit
     _has_networkit=True

@@ -214,8 +214,7 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
 
            Maximum number of clusters.
 
-       WARNING: irrespectively of min_size, the current implementation does not report
-       clusters with a single member
+       WARNING: important fix in v0.0.38, please make sure to have at least this version installed
 
        Example
        -------
@@ -231,15 +230,16 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
     import numpy.ma as ma
     if weights is not None:
         weights=weights.copy()
+        assert len(weights) == len(distances)
     matrix=distances.copy()
-    np.fill_diagonal(matrix,0)
     N=len(matrix)
     matrix[matrix > cutoff] = np.inf
-    matrix[matrix == 0] = np.inf
+    np.fill_diagonal(matrix,0.0)
     if weights is None:
         degrees = (matrix < np.inf).sum(axis=0)
     else:
         degrees = np.sum((matrix < np.inf) * weights,axis=0)
+
 
     # =============================================================================
     # QT algotithm
@@ -260,15 +260,17 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
             candidates = np.where(matrix[biggest_node] < np.inf)[0]
             next_ = biggest_node
             distances = matrix[next_][candidates]
+            distances[np.searchsorted(candidates,biggest_node)]=np.inf
             while True:
+                if (distances == np.inf).all():
+                    break
                 # This while executes for every node of a potential cluster -------
                 next_ = candidates[distances.argmin()]
                 precluster.append(next_)
                 post_distances = matrix[next_][candidates]
+                post_distances[np.searchsorted(candidates,next_)]=np.inf
                 mask = post_distances > distances
                 distances[mask] = post_distances[mask]
-                if (distances == np.inf).all():
-                    break
             degrees[biggest_node] = 0
             # This section saves the maximum cluster found so far -----------------
             if weights is None:
