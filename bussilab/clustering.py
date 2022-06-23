@@ -6,6 +6,7 @@ from typing import Optional
 
 import networkx
 import numpy as np
+import numba
 
 from .coretools import Result
 
@@ -176,7 +177,27 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
         indexes=np.delete(indexes,ii)
     return ClusteringResult(method="daura",clusters=clusters, weights=ww)
 
-def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
+@numba.jit
+def _qt_inner(distances,dist_from_cluster,candidates,cutoff):
+    next_i=0
+    minval=dist_from_cluster[0]
+    N=len(dist_from_cluster)
+    for i in range(N):
+        val=dist_from_cluster[i]
+        if(val<minval):
+            next_i=i
+            minval=val
+    if minval>cutoff:
+        return -1
+    next_=candidates[next_i]
+    for i in range(N):
+        val=distances[next_][candidates[i]]
+        if dist_from_cluster[i]<val:
+            dist_from_cluster[i]=val
+    dist_from_cluster[next_i]=np.inf
+    return next_
+
+def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_sp=False):
     """Quality threshold clustering.
 
        The method is explained in the [original paper](https://doi.org/10.1101/gr.9.11.1106).
@@ -233,7 +254,10 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
         weights=np.ones(N,dtype="int")
     else:
         weights=weights.copy()
-    distances=distances.copy()
+    if use_sp:
+        distances=np.array(distances,dtype='float32')
+    else:
+        distances=distances.copy()
     np.fill_diagonal(distances,0.0)
     indexes=np.arange(N)
 
@@ -255,13 +279,11 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
             candidates=np.where(distances[next_]<cutoff)[0]
             dist_from_cluster=distances[next_][candidates]
             dist_from_cluster[np.searchsorted(candidates,next_)]=np.inf
-            while (dist_from_cluster<cutoff).any():
-
-                next_i = dist_from_cluster.argmin()
-                next_=candidates[next_i]
+            while True:
+                next_=_qt_inner(distances,dist_from_cluster,candidates,cutoff)
+                if(next_<0):
+                    break
                 precluster.append(next_)
-                dist_from_cluster = np.maximum(dist_from_cluster,distances[next_][candidates])
-                dist_from_cluster[next_i]=np.inf
             new_cluster_size=np.sum(weights[precluster])
             if new_cluster_size > cluster_size:
                 cluster_size = new_cluster_size
@@ -282,5 +304,4 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
         distances=np.delete(distances,cluster,axis=1)
         weights=np.delete(weights,cluster)
         indexes=np.delete(indexes,cluster)
-
     return ClusteringResult(method="qt",clusters=clusters, weights=ww)
