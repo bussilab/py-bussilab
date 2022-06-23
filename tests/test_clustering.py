@@ -208,7 +208,7 @@ class TestClustering(TestCase):
         dist=distance.squareform(distance.pdist(dataset1()))
         dist[0,0]=1e-3 # this is to check that qt() ignores the diagonal terms
         cl=qt(dist,3)
-        ref=[[13, 6, 21, 4, 27, 23, 2, 5, 15, 1, 17], [3, 19, 28, 24, 8, 0, 26, 14], [7, 22, 11], [12, 29], [25, 16], [18, 20], [9], [10]]
+        ref=[[13, 6, 21, 4, 27, 23, 2, 5, 15, 1, 17], [3, 19, 28, 24, 8, 0, 26, 14], [11, 7, 10], [16, 25], [29, 12], [18, 20], [9], [22]]
         refw=[11, 8, 3, 2, 2, 2, 1, 1]
         self.assertEqual(cl.method,"qt")
         self.assertEqual(cl.weights,refw)
@@ -297,6 +297,17 @@ class TestClustering(TestCase):
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
+    def test_qt7(self):
+        from bussilab.clustering import qt
+        data=np.array([[1],[2.1],[10],[11]])
+        dist=distance.squareform(distance.pdist(data))
+        cl=qt(dist,2.0)
+        ref=[[2, 3],[0, 1]]
+        refw=[2,2]
+        self.assertEqual(cl.method,"qt")
+        self.assertEqual(cl.weights,refw)
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
 
 try:

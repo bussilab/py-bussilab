@@ -190,14 +190,14 @@ def _qt_inner(distances,dist_from_cluster,candidates,cutoff):
             next_i=i
             minval=val
     if minval>cutoff:
-        return -1
+        return (-1,minval)
     next_=candidates[next_i]
     for i in range(N):
         val=distances[next_][candidates[i]]
         if dist_from_cluster[i]<val:
             dist_from_cluster[i]=val
     dist_from_cluster[next_i]=np.inf
-    return next_
+    return (next_,minval)
 
 def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32=False):
     """Quality threshold clustering.
@@ -269,6 +269,7 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
         sorted_indexes=np.argsort(-degrees)
 
         cluster_size=0
+        diameter=0.0
         cluster=[]
         i_degrees=0
         for i_degrees in range(len(sorted_indexes)):
@@ -278,18 +279,23 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
 
             next_=sorted_indexes[i_degrees]
             precluster = [next_]
+            new_cluster_diameter=0.0
             candidates=np.where(distances[next_]<cutoff)[0]
             dist_from_cluster=distances[next_][candidates]
             dist_from_cluster[np.searchsorted(candidates,next_)]=np.inf
             while True:
-                next_=_qt_inner(distances,dist_from_cluster,candidates,cutoff)
+                (next_,minval)=_qt_inner(distances,dist_from_cluster,candidates,cutoff)
                 if(next_<0):
                     break
                 precluster.append(next_)
+                if minval > new_cluster_diameter:
+                    new_cluster_diameter = minval
             new_cluster_size=np.sum(weights[precluster])
-            if new_cluster_size > cluster_size:
+            if new_cluster_size > cluster_size or (new_cluster_size == cluster_size and new_cluster_diameter < diameter):
                 cluster_size = new_cluster_size
                 cluster = precluster
+                diameter = new_cluster_diameter
+
         if cluster_size < min_size:
             break
 
