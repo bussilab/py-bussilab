@@ -6,6 +6,7 @@ from typing import Optional
 
 import networkx
 import numpy as np
+import numba
 
 from .coretools import Result
 
@@ -176,7 +177,27 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
         indexes=np.delete(indexes,ii)
     return ClusteringResult(method="daura",clusters=clusters, weights=ww)
 
-def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
+@numba.jit
+def _qt_inner(distances,dist_from_cluster,candidates,cutoff):
+    next_i=0
+    minval=dist_from_cluster[0]
+    N=len(dist_from_cluster)
+    for i in range(N):
+        val=dist_from_cluster[i]
+        if(val<minval):
+            next_i=i
+            minval=val
+    if minval>cutoff:
+        return -1
+    next_=candidates[next_i]
+    for i in range(N):
+        val=distances[next_][candidates[i]]
+        if dist_from_cluster[i]<val:
+            dist_from_cluster[i]=val
+    dist_from_cluster[next_i]=np.inf
+    return next_
+
+def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32=False):
     """Quality threshold clustering.
 
        The method is explained in the [original paper](https://doi.org/10.1101/gr.9.11.1106).
@@ -228,87 +249,59 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
     """
     clusters=[]
     ww=[]
-    import numpy.ma as ma
-    if weights is not None:
-        weights=weights.copy()
-        assert len(weights) == len(distances)
-    matrix=distances.copy()
-    N=len(matrix)
-    matrix[matrix > cutoff] = np.inf
-    np.fill_diagonal(matrix,0.0)
+    N=len(distances)
     if weights is None:
-        degrees = (matrix < np.inf).sum(axis=0)
+        weights=np.ones(N,dtype="int")
     else:
-        degrees = np.sum((matrix < np.inf) * weights,axis=0)
+        weights=weights.copy()
+    if use_float32:
+        distances=np.array(distances,dtype='float32')
+    else:
+        distances=distances.copy()
+    np.fill_diagonal(distances,0.0)
+    indexes=np.arange(N)
 
+    ncluster=0
+    while len(weights)>0:
+        degrees=np.sum((distances < cutoff)*weights,axis=0)
+        sorted_indexes=np.argsort(-degrees)
 
-    # =============================================================================
-    # QT algotithm
-    # =============================================================================
+        cluster_size=0
+        cluster=[]
+        i_degrees=0
+        for i_degrees in range(len(sorted_indexes)):
 
-    clusters_arr = np.ndarray(N, dtype=np.int64)
-    clusters_arr.fill(-1)
-
-    ncluster = 0
-    while True:
-        # This while executes for every cluster in trajectory ---------------------
-        len_precluster = 0
-        while True:
-            # This while executes for every potential cluster analyzed ------------
-            biggest_node = degrees.argmax()
-            precluster = []
-            precluster.append(biggest_node)
-            candidates = np.where(matrix[biggest_node] < np.inf)[0]
-            next_ = biggest_node
-            distances = matrix[next_][candidates]
-            distances[np.searchsorted(candidates,biggest_node)]=np.inf
-            while True:
-                if (distances == np.inf).all():
-                    break
-                # This while executes for every node of a potential cluster -------
-                next_ = candidates[distances.argmin()]
-                precluster.append(next_)
-                post_distances = matrix[next_][candidates]
-                post_distances[np.searchsorted(candidates,next_)]=np.inf
-                mask = post_distances > distances
-                distances[mask] = post_distances[mask]
-            degrees[biggest_node] = 0
-            # This section saves the maximum cluster found so far -----------------
-            if weights is None:
-                new_len_precluster=len(precluster)
-            else:
-                new_len_precluster=np.sum(weights[precluster])
-
-            if new_len_precluster > len_precluster:
-                len_precluster = new_len_precluster
-                max_precluster = precluster
-                degrees = ma.masked_less(degrees, len_precluster)
-            if not degrees.max():
+            if degrees[sorted_indexes[i_degrees]] < cluster_size: # optimization
                 break
-        # General break if min_size is reached -------------------------------------
-        if len_precluster < min_size:
+
+            next_=sorted_indexes[i_degrees]
+            precluster = [next_]
+            candidates=np.where(distances[next_]<cutoff)[0]
+            dist_from_cluster=distances[next_][candidates]
+            dist_from_cluster[np.searchsorted(candidates,next_)]=np.inf
+            while True:
+                next_=_qt_inner(distances,dist_from_cluster,candidates,cutoff)
+                if(next_<0):
+                    break
+                precluster.append(next_)
+            new_cluster_size=np.sum(weights[precluster])
+            if new_cluster_size > cluster_size:
+                cluster_size = new_cluster_size
+                cluster = precluster
+        if cluster_size < min_size:
             break
 
-        # ---- Store cluster frames -----------------------------------------------
-        clusters_arr[max_precluster] = ncluster
         ncluster += 1
 
-        clusters.append(max_precluster)
-        ww.append(len_precluster)
+        clusters.append(indexes[cluster])
+        ww.append(cluster_size)
 
         if max_clusters is not None:
             if ncluster >= max_clusters:
                 break
 
-
-        # ---- Update matrix & degrees (discard found clusters) -------------------
-        matrix[max_precluster, :] = np.inf
-        matrix[:, max_precluster] = np.inf
-
-        if weights is None:
-            degrees = (matrix < np.inf).sum(axis=0)
-        else:
-            degrees = np.sum((matrix < np.inf) * weights,axis=0)
-        if (degrees == 0).all():
-            break
+        distances=np.delete(distances,cluster,axis=0)
+        distances=np.delete(distances,cluster,axis=1)
+        weights=np.delete(weights,cluster)
+        indexes=np.delete(indexes,cluster)
     return ClusteringResult(method="qt",clusters=clusters, weights=ww)
