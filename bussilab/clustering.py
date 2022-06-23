@@ -199,7 +199,7 @@ def _qt_inner(distances,dist_from_cluster,candidates,cutoff):
     dist_from_cluster[next_i]=np.inf
     return (next_,minval)
 
-def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32=False):
+def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
     """Quality threshold clustering.
 
        The method is explained in the [original paper](https://doi.org/10.1101/gr.9.11.1106).
@@ -208,12 +208,18 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
        Thus, if you use this algorithm please cite [this article](https://doi.org/10.1021/acs.jcim.9b00558),
        which also discusses the important differences between this algorithm and the Daura et al algorithm
        in the context of analysing molecular dynamics simulations.
+       Additionally, mention which exact version of the bussilab package you used.
 
        The implementation included here, at variance with the original one, allows passing weights
        and can be used with arbitrary metrics. In addition, it also reports clusters of size 1
-       (unless one passes max_clusters>1).
+       (unless one passes max_clusters>1). The code is optimized when compared with the original one,
+       and speed can be further increased by passing `np.array(distances,dtype='float32')` to distances.
 
-       WARNING: important fix in v0.0.39, please make sure to have at least this version installed
+       WARNING: important fix in v0.0.39 for version with weights
+
+       As of version v0.0.40, clusters with the same number of members are prioritized based on their
+       diameter (smaller diameter gets the priority). This is expected to make non-weighted calculations
+       more reproducible, but might change some results when compared with previous versions.
 
        Parameters
        ----------
@@ -247,6 +253,8 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
        import scipy.spatial.distance as distance
        dist=distance.squareform(distance.pdist(trajectory))
        clustering.qt(dist,0.7)
+
+       clustering.qt(np.array(dist,dtype='float32')) # should be slightly faster
        ```
     """
     clusters=[]
@@ -256,10 +264,7 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
         weights=np.ones(N,dtype="int")
     else:
         weights=weights.copy()
-    if use_float32:
-        distances=np.array(distances,dtype='float32')
-    else:
-        distances=distances.copy()
+    distances=distances.copy()
     np.fill_diagonal(distances,0.0)
     indexes=np.arange(N)
 
