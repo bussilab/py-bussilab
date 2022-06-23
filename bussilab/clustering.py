@@ -187,7 +187,8 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
        in the context of analysing molecular dynamics simulations.
 
        The implementation included here, at variance with the original one, allows passing weights
-       and can be used with arbitrary metrics.
+       and can be used with arbitrary metrics. In addition, it also reports clusters of size 1
+       (unless one passes max_clusters>1).
 
        Parameters
        ----------
