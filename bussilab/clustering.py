@@ -120,6 +120,8 @@ def max_clique(adj,weights=None,*,min_size=0,max_clusters=None,use_networkit=Fal
 def daura(adj,weights=None,*,min_size=0,max_clusters=None):
     """Clustering algorithm introduced in Daura et al, Angew. Chemie (1999).
 
+       WARNING: important fix in v0.0.39 for version with weights
+
        Parameters
        ----------
 
@@ -204,12 +206,14 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
        The implementation has been adapted from [this one](https://github.com/rglez/QT),
        which is also released under a GPL licence.
        Thus, if you use this algorithm please cite [this article](https://doi.org/10.1021/acs.jcim.9b00558),
-       which also discusses the imporant differences between this algorithm and the Daura et al algorithm
+       which also discusses the important differences between this algorithm and the Daura et al algorithm
        in the context of analysing molecular dynamics simulations.
 
        The implementation included here, at variance with the original one, allows passing weights
        and can be used with arbitrary metrics. In addition, it also reports clusters of size 1
        (unless one passes max_clusters>1).
+
+       WARNING: important fix in v0.0.39, please make sure to have at least this version installed
 
        Parameters
        ----------
@@ -235,8 +239,6 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
        max_clusters : int
 
            Maximum number of clusters.
-
-       WARNING: important fix in v0.0.39, please make sure to have at least this version installed
 
        Example
        -------
