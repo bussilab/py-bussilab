@@ -158,7 +158,7 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
         weights = weights.copy()  # take a copy (weights is modified while clustering)
     while len(indexes)>0:
         if weights is not None:
-            d=np.sum(adj*weights,axis=0)
+            d=np.sum(adj*weights[:,np.newaxis],axis=0)
         else:
             d=np.sum(adj,axis=0)
         n=np.argmax(d)
@@ -236,7 +236,7 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
 
            Maximum number of clusters.
 
-       WARNING: important fix in v0.0.38, please make sure to have at least this version installed
+       WARNING: important fix in v0.0.39, please make sure to have at least this version installed
 
        Example
        -------
@@ -263,7 +263,7 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None, use_float32
 
     ncluster=0
     while len(weights)>0:
-        degrees=np.sum((distances < cutoff)*weights,axis=0)
+        degrees=np.sum((distances < cutoff)*weights[:,np.newaxis],axis=0)
         sorted_indexes=np.argsort(-degrees)
 
         cluster_size=0

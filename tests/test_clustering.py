@@ -44,6 +44,16 @@ def dataset1_weights():
                      0.99089065, 0.99662465, 0.99441189, 0.99437434, 1.00473962,
                      1.00137577, 0.98325373, 1.01462485, 1.01370019, 0.99486246])
 
+def dataset2():
+    return np.array([[-0.59339408,  1.45733255],
+                     [-0.42087971,  0.20388607],
+                     [ 0.89720348, -0.53101914],
+                     [-0.85465884,  0.80789103],
+                     [ 0.32262436, -0.72368994]])
+
+def dataset2_weights():
+    return np.array([1.    , 1.0025, 1.005 , 1.0075, 1.01  ])
+
 class TestClustering(TestCase):
     def test_maxclique(self):
         from bussilab.clustering import max_clique
@@ -274,6 +284,19 @@ class TestClustering(TestCase):
         self.assertEqual(cl.weights,refw)
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+    def test_qt6(self):
+        from bussilab.clustering import qt
+        dist=distance.squareform(distance.pdist(dataset2()))
+        weights=dataset2_weights()
+        cl=qt(dist,1.0,weights)
+        ref=[[2, 4],[1, 3],[0]]
+        refw=[2.015, 2.01, 1.0]
+        self.assertEqual(cl.method,"qt")
+        self.assertAlmostEqual(np.sum((cl.weights-np.array(refw))**2),0.0)
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
 
 
 try:
