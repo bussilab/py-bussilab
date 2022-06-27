@@ -246,7 +246,7 @@ def notify(message: str = "",
         footer_text += " by "+ os.environ['USER']
         footer_text += " at " + socket.gethostname() +'\n'
         footer_text += "pwd: " + os.getcwd() + '\n'
-        footer_text += datetime.datetime.now().isoformat(timespec='milliseconds')
+        footer_text += datetime.datetime.now().isoformat(sep=' ',timespec='milliseconds')
         blocks.append({
                           "type": "context",
                           "elements": [
