@@ -312,10 +312,10 @@ class TestClustering(TestCase):
 
     def test_qt8(self):
         from bussilab.clustering import qt
+        # this is to test that [2,3] gets priority wrt [0,1] since it is more compact
         dist=distance.squareform(distance.pdist(np.array([[0.0],[0.5],[1.0],[1.2],])))
         weights=np.array([1,1,1,1])
         cl=qt(dist,0.6,weights)
-        print(cl)
         ref=[[2,3],[0,1]]
         refw=[2,2]
         self.assertEqual(cl.method,"qt")

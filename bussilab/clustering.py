@@ -180,15 +180,18 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
     return ClusteringResult(method="daura",clusters=clusters, weights=ww)
 
 @numba.jit
-def _qt_inner(distances,dist_from_cluster,candidates,cutoff):
+def _qt_inner(distances,dist_from_cluster,candidates,cutoff,weights):
     next_i=0
     minval=dist_from_cluster[0]
+    weight_minval=weights[candidates[0]]
+    weight_minval=0.0
     N=len(dist_from_cluster)
-    for i in range(N):
+    for i in range(1,N):
         val=dist_from_cluster[i]
-        if(val<minval):
+        if val<minval or (val==minval and weights[candidates[i]]>weight_minval):
             next_i=i
             minval=val
+            weight_minval=weights[candidates[i]]
     if minval>cutoff:
         return (-1,minval)
     next_=candidates[next_i]
@@ -220,6 +223,12 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
        As of version v0.0.40, clusters with the same number of members are prioritized based on their
        diameter (smaller diameter gets the priority). This is expected to make non-weighted calculations
        more reproducible, but might change some results when compared with previous versions.
+       In addition, when growing a single candidate cluster, it two points are at the same
+       distance from the growing cluster the one with higher weight is chosen. With these
+       priorities, any choice where either (a) weights are float or (b) distances are float
+       should lead to deterministing clustering irrespective of roundoff errors, assuming
+       floats are never identical.
+
 
        Parameters
        ----------
@@ -289,13 +298,15 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
             dist_from_cluster=distances[next_][candidates]
             dist_from_cluster[np.searchsorted(candidates,next_)]=np.inf
             while True:
-                (next_,minval)=_qt_inner(distances,dist_from_cluster,candidates,cutoff)
+                (next_,minval)=_qt_inner(distances,dist_from_cluster,candidates,cutoff,weights)
                 if(next_<0):
                     break
                 precluster.append(next_)
                 if minval > new_cluster_diameter:
                     new_cluster_diameter = minval
             new_cluster_size=np.sum(weights[precluster])
+            # pick largest cluster (sum of weights)
+            # if same size, pick the most compact one (smaller diameter)
             if new_cluster_size > cluster_size or (new_cluster_size == cluster_size and new_cluster_diameter < diameter):
                 cluster_size = new_cluster_size
                 cluster = precluster
