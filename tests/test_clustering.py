@@ -355,7 +355,6 @@ if _has_networkit:
             adj=np.int_(dist<1000)
             cl=max_clique(adj,use_networkit=True)
             self.assertEqual(cl.method,"max_clique")
-            print("nk",cl)
             self.assertEqual(cl.weights,[32, 13, 3, 2])
             ref=[range(32), range(34,47), range(47,50),(32,33)]
             # compare sets, since order is irrelevant
