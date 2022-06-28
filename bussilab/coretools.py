@@ -28,6 +28,22 @@ def file_or_path(arg, mode: str):
         arg = gzip.open(arg, mode)
     return arg
 
+def import_numba_jit():
+    """Return a numba.jit object. If import fails, return a fake jit object and emits a warning.
+
+       Currently, the returned object can only be used as @jit (no option). It might be extended
+       to allow more jit options.
+    """
+    try:
+        from numba import jit as numba_jit
+        return numba_jit
+    except ImportError:
+        import warnings
+        warnings.warn("There was a problem importing numba, jit functions will work but will be MUCH slower.")
+        def numba_jit(x):
+            return x
+        return numba_jit
+
 class Result(dict):
     # triple ' instead of triple " to allow using docstrings in the example
     '''Base class for objects returning results.

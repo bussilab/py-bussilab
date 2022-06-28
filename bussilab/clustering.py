@@ -7,15 +7,10 @@ from typing import Optional
 import networkx
 import numpy as np
 
-try:
-    from numba import jit as numba_jit
-except ImportError:
-    import warnings
-    warnings.warn("There was a problem importing numba, jit functions will work but will be MUCH slower")
-    def numba_jit(x):
-        return x
-
 from .coretools import Result
+from .coretools import import_numba_jit
+
+numba_jit=import_numba_jit()
 
 class ClusteringResult(Result):
     """Result of a `bussilab.clustering` calculation."""
