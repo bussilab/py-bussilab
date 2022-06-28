@@ -306,6 +306,20 @@ class TestClustering(TestCase):
         refw=[2,2]
         self.assertEqual(cl.method,"qt")
         self.assertEqual(cl.weights,refw)
+        self.assertAlmostEqual(np.sum((cl.weights-np.array(refw))**2),0.0)
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+    def test_qt8(self):
+        from bussilab.clustering import qt
+        dist=distance.squareform(distance.pdist(np.array([[0.0],[0.5],[1.0],[1.2],])))
+        weights=np.array([1,1,1,1])
+        cl=qt(dist,0.6,weights)
+        print(cl)
+        ref=[[2,3],[0,1]]
+        refw=[2,2]
+        self.assertEqual(cl.method,"qt")
+        self.assertAlmostEqual(np.sum((cl.weights-np.array(refw))**2),0.0)
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
