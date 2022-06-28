@@ -323,6 +323,22 @@ class TestClustering(TestCase):
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
+    def test_qt8(self):
+        from bussilab.clustering import qt
+        # this is to test that [1] grows with [2] rather than with [0] since [2] has
+        # more weight than [0].
+        # notice that [2] grows with [3], which is closer
+        # however, [1,2] has weight 2.15 and is preferred over [2,3], which has weight 2.1
+        dist=distance.squareform(distance.pdist(np.array([[0.0],[1.0],[2.0],[2.5]])))
+        weights=np.array([1,1.05,1.1,1])
+        cl=qt(dist,1.2,weights)
+        ref=[[1,2],[0],[3]]
+        refw=[2.15,1,1]
+        self.assertEqual(cl.method,"qt")
+        self.assertAlmostEqual(np.sum((cl.weights-np.array(refw))**2),0.0)
+        for i in range(len(cl.clusters)):
+            self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
 
 try:
     import networkit
