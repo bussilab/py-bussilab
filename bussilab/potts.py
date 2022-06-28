@@ -8,12 +8,19 @@ See `bussilab.potts.Model()`.
 import numpy as np
 from scipy.optimize import minimize
 from typing import Optional, Callable
-import numba
 import warnings
+
+try:
+    from numba import jit as numba_jit
+except ImportError:
+    warnings.warn("There was a problem importing numba, jit functions will work but will be MUCH slower")
+    def numba_jit(x):
+        return x
+
 
 from . import coretools
 
-@numba.jit
+@numba_jit
 def _make_lists(size: int,
                 colors: int = 1,
                 start: int = 0,

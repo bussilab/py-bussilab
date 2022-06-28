@@ -6,7 +6,14 @@ from typing import Optional
 
 import networkx
 import numpy as np
-import numba
+
+try:
+    from numba import jit as numba_jit
+except ImportError:
+    import warnings
+    warnings.warn("There was a problem importing numba, jit functions will work but will be MUCH slower")
+    def numba_jit(x):
+        return x
 
 from .coretools import Result
 
@@ -179,7 +186,7 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
         indexes=np.delete(indexes,ii)
     return ClusteringResult(method="daura",clusters=clusters, weights=ww)
 
-@numba.jit
+@numba_jit
 def _qt_inner(distances,dist_from_cluster,candidates,cutoff,weights):
     next_i=0
     minval=dist_from_cluster[0]
