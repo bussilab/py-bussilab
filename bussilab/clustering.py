@@ -341,8 +341,9 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
             if ncluster >= max_clusters:
                 break
 
-        distances=np.delete(distances,cluster,axis=0)
-        distances=np.delete(distances,cluster,axis=1)
-        weights=np.delete(weights,cluster)
-        indexes=np.delete(indexes,cluster)
+        # see https://stackoverflow.com/questions/63563151/how-to-remove-columns-and-rows-at-certain-indexes-in-numpy-at-the-same-time
+        idx = list(set(range(len(distances))).difference(cluster))
+        distances=distances[np.ix_(idx,idx)]
+        weights=weights[idx]
+        indexes=indexes[idx]
     return ClusteringResult(method="qt",clusters=clusters, weights=ww)
