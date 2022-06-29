@@ -462,9 +462,19 @@ def _jrun(**kargs):
        option) and a jupyter server is then run  inside a `screen` instance.
        You will thus have to type `CTRL+aCTRL+d` in order to detach the screen
        letting it run in the background.
-       To avoid this you can use the `--no-screen` flag. In this case
-       however make sure you do not close the terminal where the server is
-       running.
+
+       Alternatively, you can immediately detach the screen with
+       ```bash
+       cd /path/to/your/notebook/dir
+       bussilab jrun --detach
+
+       Notice that, since the server is run inside a screen instance, in order
+       to visualize python outputs that has been sent directly to the terminal you
+       should connect to the screen instance later. By default, a socket name
+       containing the path where the server is running is used, with `/` replaced
+       by `:`. It should thus be easy to use `screen -ls` to find the proper screen
+       instance.
+       ```
     """
     from . import jremote
     if kargs["keep_ld_library_path"]:
