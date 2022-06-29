@@ -182,7 +182,23 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
     return ClusteringResult(method="daura",clusters=clusters, weights=ww)
 
 @numba_jit
+def _qt_outer(distances,next_,cutoff):
+    candidates=np.empty(len(distances),dtype='int')
+    n=0
+    for i in range(next_):
+        if distances[next_,i]<cutoff:
+           candidates[n]=i
+           n+=1
+    for i in range(next_+1,len(distances)):
+        if distances[next_,i]<cutoff:
+           candidates[n]=i
+           n+=1
+    return candidates[:n]
+
+@numba_jit
 def _qt_inner(distances,dist_from_cluster,candidates,cutoff,weights):
+    if len(dist_from_cluster)<1:
+        return (-1,np.inf)
     next_i=0
     minval=dist_from_cluster[0]
     weight_minval=weights[candidates[0]]
@@ -296,9 +312,8 @@ def qt(distances,cutoff,weights=None,*,min_size=0,max_clusters=None):
             next_=sorted_indexes[i_degrees]
             precluster = [next_]
             new_cluster_diameter=0.0
-            candidates=np.where(distances[next_]<cutoff)[0]
+            candidates=_qt_outer(distances,next_,cutoff)
             dist_from_cluster=distances[next_][candidates]
-            dist_from_cluster[np.searchsorted(candidates,next_)]=np.inf
             while True:
                 (next_,minval)=_qt_inner(distances,dist_from_cluster,candidates,cutoff,weights)
                 if(next_<0):
