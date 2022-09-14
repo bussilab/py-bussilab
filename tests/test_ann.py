@@ -29,10 +29,10 @@ def derivatives(ann,n=100,prefactor=1e-10,vector=True):
 class TestANN(TestCase):
     def test_ann1(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10],cuda=False)),1e-10)
+        self.assertLess(derivatives(ANN([10],cuda=False)),1e-9)
     def test_ann2(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,10],cuda=False)),1e-10)
+        self.assertLess(derivatives(ANN([10,10],cuda=False)),1e-9)
     def test_ann3(self):
         np.random.seed(1977)
         self.assertLess(derivatives(ANN([10,10,10],cuda=False)),1e-8)
@@ -42,10 +42,10 @@ class TestANN(TestCase):
 
     def test_ann1r(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10],cuda=False,activation='relu')),1e-10)
+        self.assertLess(derivatives(ANN([10],cuda=False,activation='relu')),1e-9)
     def test_ann2r(self):
         np.random.seed(1977)
-        self.assertLess(derivatives(ANN([10,10],cuda=False,activation='relu')),1e-10)
+        self.assertLess(derivatives(ANN([10,10],cuda=False,activation='relu')),1e-9)
     def test_ann3r(self):
         np.random.seed(1977)
         self.assertLess(derivatives(ANN([10,10,10],cuda=False,activation='relu')),1e-8)
