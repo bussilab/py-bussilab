@@ -133,7 +133,7 @@ jobs:
                 export PATH="$(python$pyver -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
                 export PYTHONPATH="$(python$pyver -c 'import site; import re; print(re.sub("python/","python'$pyver'/",site.USER_SITE))'):$PYTHONPATH"
                 bussilab check --import
-                sudo port install py$pyver-pytest
+                sudo port install py${pyver//./}-pytest
                 # ignore BUSSILAB_TEST_NOTIFY_TOKEN since it does not work with macports for some reason
                 pytest-$pyver -v
             )
