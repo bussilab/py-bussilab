@@ -202,7 +202,6 @@ def _qt_inner(distances,dist_from_cluster,candidates,cutoff,weights):
     next_i=0
     minval=dist_from_cluster[0]
     weight_minval=weights[candidates[0]]
-    weight_minval=0.0
     N=len(dist_from_cluster)
     for i in range(1,N):
         val=dist_from_cluster[i]
