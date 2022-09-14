@@ -88,10 +88,6 @@ jobs:
   macports:
     # The type of runner that the job will run on
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.7", "3.8", "3.9", "3.10"]
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -105,34 +101,39 @@ jobs:
         source ./macports-ci install
     - name: Setup environment
       run: |
-        awk 'BEGIN{
-          a="${{ matrix.python-version }}"
-          gsub("\"","",a);
-          print("MACPORTS_PY=" a )
-          gsub("\\.","",a);
-          print("MACPORTS_PY_ND=" a )
-        }' >> $GITHUB_ENV
-    - name: Install requirements and set paths
+        echo MACPORTS_PY_VERSIONS="3.7 3.8 3.9 3.10" >> $GITHUB_ENV
+    - name: Install python
       run: |
-        sudo port install python$MACPORTS_PY_ND py$MACPORTS_PY_ND-pip py$MACPORTS_PY_ND-setuptools
-        echo PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" >> $GITHUB_ENV
+        for pyver in $MACPORTS_PY_VERSIONS
+        do
+            sudo port install python${pyver//./} py${pyver//./}-{pip,setuptools}
+        done
+    - name: Install package
+      run: |
         # the re.sub() command is necessary since site.USER_SITE seems to be incorrectly set to
         # /Users/runner/Library/Python/3.9/lib/python/site-packages
         # instead of the correct
         # /Users/runner/Library/Python/3.9/lib/python3.9/site-packages
-        # to be checked
-        echo PYTHONPATH="$(python$MACPORTS_PY -c 'import site; import re; print(re.sub("python/","python'${MACPORTS_PY}'/",site.USER_SITE))'):$PYTHONPATH" >> $GITHUB_ENV
-    - name: Install package
-      run: |
-        pip-$MACPORTS_PY install --user --no-deps .
-        sudo port install $(bussilab required --macports --pyver $MACPORTS_PY_ND)
+        for pyver in $MACPORTS_PY_VERSIONS
+        do
+            pip-$pyver install --user --no-deps .
+            PATH="$(python$pyver -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" \
+              PYTHONPATH="$(python$pyver -c 'import site; import re; print(re.sub("python/","python'$pyver'/",site.USER_SITE))'):$PYTHONPATH" \
+              sudo port install $(bussilab required --macports --pyver ${pyver//./})
+        done
     - name: Run tests
       run: |
-        PATH="$(python$MACPORTS_PY -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
-        bussilab check --import
-        sudo port install py$MACPORTS_PY_ND-pytest
-        # ignore BUSSILAB_TEST_NOTIFY_TOKEN since it does not work with macports for some reason
-        pytest-$MACPORTS_PY -v
+        for pyver in $MACPORTS_PY_VERSIONS
+        do
+            PATH="$(python$pyver -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" \
+              PYTHONPATH="$(python$pyver -c 'import site; import re; print(re.sub("python/","python'$pyver'/",site.USER_SITE))'):$PYTHONPATH" \
+              bussilab check --import
+            sudo port install py$pyver-pytest
+            # ignore BUSSILAB_TEST_NOTIFY_TOKEN since it does not work with macports for some reason
+            PATH="$(python$pyver -c 'import site; print(site.USER_BASE + "/bin")'):$PATH" \
+              PYTHONPATH="$(python$pyver -c 'import site; import re; print(re.sub("python/","python'$pyver'/",site.USER_SITE))'):$PYTHONPATH" \
+              pytest-$pyver -v
+        done
 
   conda:
 
