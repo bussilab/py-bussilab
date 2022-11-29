@@ -467,6 +467,7 @@ def _jrun(**kargs):
        ```bash
        cd /path/to/your/notebook/dir
        bussilab jrun --detach
+       ```
 
        Notice that, since the server is run inside a screen instance, in order
        to visualize python outputs that has been sent directly to the terminal you
