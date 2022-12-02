@@ -34,10 +34,10 @@ class TestCron(TestCase):
             # the second instance will not be run (--unique)
             cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog.0 --unique")
             # also this is asynchronoous
-            cli("cron --cron-file cron_reboot.yml --period 1 --max-times 4 --detach --screen-log screenlog.0")
+            cli("cron --cron-file cron_reboot.yml --max-times 4 --detach --screen-log screenlog.0")
             now=time.time()
             # this is synchronous, and will take some time
-            cli("cron --cron-file cron.yml --period 2 --max-times 2 --no-screen")
+            cli("cron --cron-file cron.yml --max-times 2 --no-screen")
             # make sure to give enough time to the asynchronous test
             time.sleep(9-(time.time()-now))
             # this is for debugging, should be shown only if there is an error later

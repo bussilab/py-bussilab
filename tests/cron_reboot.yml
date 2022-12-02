@@ -1,7 +1,9 @@
 cron:
-  - type: bash
-    script:
-      echo "A" >> cron_reboot.out
-  - skip:  2
-    delay: 1
-    type: reboot
+  period: 1
+  jobs:
+    - type: bash
+      script:
+        echo "A" >> cron_reboot.out
+    - skip:  2
+      delay: 1
+      type: reboot

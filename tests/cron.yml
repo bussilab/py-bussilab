@@ -1,4 +1,6 @@
 cron:
-  - |
-    with open("cron.out","a") as f:
-        print("test cron",file=f)
+  period: 2
+  jobs:
+    - |
+      with open("cron.out","a") as f:
+          print("test cron",file=f)
