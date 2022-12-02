@@ -48,25 +48,36 @@ def _adjust_sockname(sockname,cron_file):
     sockname=re.sub(r"\(path\)",path_to_cron_file,sockname)
     return sockname
 
+def _read_config(cron_file: str):
+    if len(cron_file) > 0:
+        with open(cron_file) as rc:
+            config=yaml.load(rc,Loader=yaml.BaseLoader)
+    else:
+        config=coretools.config()
+    if "cron" in config:
+        if isinstance(config["cron"],dict):
+            return config["cron"]
+        else:
+            return {"jobs":config["cron"]}
+    else:
+        return None
+
 def _run(cron_file: str,
          period: int,
          event: int,
          counter: int):
     try:
         print(_now(),"Running now")
-        if len(cron_file) > 0:
-            with open(cron_file) as rc:
-                config=yaml.load(rc,Loader=yaml.BaseLoader)
-        else:
-            config=coretools.config()
-        if "cron" in config:
-            for i in range(len(config["cron"])):
-               if isinstance(config["cron"][i],str):
-                   config["cron"][i]={
+        config=_read_config(cron_file)
+        if config:
+            jobs=config["jobs"]
+            for i in range(len(jobs)):
+               if isinstance(jobs[i],str):
+                   jobs[i]={
                        "type": "python",
-                       "script": config["cron"][i]
+                       "script": jobs[i]
                    }
-               c=config["cron"][i]
+               c=jobs[i]
                if not "type" in c:
                    c["type"]="python"
 
@@ -93,9 +104,9 @@ def _run(cron_file: str,
                elif c["type"] == "reboot":
                    return _reboot(iterations=counter+1) # +1 is to add the current iteration to the count
                else:
-                   raise RuntimeError("Unknown type " + config["cron"][i]["type"])
+                   raise RuntimeError("Unknown type " + jobs[i]["type"])
 
-               args.append(config["cron"][i]["script"])
+               args.append(jobs[i]["script"])
                timeout=_time_to_next_event(period)[0]//2+1
                print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
                subprocess.run(args, timeout=timeout)
@@ -152,11 +163,24 @@ def cron(*,
          sockname: str = "(path):cron",
          python_exec: str = "",
          detach: bool = False,
-         period: int = 3600,
+         period: Optional[int] = None,
          max_times: Optional[int] = None,
          unique: bool = False,
          window: bool = False
          ):
+    config=_read_config(cron_file)
+    # period is the argument passed
+    # use_period is the one actually used
+    if period is None:
+        # if nothing is passed, we try to read it from config file
+        if "period" in config:
+            use_period=int(config["period"])
+        else:
+            # or set it to a default (once per hour)
+            use_period=3600
+    else:
+        use_period=period
+
     if no_screen:
         if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
             env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
@@ -171,7 +195,7 @@ def cron(*,
             print(_now(),"remaining iterations:",max_times)
         counter=0
         if quick_start:
-            r=_run(cron_file,period,0,counter)
+            r=_run(cron_file,use_period,0,counter)
             if isinstance(r,_reboot_now):
                 print("exit now")
                 return
@@ -184,10 +208,10 @@ def cron(*,
             if max_times is not None:
                 if counter >= max_times:
                     return
-            s=_time_to_next_event(period)
+            s=_time_to_next_event(use_period)
             print(_now(),"Waiting " +str(s[0])+ " seconds for next scheduled event")
             time.sleep(s[0])
-            r=_run(cron_file,period,s[1],counter)
+            r=_run(cron_file,use_period,s[1],counter)
             if isinstance(r,_reboot_now):
                 return
             counter += 1
@@ -273,7 +297,7 @@ def cron(*,
         cmd.append("cron")
         cmd.append("--no-screen")
         cmd.append("--period")
-        cmd.append(str(period))
+        cmd.append(str(use_period))
         if len(cron_file)>0:
             cmd.append("--cron-file")
             cmd.append(cron_file)
