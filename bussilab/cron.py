@@ -13,7 +13,7 @@ from . import coretools
 from . import pip
 
 _screenrcfile = """
-  hardstatus string 'cron server do not kill %{= Kd} %{= Kd}%-w%{= Kr}[%{= KW}%n %t%{= Kr}]%{= Kd}%+w %-= %{KG} %H%{KW}|%{KY}%101`%{KW}|%D %M %d %Y%{= Kc} %C%A%{-}'
+  hardstatus string 'cron server. ctrl-A ctrl-D to detach, ctrl-C to kill  %{= Kd} %{= Kd}%-w%{= Kr}[%{= KW}%n %t%{= Kr}]%{= Kd}%+w %-= %{KG} %H%{KW}|%{KY}%101`%{KW}|%D %M %d %Y%{= Kc} %C%A%{-}'
   hardstatus alwayslastline
   vbell on
   altscreen on
@@ -261,6 +261,8 @@ def cron(*,
             # store the path so that the file can be cancelled later
             env["rcfile"]=rcfile.name
 
+        cmd.append("-t")
+        cmd.append("running")
         cmd.append("/usr/bin/env")
         cmd.append("BUSSILAB_CRON_SCREEN_ARGS=" + json.dumps(env))
         if keep_ld_library_path and 'LD_LIBRARY_PATH' in os.environ:
