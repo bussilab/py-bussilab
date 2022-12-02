@@ -269,6 +269,8 @@ def notify(message: str = "",
         text=title+"\n"
     elif len(message) > 0:
         text=message+"\n"
+    else:
+        text="(empty message)"
 
     if update:
         response = client.chat_update(
