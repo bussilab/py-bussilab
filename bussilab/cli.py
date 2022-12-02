@@ -475,7 +475,6 @@ def _jrun(**kargs):
        containing the path where the server is running is used, with `/` replaced
        by `:`. It should thus be easy to use `screen -ls` to find the proper screen
        instance.
-       ```
     """
     from . import jremote
     if kargs["keep_ld_library_path"]:
