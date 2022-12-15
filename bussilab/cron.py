@@ -62,6 +62,19 @@ def _read_config(cron_file: str):
     else:
         return None
 
+def _find_period(cron_file: str,period):
+    # period is the argument passed
+    if period is None:
+        # if nothing is passed, we try to read it from config file
+        config=_read_config(cron_file)
+        if "period" in config:
+            return int(config["period"])
+        else:
+            # or set it to a default (once per hour)
+            return 3600
+    else:
+        return period
+
 def _run(cron_file: str,
          period: int,
          event: int,
@@ -168,19 +181,6 @@ def cron(*,
          unique: bool = False,
          window: bool = False
          ):
-    config=_read_config(cron_file)
-    # period is the argument passed
-    # use_period is the one actually used
-    if period is None:
-        # if nothing is passed, we try to read it from config file
-        if "period" in config:
-            use_period=int(config["period"])
-        else:
-            # or set it to a default (once per hour)
-            use_period=3600
-    else:
-        use_period=period
-
     if no_screen:
         if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
             env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
@@ -195,7 +195,7 @@ def cron(*,
             print(_now(),"remaining iterations:",max_times)
         counter=0
         if quick_start:
-            r=_run(cron_file,use_period,0,counter)
+            r=_run(cron_file,_find_period(cron_file,period),0,counter)
             if isinstance(r,_reboot_now):
                 print("exit now")
                 return
@@ -208,10 +208,10 @@ def cron(*,
             if max_times is not None:
                 if counter >= max_times:
                     return
-            s=_time_to_next_event(use_period)
+            s=_time_to_next_event(_find_period(cron_file,period))
             print(_now(),"Waiting " +str(s[0])+ " seconds for next scheduled event")
             time.sleep(s[0])
-            r=_run(cron_file,use_period,s[1],counter)
+            r=_run(cron_file,_find_period(cron_file,period),s[1],counter)
             if isinstance(r,_reboot_now):
                 return
             counter += 1
@@ -296,8 +296,9 @@ def cron(*,
         cmd.append("bussilab")
         cmd.append("cron")
         cmd.append("--no-screen")
-        cmd.append("--period")
-        cmd.append(str(use_period))
+        if period is not None:
+          cmd.append("--period")
+          cmd.append(str(period))
         if len(cron_file)>0:
             cmd.append("--cron-file")
             cmd.append(cron_file)
