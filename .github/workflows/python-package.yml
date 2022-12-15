@@ -97,6 +97,31 @@ jobs:
         python setup.py sdist
         python -m twine upload -u bussilabbot -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz
 
+  python36:
+    # Mini test, to make sure we do not break python 3.6 compaibility for a while
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.6
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.6
+
+    - name: Install
+      run: |
+        pip install .
+    - name: Test with pytest
+      env:
+        BUSSILAB_TEST_NOTIFY_TOKEN: ${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}
+        BUSSILAB_TEST_NOTIFY_CHANNEL: ${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}
+      run: |
+        bussilab check --import
+        pip install pytest pytest-cov
+        pytest -v
+        NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab
+        bash <(curl -s https://codecov.io/bash)
+
   macports:
     # The type of runner that the job will run on
     runs-on: macos-latest
