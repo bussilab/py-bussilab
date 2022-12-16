@@ -78,13 +78,14 @@ def _find_period(cron_file: str,period):
 def _run(cron_file: str,
          period: int,
          event: int,
-         counter: int):
+         counter: int,
+         skip_jobs: int = 0):
     try:
         print(_now(),"Running now")
         config=_read_config(cron_file)
         if config:
             jobs=config["jobs"]
-            for i in range(len(jobs)):
+            for i in range(skip_jobs,len(jobs)):
                if isinstance(jobs[i],str):
                    jobs[i]={
                        "type": "python",
@@ -113,9 +114,9 @@ def _run(cron_file: str,
                elif c["type"] == "selfupdate":
                    timeout=_time_to_next_event(period)[0]//2+1
                    pip.upgrade_self(timeout=timeout)
-                   return _reboot(iterations=counter+1) # +1 is to add the current iteration to the count
+                   return _reboot(iterations=counter,skip_jobs=i+1) # +1 is to skip current job
                elif c["type"] == "reboot":
-                   return _reboot(iterations=counter+1) # +1 is to add the current iteration to the count
+                   return _reboot(iterations=counter,skip_jobs=i+1) # +1 is to skip current job
                else:
                    raise RuntimeError("Unknown type " + jobs[i]["type"])
 
@@ -132,13 +133,15 @@ class _reboot_now():
     pass
 
 def _reboot(*,
-           iterations=0):
+           iterations=0,
+           skip_jobs=0):
     if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
         print(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
         env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
         args = env["arguments"]
         args["no_screen"]=False # reboots should be done with screen, which is switched off by default
-        args["quick_start"]=False # disable quick start
+        args["quick_start"]=True
+        args["quick_start_skip_jobs"]=skip_jobs
         args["window"]=True # open in a new window
         # fix number of times counting iterations already done
         if "max_times" in args:
@@ -168,6 +171,7 @@ def _reboot(*,
 
 def cron(*,
          quick_start: bool = False,
+         quick_start_skip_jobs: int = 0,
          cron_file: str = "",
          screen_cmd: str = "screen",
          screen_log: str = "",
@@ -181,6 +185,8 @@ def cron(*,
          unique: bool = False,
          window: bool = False
          ):
+    if not quick_start and quick_start_skip_jobs>0:
+        raise RuntimeError("quick_start_skip_jobs can only be used with quick_start")
     if no_screen:
         if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
             env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
@@ -195,7 +201,7 @@ def cron(*,
             print(_now(),"remaining iterations:",max_times)
         counter=0
         if quick_start:
-            r=_run(cron_file,_find_period(cron_file,period),0,counter)
+            r=_run(cron_file,_find_period(cron_file,period),0,counter,quick_start_skip_jobs)
             if isinstance(r,_reboot_now):
                 print("exit now")
                 return
@@ -304,6 +310,9 @@ def cron(*,
             cmd.append(cron_file)
         if quick_start:
             cmd.append("--quick-start")
+            if quick_start_skip_jobs>0:
+              cmd.append("--quick-start-skip-jobs")
+              cmd.append(str(quick_start_skip_jobs))
         if max_times is not None:
             cmd.append("--max-times")
             cmd.append(str(max_times))

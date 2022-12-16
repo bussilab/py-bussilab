@@ -4,9 +4,9 @@ cron:
     - type: bash
       script:
         echo "A" >> cron_reboot.out
-    - type: bash
-      script:
-        echo "B" >> cron_reboot.out
     - skip:  2
       delay: 1
       type: reboot
+    - type: bash
+      script:
+        echo "B" >> cron_reboot.out
