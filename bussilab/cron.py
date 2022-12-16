@@ -117,9 +117,17 @@ def _run(cron_file: str,
                elif c["type"] == "selfupdate":
                    timeout=_time_to_next_event(period)[0]/2
                    pip.upgrade_self(timeout=timeout)
-                   return _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
+                   r = _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
+                   if isinstance(r,_reboot_now):
+                     return r
+                   else:
+                     continue
                elif c["type"] == "reboot":
-                   return _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
+                   r = _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
+                   if isinstance(r,_reboot_now):
+                     return r
+                   else:
+                     continue
                else:
                    raise RuntimeError("Unknown type " + steps[i]["type"])
 
