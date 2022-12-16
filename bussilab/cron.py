@@ -84,7 +84,7 @@ def _run(cron_file: str,
          counter: int,
          skip_steps: int = 0):
     try:
-        print(_now(),"Running now")
+        print(_now(),"Running now (event={})".format(event))
         config=_read_config(cron_file)
         if config:
             steps=config["steps"]
@@ -125,7 +125,7 @@ def _run(cron_file: str,
 
                args.append(steps[i]["script"])
                timeout=_time_to_next_event(period)[0]/2
-               print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
+               print(_now(),"step " + str(i) +" with timeout " + "{:.3f}".format(timeout))
                subprocess.run(args, timeout=timeout)
     except Exception as e:
         print(e)
@@ -140,7 +140,7 @@ def _reboot(*,
            skip_steps=0,
            event=0):
     if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
-        print(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
+        print(_now(),"environment:",os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
         env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
         args = env["arguments"]
         args["no_screen"]=False # reboots should be done with screen, which is switched off by default
@@ -209,6 +209,9 @@ def cron(*,
             print(_now(),"remaining iterations:",max_times)
         counter=0
         if quick_start:
+            print(_now(),"quick starting")
+            if quick_start_skip_steps>0:
+              print(_now(),"skipping",quick_start_skip_steps,"steps")
             r=_run(cron_file,_find_period(cron_file,period),quick_start_event,counter,quick_start_skip_steps)
             if isinstance(r,_reboot_now):
                 print("exit now")
@@ -223,7 +226,7 @@ def cron(*,
                 if counter >= max_times:
                     return
             s=_time_to_next_event(_find_period(cron_file,period))
-            print(_now(),"Waiting " +str(s[0])+ " seconds for next scheduled event")
+            print(_now(),"Waiting " +"{:.3f}".format(s[0])+ " seconds for next scheduled event")
             time.sleep(s[0])
             r=_run(cron_file,_find_period(cron_file,period),s[1],counter)
             if isinstance(r,_reboot_now):
@@ -247,7 +250,7 @@ def cron(*,
 
         if python_exec == "":
             python_exec = sys.executable
-        print("python_exec:", python_exec)
+        print(_now(),"python_exec:", python_exec)
 
         cmd = []
         cmd.extend(shlex.split(screen_cmd)) # allows screen_cmd to contain space separated options
@@ -328,7 +331,7 @@ def cron(*,
             cmd.append("--max-times")
             cmd.append(str(max_times))
 
-        print("cmd:",cmd)
+        print(_now(),"cmd:",cmd)
 
         try:
             ret=subprocess.call(cmd)
