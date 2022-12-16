@@ -114,9 +114,9 @@ def _run(cron_file: str,
                elif c["type"] == "selfupdate":
                    timeout=_time_to_next_event(period)[0]//2+1
                    pip.upgrade_self(timeout=timeout)
-                   return _reboot(iterations=counter,skip_steps=i+1) # +1 is to skip current step
+                   return _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
                elif c["type"] == "reboot":
-                   return _reboot(iterations=counter,skip_steps=i+1) # +1 is to skip current step
+                   return _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
                else:
                    raise RuntimeError("Unknown type " + steps[i]["type"])
 
@@ -134,7 +134,8 @@ class _reboot_now():
 
 def _reboot(*,
            iterations=0,
-           skip_steps=0):
+           skip_steps=0,
+           event=0):
     if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
         print(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
         env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
@@ -142,6 +143,7 @@ def _reboot(*,
         args["no_screen"]=False # reboots should be done with screen, which is switched off by default
         args["quick_start"]=True
         args["quick_start_skip_steps"]=skip_steps
+        args["quick_start_event"]=event
         args["window"]=True # open in a new window
         # fix number of times counting iterations already done
         if "max_times" in args:
@@ -172,6 +174,7 @@ def _reboot(*,
 def cron(*,
          quick_start: bool = False,
          quick_start_skip_steps: int = 0,
+         quick_start_event: int = 0,
          cron_file: str = "",
          screen_cmd: str = "screen",
          screen_log: str = "",
@@ -187,6 +190,8 @@ def cron(*,
          ):
     if not quick_start and quick_start_skip_steps>0:
         raise RuntimeError("quick_start_skip_steps can only be used with quick_start")
+    if not quick_start and quick_start_event>0:
+        raise RuntimeError("quick_start_event can only be used with quick_start")
     if no_screen:
         if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
             env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
@@ -201,7 +206,7 @@ def cron(*,
             print(_now(),"remaining iterations:",max_times)
         counter=0
         if quick_start:
-            r=_run(cron_file,_find_period(cron_file,period),0,counter,quick_start_skip_steps)
+            r=_run(cron_file,_find_period(cron_file,period),quick_start_event,counter,quick_start_skip_steps)
             if isinstance(r,_reboot_now):
                 print("exit now")
                 return
@@ -313,6 +318,9 @@ def cron(*,
             if quick_start_skip_steps>0:
               cmd.append("--quick-start-skip-steps")
               cmd.append(str(quick_start_skip_steps))
+            if quick_start_event>0:
+              cmd.append("--quick-start-event")
+              cmd.append(str(quick_start_event))
         if max_times is not None:
             cmd.append("--max-times")
             cmd.append(str(max_times))
