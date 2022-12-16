@@ -1,6 +1,6 @@
 cron:
   period: 1
-  jobs:
+  steps:
     - type: bash
       script:
         echo "A" >> cron_reboot.out

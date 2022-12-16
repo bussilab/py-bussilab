@@ -58,7 +58,7 @@ def _read_config(cron_file: str):
         if isinstance(config["cron"],dict):
             return config["cron"]
         else:
-            return {"jobs":config["cron"]}
+            return {"steps":config["cron"]}
     else:
         return None
 
@@ -79,19 +79,19 @@ def _run(cron_file: str,
          period: int,
          event: int,
          counter: int,
-         skip_jobs: int = 0):
+         skip_steps: int = 0):
     try:
         print(_now(),"Running now")
         config=_read_config(cron_file)
         if config:
-            jobs=config["jobs"]
-            for i in range(skip_jobs,len(jobs)):
-               if isinstance(jobs[i],str):
-                   jobs[i]={
+            steps=config["steps"]
+            for i in range(skip_steps,len(steps)):
+               if isinstance(steps[i],str):
+                   steps[i]={
                        "type": "python",
-                       "script": jobs[i]
+                       "script": steps[i]
                    }
-               c=jobs[i]
+               c=steps[i]
                if not "type" in c:
                    c["type"]="python"
 
@@ -114,13 +114,13 @@ def _run(cron_file: str,
                elif c["type"] == "selfupdate":
                    timeout=_time_to_next_event(period)[0]//2+1
                    pip.upgrade_self(timeout=timeout)
-                   return _reboot(iterations=counter,skip_jobs=i+1) # +1 is to skip current job
+                   return _reboot(iterations=counter,skip_steps=i+1) # +1 is to skip current step
                elif c["type"] == "reboot":
-                   return _reboot(iterations=counter,skip_jobs=i+1) # +1 is to skip current job
+                   return _reboot(iterations=counter,skip_steps=i+1) # +1 is to skip current step
                else:
-                   raise RuntimeError("Unknown type " + jobs[i]["type"])
+                   raise RuntimeError("Unknown type " + steps[i]["type"])
 
-               args.append(jobs[i]["script"])
+               args.append(steps[i]["script"])
                timeout=_time_to_next_event(period)[0]//2+1
                print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
                subprocess.run(args, timeout=timeout)
@@ -134,14 +134,14 @@ class _reboot_now():
 
 def _reboot(*,
            iterations=0,
-           skip_jobs=0):
+           skip_steps=0):
     if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
         print(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
         env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
         args = env["arguments"]
         args["no_screen"]=False # reboots should be done with screen, which is switched off by default
         args["quick_start"]=True
-        args["quick_start_skip_jobs"]=skip_jobs
+        args["quick_start_skip_steps"]=skip_steps
         args["window"]=True # open in a new window
         # fix number of times counting iterations already done
         if "max_times" in args:
@@ -171,7 +171,7 @@ def _reboot(*,
 
 def cron(*,
          quick_start: bool = False,
-         quick_start_skip_jobs: int = 0,
+         quick_start_skip_steps: int = 0,
          cron_file: str = "",
          screen_cmd: str = "screen",
          screen_log: str = "",
@@ -185,8 +185,8 @@ def cron(*,
          unique: bool = False,
          window: bool = False
          ):
-    if not quick_start and quick_start_skip_jobs>0:
-        raise RuntimeError("quick_start_skip_jobs can only be used with quick_start")
+    if not quick_start and quick_start_skip_steps>0:
+        raise RuntimeError("quick_start_skip_steps can only be used with quick_start")
     if no_screen:
         if "BUSSILAB_CRON_SCREEN_ARGS" in os.environ:
             env = json.loads(os.environ["BUSSILAB_CRON_SCREEN_ARGS"])
@@ -201,7 +201,7 @@ def cron(*,
             print(_now(),"remaining iterations:",max_times)
         counter=0
         if quick_start:
-            r=_run(cron_file,_find_period(cron_file,period),0,counter,quick_start_skip_jobs)
+            r=_run(cron_file,_find_period(cron_file,period),0,counter,quick_start_skip_steps)
             if isinstance(r,_reboot_now):
                 print("exit now")
                 return
@@ -310,9 +310,9 @@ def cron(*,
             cmd.append(cron_file)
         if quick_start:
             cmd.append("--quick-start")
-            if quick_start_skip_jobs>0:
-              cmd.append("--quick-start-skip-jobs")
-              cmd.append(str(quick_start_skip_jobs))
+            if quick_start_skip_steps>0:
+              cmd.append("--quick-start-skip-steps")
+              cmd.append(str(quick_start_skip_steps))
         if max_times is not None:
             cmd.append("--max-times")
             cmd.append(str(max_times))

@@ -580,7 +580,7 @@ def _notify(**kargs):
 @command("cron", help="Run cron",
           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 @arg("--quick-start", help="run immediately", action="store_true")
-@arg("--quick-start-skip-jobs", help="skip jobs on quick start", default=None, type=int)
+@arg("--quick-start-skip-steps", help="skip steps on quick start", default=None, type=int)
 @arg("--cron-file", help="path to cron file")
 @arg("--screen-cmd", help="screen command", default="screen")
 @arg("--screen-log", help="screen logfile (no logfile by default)", default="")
