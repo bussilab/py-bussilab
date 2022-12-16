@@ -10,3 +10,12 @@ cron:
     - type: bash
       script:
         echo "B" >> cron_reboot.out
+    - type: bash
+      skip: 2
+      script:
+        echo "C0" >> cron_reboot_unsorted.out
+    - type: bash
+      skip: 2
+      delay: 1
+      script:
+        echo "C1" >> cron_reboot_unsorted.out

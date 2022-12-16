@@ -29,6 +29,10 @@ class TestCron(TestCase):
                 os.remove("cron_reboot.out")
             except FileNotFoundError:
                 pass
+            try:
+                os.remove("cron_reboot_unsorted.out")
+            except FileNotFoundError:
+                pass
             # this is asynchronous
             cli("cron --cron-file cron_screen.yml --period 2 --max-times 2 --detach --screen-log screenlog.0 --unique")
             # the second instance will not be run (--unique)
@@ -49,10 +53,15 @@ class TestCron(TestCase):
             self.assertEqualFile("cron_screen.out")
             self.assertEqualFile("cron_screen2.out")
             self.assertEqualFile("cron_reboot.out")
+            with open("cron_reboot_unsorted.out") as file:
+                lines = [line.rstrip() for line in file]
+                lines.sort()
+                self.assertEqual(lines,["C0","C0","C1","C1"])
             os.remove("cron.out")
             os.remove("cron_screen.out")
             os.remove("cron_screen2.out")
             os.remove("cron_reboot.out")
+            os.remove("cron_reboot_unsorted.out")
             os.remove("screenlog.0")
 
 if __name__ == "__main__":
