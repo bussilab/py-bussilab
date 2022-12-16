@@ -27,12 +27,15 @@ def _screen_version(screen_cmd):
     return int(screen_ver[0]),int(screen_ver[1])
 
 def _time_to_next_event(period: int):
-    now=time.localtime()
+    now_full=time.time()
+    # see https://stackoverflow.com/questions/6677332/using-f-with-strftime-in-python-to-get-microseconds
+    mlsec = int(repr(now_full).split('.')[1][:3])*0.001
+    now=time.localtime(now_full)
     seconds=now.tm_wday*24*3600+now.tm_hour*3600 + now.tm_min*60 + now.tm_sec
     seconds_=seconds
     seconds = seconds%period
     # also returns predicted time for next event
-    return period-seconds,seconds_+period-seconds
+    return period-seconds-mlsec,seconds_+period-seconds
 
 def _now():
     return '{}'.format(datetime.datetime.now()) + ":"
@@ -112,7 +115,7 @@ def _run(cron_file: str,
                elif c["type"] == "bash":
                    args = ["bash", "--noprofile", "--norc", "-c"]
                elif c["type"] == "selfupdate":
-                   timeout=_time_to_next_event(period)[0]//2+1
+                   timeout=_time_to_next_event(period)[0]/2
                    pip.upgrade_self(timeout=timeout)
                    return _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
                elif c["type"] == "reboot":
@@ -121,7 +124,7 @@ def _run(cron_file: str,
                    raise RuntimeError("Unknown type " + steps[i]["type"])
 
                args.append(steps[i]["script"])
-               timeout=_time_to_next_event(period)[0]//2+1
+               timeout=_time_to_next_event(period)[0]/2
                print(_now(),"cmd " + str(i) +" with timeout " + str(timeout))
                subprocess.run(args, timeout=timeout)
     except Exception as e:
