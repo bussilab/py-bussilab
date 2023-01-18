@@ -46,7 +46,7 @@ def run_server(dry_run: bool = False,
                no_screen: bool = False,
                keep_ld_library_path: bool = True,
                python_exec: str = "",
-               sockname: str = "(path):jupyter-server:(port)",
+               sockname: str = "(path):(port):jupyter",
                detach: bool = False):
     """Runs a jupyter server inside a screen command.
 
