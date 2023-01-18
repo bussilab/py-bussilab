@@ -11,6 +11,7 @@ import json
 import tempfile
 from . import coretools
 from . import pip
+import hashlib
 
 _screenrcfile = """
   hardstatus string 'cron server. ctrl-A ctrl-D to detach, ctrl-C to kill  %{= Kd} %{= Kd}%-w%{= Kr}[%{= KW}%n %t%{= Kr}]%{= Kd}%+w %-= %{KG} %H%{KW}|%{KY}%101`%{KW}|%D %M %d %Y%{= Kc} %C%A%{-}'
@@ -40,6 +41,9 @@ def _time_to_next_event(period: int):
 def _now():
     return '{}'.format(datetime.datetime.now()) + ":"
 
+_max_sockname=70
+_min_sockname=50
+
 def _adjust_sockname(sockname,cron_file):
     path_to_cron_file=""
     if len(cron_file) > 0:
@@ -49,6 +53,10 @@ def _adjust_sockname(sockname,cron_file):
     path_to_cron_file=os.path.abspath(path_to_cron_file)
     path_to_cron_file=re.sub("[^-A-Za-z0-9.]",":",path_to_cron_file)
     sockname=re.sub(r"\(path\)",path_to_cron_file,sockname)
+    if len(sockname)>_max_sockname:
+      m=hashlib.blake2b(digest_size=(_max_sockname-_min_sockname-1)//2)
+      m.update(bytes(sockname[_min_sockname:],'utf-8'))
+      sockname=sockname[:_min_sockname] + "-" + m.hexdigest()
     return sockname
 
 def _read_config(cron_file: str):

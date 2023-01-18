@@ -16,6 +16,7 @@ import re
 import platform
 import time
 import shlex
+import hashlib
 
 def find_free_port():
     """Returns the number of a free port."""
@@ -24,11 +25,18 @@ def find_free_port():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]
 
+_max_sockname=70
+_min_sockname=50
+
 def _adjust_sockname(sockname,port):
     pwd=os.getcwd()
     pwd=re.sub("[^-A-Za-z0-9.]",":",pwd)
     sockname=re.sub(r"\(path\)",pwd,sockname)
     sockname=re.sub(r"\(port\)",str(port),sockname)
+    if len(sockname)>_max_sockname:
+      m=hashlib.blake2b(digest_size=(_max_sockname-_min_sockname-1)//2)
+      m.update(bytes(sockname[_min_sockname:],'utf-8'))
+      sockname=sockname[:_min_sockname] + "-" + m.hexdigest()
     return sockname
 
 def run_server(dry_run: bool = False,
