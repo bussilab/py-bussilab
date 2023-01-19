@@ -487,6 +487,7 @@ def _jrun(**kargs):
 @arg("server", help="server URL (e.g. giorgione.phys.sissa.it)")
 @arg("-d", "--dry-run", action='store_true',
      help="show command instead of executing it")
+@arg("--lab", help="use jupyterlab", action="store_true")
 @arg("-l", "--list-only", action='store_true',
      help="only report a list or servers")
 @arg("--port", help="set port", default=0)

@@ -94,10 +94,14 @@ def remote(server: str,
            list_only: bool = False,
            server_url: str ="",
            port: int = 0,
+           lab: bool = False,
            index: int = 0,
            open_cmd: str = ""):
 
-    cmd = python_exec+" -m jupyter notebook list"
+    if lab:
+      cmd = python_exec+" -m jupyterlab list"
+    else:
+      cmd = python_exec+" -m jupyter notebook list"
 
     print("server:", server)
     print("cmd:", cmd)
