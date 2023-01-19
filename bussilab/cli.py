@@ -442,6 +442,7 @@ def _wham(**args):
          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 @arg("-d", "--dry-run", action='store_true',
      help="show command instead of executing it")
+@arg("--lab", help="use jupyterlab", action="store_true")
 @arg("--port", help="set port", default=0)
 @arg("--screen-cmd", help="screen command", default="screen")
 @arg("--screen-log", help="screen logfile (no logfile by default)", default="")
