@@ -47,6 +47,7 @@ def run_server(dry_run: bool = False,
                keep_ld_library_path: bool = True,
                python_exec: str = "",
                sockname: str = "(path):(port):jupyter",
+               lab: bool = False,
                detach: bool = False):
     """Runs a jupyter server inside a screen command.
 
@@ -79,8 +80,11 @@ def run_server(dry_run: bool = False,
             cmd.append("LD_LIBRARY_PATH=" + os.environ["LD_LIBRARY_PATH"])
     cmd.extend(shlex.split(python_exec)) # allows python_exec to contain space separated options
     cmd.append("-m")
-    cmd.append("jupyter")
-    cmd.append("notebook")
+    if lab:
+        cmd.append("jupyterlab")
+    else:
+        cmd.append("jupyter")
+        cmd.append("notebook")
     cmd.append("--no-browser")
     cmd.append("--port=" + str(port))
     print("cmd:", cmd)
