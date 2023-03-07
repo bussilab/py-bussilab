@@ -41,7 +41,7 @@ def wham(bias,
         logZ: Optional[np.ndarray] = None,
         logW: Optional[np.ndarray] = None,
         normalize: bool = True,
-        method: str = "substitute",
+        method: str = "minimize",
         minimize_opt: Optional[dict] = None):
     """Compute weights according to binless WHAM.
 
@@ -186,8 +186,10 @@ def wham(bias,
            does not want to choose first on which of the Hamiltonians they should be normalized.
 
        method: str, optional
-           If "substitute", solve self-consistent equations by substitution. This is the default.
+           If "substitute", solve self-consistent equations by substitution.
            If "minimize", use a minimization as in J Chem Phys 136, 144102 (2012).
+           Prior to version 0.0.40, the default was "substitute".
+           Starting with version 0.0.41, the default is "minimize".
 
        minimize_opt: dict, optional
            If method=="minimize", this dict can be used to pass options to scipy.minimize.

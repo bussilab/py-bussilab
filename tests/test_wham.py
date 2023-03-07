@@ -28,12 +28,12 @@ class TestWham(TestCase):
         d = np.exp(wham(np.array([[3, 5], [4, 4]]), frame_weight=(1, 10)).logW)
         self.assertAlmostEqual(np.sum((d-np.array([[0.06421006, 0.93578994]]))**2), 0.0)
 
-    def test_wham1m(self):
+    def test_wham1s(self):
         import numpy as np
-        # check the minimizing version
-        a = np.exp(wham(np.array([[1, 10, 7], [2, 9, 6], [3, 8, 5]]),method="minimize").logW)
+        # check the substituting version
+        a = np.exp(wham(np.array([[1, 10, 7], [2, 9, 6], [3, 8, 5]]),method="substitute").logW)
         self.assertAlmostEqual(np.sum((a-np.array([0.41728571, 0.39684866, 0.18586563]))**2), 0.0)
-        b = np.exp(wham(np.array([[1, 10], [2, 9], [3, 8]]), traj_weight=(1, 2),method="minimize").logW)
+        b = np.exp(wham(np.array([[1, 10], [2, 9], [3, 8]]), traj_weight=(1, 2),method="substitute").logW)
         self.assertAlmostEqual(np.sum((b-np.array([0.41728571, 0.39684866, 0.18586563]))**2), 0.0)
         c = np.exp(wham(np.array([[3, 5],
                                   [4, 4],
@@ -50,10 +50,11 @@ class TestWham(TestCase):
             0.06421006, 0.09357899, 0.09357899, 0.09357899, 0.09357899,
             0.09357899, 0.09357899, 0.09357899, 0.09357899, 0.09357899, 0.09357899
         ]))**2), 0.0)
-        d = np.exp(wham(np.array([[3, 5], [4, 4]]), frame_weight=(1, 10),method="minimize").logW)
+        d = np.exp(wham(np.array([[3, 5], [4, 4]]), frame_weight=(1, 10),method="substitute").logW)
         self.assertAlmostEqual(np.sum((d-np.array([[0.06421006, 0.93578994]]))**2), 0.0)
 
     def test_wham2(self):
+        # test passing lists instead of np arrays
         import numpy as np
         a = np.exp(wham([[1, 10, 7], [2, 9, 6], [3, 8, 5]]).logW)
         self.assertAlmostEqual(np.sum((a-np.array([0.41728571, 0.39684866, 0.18586563]))**2), 0.0)
@@ -98,11 +99,11 @@ class TestWham(TestCase):
             self.assertAlmostEqual(w.logZ[1]-w.logZ[0],diffZ)
             self.assertAlmostEqual(w.logW[1]-w.logW[0],1.0)
 
-    def test_wham4m(self):
+    def test_wham4s(self):
         import numpy as np
-        # check if the algorithm is numerically robust if one of the biases if heavily offset, with minimization
+        # check if the algorithm is numerically robust if one of the biases if heavily offset, with substitution
         for diffZ in (0.0,1e1,1e2,1e3,1e4,1e5,1e6):
-            w=wham(2.0*np.array([[1,1-diffZ],[2,2-diffZ]]),method="minimize",T=2.0)
+            w=wham(2.0*np.array([[1,1-diffZ],[2,2-diffZ]]),method="substitute",T=2.0)
             self.assertAlmostEqual(w.logZ[1]-w.logZ[0],diffZ)
             self.assertAlmostEqual(w.logW[1]-w.logW[0],1.0)
 
@@ -110,20 +111,19 @@ class TestWham(TestCase):
         import numpy as np
         # check if the algorithm is numerically robust if one frame has weight much smaller than another
         # requires weights to be non normalized
-        # with minimization
         for diffW in (0.0,1e1,1e2,1e3,1e4,1e5,1e6):
-            w=wham(2.0*np.array([[0.0,0.0],[diffW,diffW]]),T=2.0, normalize=False,method="minimize")
+            w=wham(2.0*np.array([[0.0,0.0],[diffW,diffW]]),T=2.0, normalize=False)
             self.assertAlmostEqual(w.logW[1]-w.logW[0],diffW)
             self.assertAlmostEqual(w.logZ[1]-w.logZ[0],0.0)
 
     def test_wham_restart(self):
         import numpy as np
-        w0=wham(((0,10),(-4,11)),T=0.8)
-        self.assertGreaterEqual(w0.nit,20)
-        w1=wham(((0,10),(-4,11)),T=0.8,logW=w0.logW)
-        self.assertLessEqual(w1.nit,5)
-        w2=wham(((0,10),(-4,11)),T=0.8,logZ=w0.logZ)
-        self.assertLessEqual(w2.nit,5)
+        w0=wham(((0,10),(-4,11)),T=0.2)
+        self.assertGreaterEqual(w0.nfev,8)
+        w1=wham(((0,10),(-4,11)),T=0.2,logW=w0.logW)
+        self.assertLessEqual(w1.nfev,2)
+        w2=wham(((0,10),(-4,11)),T=0.2,logZ=w0.logZ)
+        self.assertLessEqual(w2.nfev,2)
 
 if __name__ == "__main__":
     unittest.main()
