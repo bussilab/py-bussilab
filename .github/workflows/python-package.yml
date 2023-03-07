@@ -140,8 +140,7 @@ jobs:
       run: |
         # numba 0.56 requires numpy 1.23
         # on macports, with python 3.9 and up, numpy 1.24 will be installed
-        # so, temporarily, these python versions are removed from tests
-	# echo MACPORTS_PY_VERSIONS="3.7 3.8 3.9 3.10" >> $GITHUB_ENV
+        # so, temporarily, python versions 3.9 and 3.10 are removed from tests
         echo MACPORTS_PY_VERSIONS="3.7 3.8" >> $GITHUB_ENV
     - name: Install python
       run: |
