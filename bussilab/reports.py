@@ -77,7 +77,7 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                stdout = subprocess.PIPE,
                stderr = subprocess.PIPE,
                universal_newlines=True,
-               timeout = 20,
+               timeout = 60,
                check = True).stdout.split('\n')
             for i in range(len(out)):
                 if out[i]==token:
