@@ -98,14 +98,12 @@ def remote(server: str,
            list_only: bool = False,
            server_url: str ="",
            port: int = 0,
-           lab: bool = False,
            index: int = 0,
            open_cmd: str = ""):
 
-    if lab:
-      cmd = python_exec+" -m jupyterlab list"
-    else:
-      cmd = python_exec+" -m jupyter notebook list"
+    cmd =  "( " + python_exec + " -m jupyter notebook list 2> /dev/null ) ;"
+    cmd += "echo x ;"
+    cmd += "( " + python_exec + " -m jupyterlab list 2> /dev/null ) ;"
 
     print("server:", server)
     print("cmd:", cmd)
@@ -117,6 +115,8 @@ def remote(server: str,
         ll = []
         ll_localhost = []
         args = ['ssh', server, cmd]
+        ll_type = []
+        found_lab=False
 
         for l in subprocess.run(args,
                                 stdout=subprocess.PIPE,
@@ -126,9 +126,16 @@ def remote(server: str,
             if re.match("^http", l):
                 ll.append(re.sub("localhost", server, l))
                 ll_localhost.append(l)
+                if found_lab:
+                    ll_type.append("(L)")
+                else:
+                    ll_type.append("(N)")
+
+            if l == "x":
+                found_lab = True
 
         for i in range(len(ll)):
-            print(str(i+1)+") "+ll[i])
+            print(str(i+1)+") "+ll[i]+" "+ll_type[i])
 
         if list_only:
             return
