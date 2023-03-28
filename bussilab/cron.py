@@ -115,7 +115,7 @@ def _run(cron_file: str,
                        delay=eval(c["delay"])
                    else:
                        delay=0
-                   if (event/period)%skip != delay%skip:
+                   if (event//period)%skip != delay%skip:
                        continue
 
                if c["type"] == "python":
