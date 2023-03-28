@@ -136,6 +136,18 @@ def notify(message: str = "",
        delete: None or str
 
            The URL of a message to be deleted.
+       
+       reply: None or str
+       
+           The URL of a message to be replied
+       
+       reply_broadcast: None or str
+       
+           The URL of a message to be broadcast-replied
+           
+       file: None or str
+       
+           The path of a file to be uploaded
 
        title: str
 
@@ -182,7 +194,7 @@ def notify(message: str = "",
        ].count(True)>1:
         raise TypeError("channel/update/delete/reply/reply_broadcast are mutually incompatible")
 
-    if len(file)>0 and (update or delete or reply):
+    if len(file)>0 and (update or delete or reply or reply_broadcast):
         raise TypeError("")
 
     config = None
