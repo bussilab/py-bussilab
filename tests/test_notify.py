@@ -16,6 +16,8 @@ if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
 
             url=notify("unittest3 *WRONG*", token=token, channel=channel)
             url=notify("unittest3 *WRONG 2*", update=url, token=token)
+            url2=notify("unittest3 reply", reply=url, token=token)
+            url3=notify("unittest3 broadcast", reply_broadcast=url, token=token)
             notify(delete=url, token=token)
 
             with self.assertRaises(Exception):
