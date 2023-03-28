@@ -312,9 +312,27 @@ def notify(message: str = "",
             file_title += footer_text
 
         attempts=5
+        
+
+        v2=False
+# # Note:
+# # UserWarning: client.files_upload() may cause some issues like timeouts for
+# # relatively large files. Our latest recommendation is to use client.files_upload_v2(),
+# # which is mostly compatible and much stabler, instead.
+# # However, to me v2 does not work (the file is not accessible and not posted to the channel)
+#         try:
+#             x=client.files_upload_v2
+#             v2=True
+#         except AttributeError:
+#             pass
+
+
         for i in range(attempts):
             try:
-                response = client.files_upload(file=file,title=file_title,channels=channel)
+                if v2:
+                    response = client.files_upload_v2(file=file,title=file_title,channel=channel)
+                else:
+                    response = client.files_upload(file=file,title=file_title,channels=channel)
                 break
             except SlackApiError:
                 if(i+1==attempts):
