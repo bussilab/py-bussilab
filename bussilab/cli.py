@@ -564,6 +564,8 @@ def _pip_upgrade_all(**kargs):
 @arg("-c","--channel", help="channel (check ~/.bussilabrc by default)")
 @arg("-u","--update", help="url of the message to be updated")
 @arg("-d","--delete", help="url of the message to be deleted")
+@arg("-r","--reply", help="url of the message to be replied")
+@arg("-R","--reply-broadcast", help="url of the message to be broadcast-replied")
 @endgroup
 @arg("-f","--file", help="path to a file to be uploaded (incompatible with -u and -d)")
 @arg("-t","--title", help="title of the message")

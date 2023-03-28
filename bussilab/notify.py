@@ -89,6 +89,7 @@ def _parse_url(url: str):
     if re.match(r"^https://[^/]*\.slack\.com/archives/.*",url):
         organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
         url=re.sub(r"^https://[^/]*\.slack\.com/archives/","",url)
+        url=re.sub(r"\?.*","",url)
         url=url[:-6]+"."+url[-6:]
         channel=re.sub("/p.*","",url)
         ts=re.sub(".*/p","",url)
@@ -107,6 +108,8 @@ def notify(message: str = "",
            *,
            update: str = None,
            delete: str = None,
+           reply: str = None,
+           reply_broadcast: str = None,
            title: str = "",
            footer: bool = True,
            type: str = "mrkdwn",
@@ -171,16 +174,15 @@ def notify(message: str = "",
        See `bussilab.notify` for more examples.
     """
 
-    if channel and update:
-        raise TypeError("")
+    if [bool(channel),
+        bool(update),
+        bool(delete),
+        bool(reply),
+        bool(reply_broadcast)
+       ].count(True)>1:
+        raise TypeError("channel/update/delete/reply/reply_broadcast are mutually incompatible")
 
-    if channel and delete:
-        raise TypeError("")
-
-    if update and delete:
-        raise TypeError("")
-
-    if len(file)>0 and (update or delete):
+    if len(file)>0 and (update or delete or reply):
         raise TypeError("")
 
     config = None
@@ -198,6 +200,12 @@ def notify(message: str = "",
         if not delete_dict:
            raise TypeError("")
         organization=delete_dict["organization"]
+    elif reply:
+        reply_dict=_parse_url(reply)
+        organization=reply_dict["organization"]
+    elif reply_broadcast:
+        reply_dict=_parse_url(reply_broadcast)
+        organization=reply_dict["organization"]
     else:
         if channel is None:
             if config is None:
@@ -300,6 +308,19 @@ def notify(message: str = "",
                 if(i+1==attempts):
                     raise
                 print("retrying ...",i+1)
+    elif reply:
+        response = client.chat_postMessage(
+                   blocks=blocks,
+                   text=text,
+                   channel=reply_dict["channel"],
+                   thread_ts=reply_dict["ts"])
+    elif reply_broadcast:
+        response = client.chat_postMessage(
+                   blocks=blocks,
+                   text=text,
+                   channel=reply_dict["channel"],
+                   thread_ts=reply_dict["ts"],
+                   reply_broadcast=True)
     else:
         response = client.chat_postMessage(
                    blocks=blocks,
