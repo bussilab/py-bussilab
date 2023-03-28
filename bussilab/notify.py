@@ -85,8 +85,6 @@ from . import coretools
 
 from typing import cast
 
-_organization="bussilab"  # this is hardcoded for now
-
 def _parse_url(url: str):
     if re.match(r"^https://[^/]*\.slack\.com/archives/.*",url):
         organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
@@ -211,7 +209,7 @@ def notify(message: str = "",
         else:
             # this is needed to set organization correctly (so as to build the
             # proper link) when passing the name of a channel
-            organization = _organization
+            organization = ""
 
     client = WebClient(token=token)
 
@@ -310,9 +308,14 @@ def notify(message: str = "",
 
     response = cast(SlackResponse, response)
 
-    if len(file)==0:
-        url="https://" + organization + ".slack.com/archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
+    if len(organization)==0:
+        base_url=client.auth_test()["url"]
     else:
-        url="https://" + organization + ".slack.com/files/" + response["file"]["user"] + "/" + response["file"]["id"]
+        base_url="https://" + organization + ".slack.com/"
+
+    if len(file)==0:
+        url=base_url + "archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
+    else:
+        url=base_url + "files/" + response["file"]["user"] + "/" + response["file"]["id"]
 
     return url
