@@ -194,7 +194,7 @@ def notify(message: str = "",
        ].count(True)>1:
         raise TypeError("channel/update/delete/reply/reply_broadcast are mutually incompatible")
 
-    if len(file)>0 and (update or delete or reply or reply_broadcast):
+    if len(file)>0 and (update or delete or reply_broadcast):
         raise TypeError("")
 
     config = None
@@ -202,16 +202,31 @@ def notify(message: str = "",
         config = coretools.config()
         token=config["notify"]["token"]
 
+    client = WebClient(token=token)
+
+    if delete:
+        delete_multi=delete.split(",")
+        if len(delete_multi)>1:
+            for d in delete_multi:
+                notify(message,channel,delete=d,token=token)
+            return ""
+        delete_dict=_parse_url(delete)
+        if not delete_dict:
+           raise TypeError("")
+        if delete_dict["type"]=="message":
+            client.chat_delete(channel=delete_dict["channel"], ts=delete_dict["ts"])
+            return ""
+        elif delete_dict["type"]=="file":
+            client.files_delete(file=delete_dict["id"])
+            return ""
+        raise RuntimeError("unknown type")
+
+
     if update:
         update_dict=_parse_url(update)
         if not update_dict:
            raise TypeError("")
         organization=update_dict["organization"]
-    elif delete:
-        delete_dict=_parse_url(delete)
-        if not delete_dict:
-           raise TypeError("")
-        organization=delete_dict["organization"]
     elif reply:
         reply_dict=_parse_url(reply)
         organization=reply_dict["organization"]
@@ -230,8 +245,6 @@ def notify(message: str = "",
             # this is needed to set organization correctly (so as to build the
             # proper link) when passing the name of a channel
             organization = ""
-
-    client = WebClient(token=token)
 
     blocks=[]
     text=""
@@ -296,20 +309,14 @@ def notify(message: str = "",
                    text=text,
                    blocks=blocks,
                    ts=update_dict["ts"])
-    elif delete and delete_dict["type"]=="message":
-        client.chat_delete(channel=delete_dict["channel"], ts=delete_dict["ts"])
-        return ""
-    elif delete and delete_dict["type"]=="file":
-        client.files_delete(file=delete_dict["id"])
-        return ""
     elif len(file)>0:
-        file_title = ""
+        initial_comment = ""
         if len(title)>0:
-            file_title += title + " "
+            initial_comment += "*" + title + "*\n"
         if len(message)>0:
-            file_title += message +" "
+            initial_comment += message +"\n"
         if footer:
-            file_title += footer_text
+            initial_comment += footer_text
 
         attempts=5
         
@@ -330,9 +337,14 @@ def notify(message: str = "",
         for i in range(attempts):
             try:
                 if v2:
-                    response = client.files_upload_v2(file=file,title=file_title,channel=channel)
+                    response = client.files_upload_v2(file=file,title=file,channel=channel)
                 else:
-                    response = client.files_upload(file=file,title=file_title,channels=channel)
+                    if reply:
+                        response = client.files_upload(file=file,channels=reply_dict["channel"],
+                                                       title=file,thread_ts=reply_dict["ts"])
+                    else:
+                        response = client.files_upload(file=file,title=file,channels=channel,
+                                                      initial_comment=initial_comment)
                 break
             except SlackApiError:
                 if(i+1==attempts):
@@ -367,6 +379,11 @@ def notify(message: str = "",
     if len(file)==0:
         url=base_url + "archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
     else:
-        url=base_url + "files/" + response["file"]["user"] + "/" + response["file"]["id"]
+        
+        k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
+        channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
+        ts=response["file"]["shares"][k][channel][0]["ts"]
+        url=base_url + "archives/" + channel + "/p" + ts[:-7] + ts[-6:]
+        url+="," + base_url + "files/" + response["file"]["user"] + "/" + response["file"]["id"]
 
     return url
