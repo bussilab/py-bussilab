@@ -69,6 +69,7 @@ import datetime
 import re
 import os
 import socket
+import time
 
 try:
     # slack client 3
@@ -84,6 +85,17 @@ except ModuleNotFoundError:
 from . import coretools
 
 from typing import cast
+
+def _try_multiple_times(func,*args,**kwargs):
+     while True:
+        try:
+            return func(*args,**kwargs)
+        except SlackApiError as e:            
+            if "error" in e.response and e.response["error"]=="ratelimited" and "Retry-After" in e.response.headers:
+                print("Retry-after",e.response.headers["Retry-After"])
+                time.sleep(float(e.response.headers["Retry-After"]))
+            else:
+                raise
 
 def _parse_url(url: str):
     if re.match(r"^https://[^/]*\.slack\.com/archives/.*",url):
@@ -216,17 +228,17 @@ def notify(message: str = "",
         if not delete_dict:
            raise TypeError("")
         if delete_dict["type"]=="message":
-            client.chat_delete(channel=delete_dict["channel"], ts=delete_dict["ts"])
+            _try_multiple_times(client.chat_delete,channel=delete_dict["channel"], ts=delete_dict["ts"])
             return ""
         elif delete_dict["type"]=="file":
-            client.files_delete(file=delete_dict["id"])
+            _try_multiple_times(client.files_delete,file=delete_dict["id"])
             return ""
         raise RuntimeError("unknown type")
     
     if react:
         react_dict=_parse_url(react.split(",")[0])
 
-        response = client.reactions_add(
+        response = _try_multiple_times(client.reactions_add,
           name=react.split(",")[1],
           timestamp=react_dict["ts"],
           channel=react_dict["channel"])
@@ -315,7 +327,7 @@ def notify(message: str = "",
         text="(empty message)"
 
     if update:
-        response = client.chat_update(
+        response = _try_multiple_times(client.chat_update,
                    channel=update_dict["channel"],
                    text=text,
                    blocks=blocks,
@@ -345,37 +357,30 @@ def notify(message: str = "",
 #             pass
 
 
-        for i in range(attempts):
-            try:
-                if v2:
-                    response = client.files_upload_v2(file=file,title=file,channel=channel)
-                else:
-                    if reply:
-                        response = client.files_upload(file=file,channels=reply_dict["channel"],
-                                                       title=file,thread_ts=reply_dict["ts"])
-                    else:
-                        response = client.files_upload(file=file,title=file,channels=channel,
-                                                      initial_comment=initial_comment)
-                break
-            except SlackApiError:
-                if(i+1==attempts):
-                    raise
-                print("retrying ...",i+1)
+        if v2:
+            response = _try_multiple_times(client.files_upload_v2,file=file,title=file,channel=channel)
+        else:
+            if reply:
+                response = _try_multiple_times(client.files_upload,file=file,channels=reply_dict["channel"],
+                                               title=file,thread_ts=reply_dict["ts"])
+            else:
+                response = _try_multiple_times(client.files_upload,file=file,title=file,channels=channel,
+                                              initial_comment=initial_comment)
     elif reply:
-        response = client.chat_postMessage(
+        response = _try_multiple_times(client.chat_postMessage,
                    blocks=blocks,
                    text=text,
                    channel=reply_dict["channel"],
                    thread_ts=reply_dict["ts"])
     elif reply_broadcast:
-        response = client.chat_postMessage(
+        response = _try_multiple_times(client.chat_postMessage,
                    blocks=blocks,
                    text=text,
                    channel=reply_dict["channel"],
                    thread_ts=reply_dict["ts"],
                    reply_broadcast=True)
     else:
-        response = client.chat_postMessage(
+        response = _try_multiple_times(client.chat_postMessage,
                    blocks=blocks,
                    text=text,
                    channel=channel)
@@ -383,7 +388,7 @@ def notify(message: str = "",
     response = cast(SlackResponse, response)
 
     if len(organization)==0:
-        base_url=client.auth_test()["url"]
+        base_url=_try_multiple_times(client.auth_test)["url"]
     else:
         base_url="https://" + organization + ".slack.com/"
 
