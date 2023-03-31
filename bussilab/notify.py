@@ -97,7 +97,18 @@ def _try_multiple_times(func,*args,**kwargs):
             else:
                 raise
 
+_match_message=r"https://[^/]*\.slack\.com/archives/.*"
+
 def _parse_url(url: str):
+    if re.match(r"^https://[^/]*\.slack\.com/archives/.*:.*",url):
+        organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
+        url=re.sub(r"^https://[^/]*\.slack\.com/archives/","",url)
+        url1=re.sub(r":.*","",url)
+        url1=url1[:-6]+"."+url1[-6:]
+        channel=re.sub("/p.*","",url1)
+        ts=re.sub(":.*$","",re.sub("^.*/p","",url1))
+        react=re.sub(r".*:","",url)
+        return { "type":"reaction", "ts":ts, "channel":channel, "organization":organization, "reaction": react}
     if re.match(r"^https://[^/]*\.slack\.com/archives/.*",url):
         organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
         url=re.sub(r"^https://[^/]*\.slack\.com/archives/","",url)
@@ -233,16 +244,19 @@ def notify(message: str = "",
         elif delete_dict["type"]=="file":
             _try_multiple_times(client.files_delete,file=delete_dict["id"])
             return ""
+        elif delete_dict["type"]=="reaction":
+            _try_multiple_times(client.reactions_remove,channel=delete_dict["channel"], timestamp=delete_dict["ts"], name=delete_dict["reaction"])
+            return ""
         raise RuntimeError("unknown type")
-    
+
     if react:
-        react_dict=_parse_url(react.split(",")[0])
+        react_dict=_parse_url(react)
 
         response = _try_multiple_times(client.reactions_add,
-          name=react.split(",")[1],
+          name=react_dict["reaction"],
           timestamp=react_dict["ts"],
           channel=react_dict["channel"])
-        return react.split(",")[0]
+        return react
 
 
     if update:
