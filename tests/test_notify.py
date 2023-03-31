@@ -9,7 +9,8 @@ if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
     channel=os.environ["BUSSILAB_TEST_NOTIFY_CHANNEL"]
     class TestNotify(unittest.TestCase):
         def test_notify(self):
-            notify("unittest1", token=token, channel=channel)
+            url=notify("unittest1", token=token, channel=channel)
+            notify(react=url+",white_check_mark",token=token)
 
             url=notify("unittest2 *WRONG*", token=token, channel=channel)
             notify("unittest2", update=url, token=token)

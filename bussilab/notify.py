@@ -106,6 +106,7 @@ def _parse_url(url: str):
 def notify(message: str = "",
            channel: str = None,
            *,
+           react: str = None,
            update: str = None,
            delete: str = None,
            reply: str = None,
@@ -188,13 +189,14 @@ def notify(message: str = "",
 
     if [bool(channel),
         bool(update),
+        bool(react),
         bool(delete),
         bool(reply),
         bool(reply_broadcast)
        ].count(True)>1:
         raise TypeError("channel/update/delete/reply/reply_broadcast are mutually incompatible")
 
-    if len(file)>0 and (update or delete or reply_broadcast):
+    if len(file)>0 and (update or react or delete or reply_broadcast):
         raise TypeError("")
 
     config = None
@@ -220,6 +222,15 @@ def notify(message: str = "",
             client.files_delete(file=delete_dict["id"])
             return ""
         raise RuntimeError("unknown type")
+    
+    if react:
+        react_dict=_parse_url(react.split(",")[0])
+
+        response = client.reactions_add(
+          name=react.split(",")[1],
+          timestamp=react_dict["ts"],
+          channel=react_dict["channel"])
+        return react.split(",")[0]
 
 
     if update:
