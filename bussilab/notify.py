@@ -341,9 +341,6 @@ def notify(message: str = "",
         if footer:
             initial_comment += footer_text
 
-        attempts=5
-        
-
         v2=False
 # # Note:
 # # UserWarning: client.files_upload() may cause some issues like timeouts for
