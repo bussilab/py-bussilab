@@ -103,7 +103,7 @@ def remote(server: str,
 
     cmd =  "( " + python_exec + " -m jupyter notebook list 2> /dev/null ) ;"
     cmd += "echo x ;"
-    cmd += "( " + python_exec + " -m jupyterlab list 2> /dev/null ) ;"
+    cmd += "( " + python_exec + " -m jupyterlab list 2>&1 ) ;" # needed for jupyter-lab list 3.6
 
     print("server:", server)
     print("cmd:", cmd)
@@ -123,6 +123,7 @@ def remote(server: str,
                                 stderr=subprocess.PIPE,
                                 universal_newlines=True,
                                 check=True).stdout.split('\n'):
+            l=re.sub(r"^\[JupyterServerListApp\] ","",l) # needed for newer jupyter-lab list 3.6
             if re.match("^http", l):
                 ll.append(re.sub("localhost", server, l))
                 ll_localhost.append(l)
