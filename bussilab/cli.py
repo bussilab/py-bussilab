@@ -566,7 +566,7 @@ def _pip_upgrade_all(**kargs):
 @arg("-d","--delete", help="url of the message to be deleted")
 @arg("-r","--reply", help="url of the message to be replied")
 @arg("-R","--reply-broadcast", help="url of the message to be broadcast-replied")
-@arg("--react", help="react to a message")
+@arg("-X","--react", help="react to a message")
 @endgroup
 @arg("-f","--file", help="path to a file to be uploaded (incompatible with -u and -d)")
 @arg("-t","--title", help="title of the message")
