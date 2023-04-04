@@ -258,6 +258,11 @@ def notify(message: str = "",
           channel=react_dict["channel"])
         return react
 
+    if len(message)>2900:
+        message=message[:2900] + " [truncated]"
+
+    if len(title)>2900:
+        title=title[:2900] + " [truncated]"
 
     if update:
         update_dict=_parse_url(update)
