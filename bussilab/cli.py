@@ -572,14 +572,18 @@ def _pip_upgrade_all(**kargs):
 @arg("-t","--title", help="title of the message")
 @arg("--type", help="'plain_text' or 'mrkdwn'", default='mrkdwn')
 @arg("--token", help="token (check ~/.bussilabrc by default")
+@arg("-q","--quiet", help="quiet (do not write output)", action="store_true")
 def _notify(**kargs):
     """
        This is a tool to send a notification to Slack.
        See the documentation of `bussilab.notify`.
     """
     from . import notify
+    quiet=kargs["quiet"]
+    del kargs["quiet"]
     msg=notify.notify(**kargs)
-    print(msg)
+    if not quiet:
+      print(msg)
 
 @command("cron", help="Run cron",
           formatter_class=argparse.ArgumentDefaultsHelpFormatter)
