@@ -258,6 +258,10 @@ def notify(message: str = "",
           channel=react_dict["channel"])
         return react
 
+    # take care of carriage returns in log files
+    if len(message)>0:
+        message=re.sub(r'.*\r([^\n])', r'\1', message, flags=re.M)
+
     if len(message)>2900:
         message=message[:2900] + " [truncated]"
 
