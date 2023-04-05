@@ -87,13 +87,24 @@ from . import coretools
 from typing import cast
 
 def _try_multiple_times(func,*args,**kwargs):
+     max_attempts=10
+     num_attempts=0
      while True:
         try:
+            num_attempts+=1
             return func(*args,**kwargs)
         except SlackApiError as e:            
+            if num_attempts>=max_attempts:
+                raise
+
             if "error" in e.response and e.response["error"]=="ratelimited" and "Retry-After" in e.response.headers:
                 print("Retry-after",e.response.headers["Retry-After"])
                 time.sleep(float(e.response.headers["Retry-After"]))
+            # https://github.com/slackapi/python-slack-sdk/issues/1165
+            elif "status" in e.response.headers and e.response.headers["status"]==408:
+                print("Server-side error:",e.response.headers)
+                print("Retrying after 30 seconds")
+                time.sleep(30)
             else:
                 raise
 
