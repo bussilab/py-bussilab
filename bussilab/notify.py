@@ -28,12 +28,6 @@ Notice that the message is optional. Even with an empty message, the footer
 will allow you to reconstruct from which machine and directory the message was
 sent from. This might be sufficient for your goal.
 
-Alternatively, you can upload a file:
-```python
-from bussilab.notify import notify
-notify("text here",file="/path/to/file")
-```
-
 You can also indicate a specific channel for the notification using the
 `channel` option:
 ```bash
@@ -46,18 +40,38 @@ notify("text here", channel="project-myproject")
 ```
 This will only work if the App has been added to the specified channel.
 
+The following syntax can be used to upload a file:
+```bash
+bussilab notify --message "text here" --file /path/to/file
+```
+or from python:
+```python
+from bussilab.notify import notify
+notify("text here",file="/path/to/file")
+```
+
 The commands above will return the URL of the message. This URL can be used
-later to update or delete them:
+later to update or delete them or to post reactions:
 ```bash
 url=$(bussilab notify --message "text here")
 bussilab notify --update $url --message "revised message"
+bussilab notify --react $url:heart
+
+# this will remove only the reaction:
+bussilab notify --delete $url:heart
+
+# this will remove the entire message:
 bussilab notify --delete $url
+
+url=$(bussilab notify --message "text here")
 ```
-or
+or from python:
 ```python
 from bussilab.notify import notify
 url=notify("text here")
-notify("text here", update=url)
+notify("revised message", update=url)
+notify(react=url+":heart")
+notify(delete=url+":heart")
 notify(delete=url)
 ```
 In these cases, the channel is not needed and should not be provided.
@@ -70,6 +84,7 @@ import re
 import os
 import socket
 import time
+import warnings
 
 try:
     # slack client 3
@@ -98,12 +113,19 @@ def _try_multiple_times(func,*args,**kwargs):
                 raise
 
             if "error" in e.response and e.response["error"]=="ratelimited" and "Retry-After" in e.response.headers:
-                print("Retry-after",e.response.headers["Retry-After"])
+                warnings.warn("Slack API, retry-after "
+                              +str(e.response.headers["Retry-After"])
+                              +" seconds"+
+                              " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                              ResourceWarning)
                 time.sleep(float(e.response.headers["Retry-After"]))
             # https://github.com/slackapi/python-slack-sdk/issues/1165
             elif "status" in e.response.headers and e.response.headers["status"]==408:
-                print("Server-side error:",e.response.headers)
-                print("Retrying after 30 seconds")
+                warnings.warn("Slack API, server-side problem: "
+                              +str(e.response.headers)+"\n"+
+                              "retrying after 30 seconds"+
+                              " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                              ResourceWarning)
                 time.sleep(30)
             else:
                 raise
@@ -171,7 +193,11 @@ def notify(message: str = "",
 
        delete: None or str
 
-           The URL of a message to be deleted.
+           The URL of a message to be deleted. By passing a URL
+           concatenated with the string `":name_of_reaction"` you can
+           delete a reaction. Buy passing two comma-separated URLs
+           you can delete both a file and the message with which it was
+           shared.
        
        reply: None or str
        
@@ -180,6 +206,11 @@ def notify(message: str = "",
        reply_broadcast: None or str
        
            The URL of a message to be broadcast-replied
+       
+       react: None or str
+       
+           The URL of a message to which you want to add a reaction,
+           followed by the string `:name_of_the_reaction`
            
        file: None or str
        
@@ -210,6 +241,8 @@ def notify(message: str = "",
                A string with the URL of the sent message.
                In case the `delete` keyword is used, it returns an empty
                string.
+               In case a file is uploaded, it returns two comma-separated
+               URLs corresponding to the message and to the file.
 
 
        Example
@@ -232,7 +265,7 @@ def notify(message: str = "",
         raise TypeError("channel/update/delete/reply/reply_broadcast are mutually incompatible")
 
     if len(file)>0 and (update or react or delete or reply_broadcast):
-        raise TypeError("")
+        raise TypeError("files cannot be updated")
 
     config = None
     if token is None:
@@ -242,6 +275,7 @@ def notify(message: str = "",
     client = WebClient(token=token)
 
     if delete:
+        # this is to enable deletion of both a message and a file:
         delete_multi=delete.split(",")
         if len(delete_multi)>1:
             for d in delete_multi:
@@ -249,21 +283,26 @@ def notify(message: str = "",
             return ""
         delete_dict=_parse_url(delete)
         if not delete_dict:
-           raise TypeError("")
+            raise TypeError("cannot parse delete URL")
         if delete_dict["type"]=="message":
-            _try_multiple_times(client.chat_delete,channel=delete_dict["channel"], ts=delete_dict["ts"])
-            return ""
+            _try_multiple_times(client.chat_delete,
+                                channel=delete_dict["channel"],
+                                ts=delete_dict["ts"])
         elif delete_dict["type"]=="file":
-            _try_multiple_times(client.files_delete,file=delete_dict["id"])
-            return ""
+            _try_multiple_times(client.files_delete,
+                                file=delete_dict["id"])
         elif delete_dict["type"]=="reaction":
-            _try_multiple_times(client.reactions_remove,channel=delete_dict["channel"], timestamp=delete_dict["ts"], name=delete_dict["reaction"])
-            return ""
-        raise RuntimeError("unknown type")
+            _try_multiple_times(client.reactions_remove,
+                                channel=delete_dict["channel"],
+                                timestamp=delete_dict["ts"],
+                                name=delete_dict["reaction"])
+        else:
+            raise RuntimeError("unknown type")
+        # delete always returns an empty string
+        return ""
 
     if react:
         react_dict=_parse_url(react)
-
         response = _try_multiple_times(client.reactions_add,
           name=react_dict["reaction"],
           timestamp=react_dict["ts"],
@@ -272,7 +311,9 @@ def notify(message: str = "",
 
     screenlog_message=""
     if len(screenlog)>0:
-       with open(screenlog,'rb') as handler:
+        # we manually removed "deleted" lines.
+        # this is very useful for tdqm-like logs
+        with open(screenlog,'rb') as handler:
             screenlog_message=handler.read().decode()
        	    screenlog_message=re.sub(r'.*\r([^\n])', r'\1', screenlog_message, flags=re.M)
 
@@ -330,6 +371,7 @@ def notify(message: str = "",
                        },
            }
            )
+        
     if len(screenlog_message) > 0:
         blocks.append(
            {
@@ -408,11 +450,17 @@ def notify(message: str = "",
             response = _try_multiple_times(client.files_upload_v2,file=file,title=file,channel=channel)
         else:
             if reply:
-                response = _try_multiple_times(client.files_upload,file=file,channels=reply_dict["channel"],
-                                               title=file,thread_ts=reply_dict["ts"])
+                response = _try_multiple_times(client.files_upload,
+                                               file=file,
+                                               channels=reply_dict["channel"],
+                                               title=file,
+                                               thread_ts=reply_dict["ts"])
             else:
-                response = _try_multiple_times(client.files_upload,file=file,title=file,channels=channel,
-                                              initial_comment=initial_comment)
+                response = _try_multiple_times(client.files_upload,
+                                               file=file,
+                                               title=file,
+                                               channels=channel,
+                                               initial_comment=initial_comment)
     elif reply:
         response = _try_multiple_times(client.chat_postMessage,
                    blocks=blocks,
