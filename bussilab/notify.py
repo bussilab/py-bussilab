@@ -135,6 +135,7 @@ def notify(message: str = "",
            reply: str = None,
            reply_broadcast: str = None,
            title: str = "",
+           screenlog: str = "",
            footer: bool = True,
            type: str = "mrkdwn",
            file: str = "",
@@ -258,10 +259,15 @@ def notify(message: str = "",
           channel=react_dict["channel"])
         return react
 
-    # take care of carriage returns in log files
-    if len(message)>0:
-        message=re.sub(r'.*\r([^\n])', r'\1', message, flags=re.M)
+    screenlog_message=""
+    if len(screenlog)>0:
+       with open(screenlog,'rb') as handler:
+            screenlog_message=handler.read().decode()
+       	    screenlog_message=re.sub(r'.*\r([^\n])', r'\1', screenlog_message, flags=re.M)
 
+    if len(screenlog_message)>2900:
+        screenlog_message=screenlog_message[:2900] + " [truncated]"
+        
     if len(message)>2900:
         message=message[:2900] + " [truncated]"
 
@@ -310,6 +316,16 @@ def notify(message: str = "",
                "text": {
                          "type": type,
                          "text": message
+                       },
+           }
+           )
+    if len(screenlog_message) > 0:
+        blocks.append(
+           {
+               "type": "section",
+               "text": {
+                         "type": "mrkdwn",
+                         "text": "```\n" + screenlog_message + "\n```\n"
                        },
            }
            )

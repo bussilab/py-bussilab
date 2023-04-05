@@ -570,6 +570,7 @@ def _pip_upgrade_all(**kargs):
 @endgroup
 @arg("-f","--file", help="path to a file to be uploaded (incompatible with -u and -d)")
 @arg("-t","--title", help="title of the message")
+@arg("--screenlog", help="screenlog file")
 @arg("--type", help="'plain_text' or 'mrkdwn'", default='mrkdwn')
 @arg("--token", help="token (check ~/.bussilabrc by default")
 @arg("-q","--quiet", help="quiet (do not write output)", action="store_true")
