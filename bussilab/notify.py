@@ -169,6 +169,7 @@ def notify(message: str = "",
            reply_broadcast: str = None,
            title: str = "",
            screenlog: str = "",
+           screenlog_maxlines: int = 0,
            footer: bool = True,
            type: str = "mrkdwn",
            file: str = "",
@@ -316,6 +317,11 @@ def notify(message: str = "",
         with open(screenlog,'rb') as handler:
             screenlog_message=handler.read().decode()
        	    screenlog_message=re.sub(r'.*\r([^\n])', r'\1', screenlog_message, flags=re.M)
+        if screenlog_maxlines>0:
+            screenlog_message_lines=screenlog_message.split("\n")
+            if len(screenlog_message_lines) > screenlog_maxlines:
+                screenlog_message_lines = screenlog_message_lines[-screenlog_maxlines:]
+            screenlog_message="\n".join(screenlog_message_lines)
 
     if len(screenlog_message)>2900:
         screenlog_message=screenlog_message[:2900] + " [truncated]"
