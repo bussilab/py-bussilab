@@ -108,7 +108,7 @@ def _try_multiple_times(func,*args,**kwargs):
         try:
             num_attempts+=1
             return func(*args,**kwargs)
-        except SlackApiError as e:            
+        except SlackApiError as e:
             if num_attempts>=max_attempts:
                 raise
 
@@ -117,15 +117,17 @@ def _try_multiple_times(func,*args,**kwargs):
                               +str(e.response.headers["Retry-After"])
                               +" seconds"+
                               " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
-                              ResourceWarning)
+                              UserWarning)
                 time.sleep(float(e.response.headers["Retry-After"]))
-            else: # general error, just wait 30 seconds
+            elif e.response.status_code!=200:
                 warnings.warn("Slack API, server-side problem: "
-                              +str(e.response)+"\n"+
+                              +str(e.response.status_code)+"\n"+
                               "retrying after 30 seconds"+
                               " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
-                              ResourceWarning)
+                              UserWarning)
                 time.sleep(30)
+            else:
+                raise
 
 _match_message=r"https://[^/]*\.slack\.com/archives/.*"
 
