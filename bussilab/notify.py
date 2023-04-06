@@ -121,7 +121,7 @@ def _try_multiple_times(func,*args,**kwargs):
                 time.sleep(float(e.response.headers["Retry-After"]))
             else: # general error, just wait 30 seconds
                 warnings.warn("Slack API, server-side problem: "
-                              +str(e.response.headers)+"\n"+
+                              +str(e.response)+"\n"+
                               "retrying after 30 seconds"+
                               " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
                               ResourceWarning)
