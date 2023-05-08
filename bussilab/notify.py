@@ -359,6 +359,7 @@ def notify(message: str = "",
     text=""
 
     if len(title) > 0:
+        text+="*" + title+"*\n"
         blocks.append(
            {
                "type": "section",
@@ -367,6 +368,7 @@ def notify(message: str = "",
            )
 
     if len(message) > 0:
+        text+=message+"\n"
         blocks.append(
            {
                "type": "section",
@@ -378,6 +380,7 @@ def notify(message: str = "",
            )
         
     if len(screenlog_message) > 0:
+        text+=screenlog_message+"\n"
         blocks.append(
            {
                "type": "section",
@@ -398,6 +401,7 @@ def notify(message: str = "",
         footer_text += " at " + socket.gethostname() +'\n'
         footer_text += "pwd: " + os.getcwd() + '\n'
         footer_text += datetime.datetime.now().isoformat(sep=' ',timespec='milliseconds')
+        text+=footer_text+"\n"
         blocks.append({
                           "type": "context",
                           "elements": [
@@ -408,6 +412,7 @@ def notify(message: str = "",
                           ]
                       })
     if len(blocks)==0:
+        text+="(empty notification)"
         blocks.append({
                           "type": "section",
                           "text": {
@@ -415,13 +420,6 @@ def notify(message: str = "",
                                      "text": "(empty notification)"
                                   }
                       })
-
-    if len(title) > 0:
-        text=title+"\n"
-    elif len(message) > 0:
-        text=message+"\n"
-    else:
-        text="(empty message)"
 
     if update:
         response = _try_multiple_times(client.chat_update,
