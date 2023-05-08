@@ -275,9 +275,6 @@ _required_ = [
     'typing_extensions'
 ]
 
-if _sys.version_info > (3, 10):
-    _required_.remove('numba') # temporary fix, numba not yet ported to python 3.11
-
 _macports_py_ = "3.9"
 
 def _process_macports(macports: _List[str]) -> _List[str]:
