@@ -5,7 +5,6 @@ See `bussilab.wham.wham()`.
 
 """
 import sys
-import warnings
 from typing import Optional, cast
 import numpy as np
 from . import coretools
