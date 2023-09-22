@@ -68,7 +68,8 @@ def wham(bias,
        Currently, method="minimize" does not work correctly when setting traj_weights.
        As a consequence, results produced with v0.0.41, where this method is the default,
        might be incorrect. In v0.0.42 this is temporarily fixed by reverting to method="substitute"
-       when using traj_weights.
+       when using traj_weights. In v0.0.43 this should be finally fixed: both methods should
+       equally work in all cases, and the default "minimize" method should require less iterations.
 
        Combining trajectories of different length
        ------------------------------------------
