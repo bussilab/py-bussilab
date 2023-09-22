@@ -138,7 +138,7 @@ jobs:
         source ./macports-ci install
     - name: Setup environment
       run: |
-        echo MACPORTS_PY_VERSIONS="3.8 3.9 3.10 3.11" >> $GITHUB_ENV
+        echo MACPORTS_PY_VERSIONS="3.8 3.9 3.10" >> $GITHUB_ENV
     - name: Install python
       run: |
         for pyver in $MACPORTS_PY_VERSIONS
