@@ -63,6 +63,14 @@ def wham(bias,
        If using `normalize=False`, weights are **not** normalized and biases are pre-shifted so as
        to decrease numerical issues.
 
+       Bugs
+       ----
+
+       Currently, method="minimize" does not work correctly when setting traj_weights.
+       As a consequence, results produced with v0.0.41, where this method is the default,
+       might be incorrect. In v0.0.42 this is temporarily fixed by reverting to method="substitute"
+       when using traj_weights.
+
        Combining trajectories of different length
        ------------------------------------------
 
