@@ -218,10 +218,6 @@ def wham(bias,
         frame_weight = np.ones(nframes)
     if traj_weight is None:
         traj_weight = np.ones(ntraj)
-    else:
-        if method != "substitute":
-            warnings.warn("currently there's a bug that makes method='minimize' incompatible with traj_weights. method='substitute' will be enforced")
-            method="substitute"
 
     assert len(traj_weight) == ntraj
     assert len(frame_weight) == nframes
@@ -267,15 +263,15 @@ def wham(bias,
         nfev=nit
     elif method == "minimize":
         from scipy.optimize import minimize
+        # in the equation below, traj_weight should be exactly scaled to the number of frames
+        traj_weight_scaled=traj_weight/np.sum(traj_weight)*np.sum(frame_weight)
         def func(x):
-            x-=np.average(x)
             Zm1=np.exp(-x)
-            tmp=expv*(traj_weight*Zm1)[np.newaxis,:]
+            tmp=expv*(traj_weight_scaled*Zm1)[np.newaxis,:]
             tmp1=np.sum(tmp,axis=1)
-            C=np.sum(frame_weight*np.log(tmp1))+np.sum(traj_weight*x)
+            C=np.sum(frame_weight*np.log(tmp1))+np.sum(traj_weight_scaled*x)
             tmp/=tmp1[:,np.newaxis]
-            grad=-np.matmul(frame_weight,tmp)+traj_weight
-            grad-=np.average(grad)
+            grad=-np.matmul(frame_weight,tmp)+traj_weight_scaled
             return C,grad
         if minimize_opt is not None:
             if "method" not in minimize_opt:
