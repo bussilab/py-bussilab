@@ -5,6 +5,7 @@ See `bussilab.wham.wham()`.
 
 """
 import sys
+import warnings
 from typing import Optional, cast
 import numpy as np
 from . import coretools
@@ -209,6 +210,10 @@ def wham(bias,
         frame_weight = np.ones(nframes)
     if traj_weight is None:
         traj_weight = np.ones(ntraj)
+    else:
+        if method != "substitute":
+            warnings.warn("currently there's a bug that makes method='minimize' incompatible with traj_weights. method='substitute' will be enforced")
+            method="substitute"
 
     assert len(traj_weight) == ntraj
     assert len(frame_weight) == nframes
