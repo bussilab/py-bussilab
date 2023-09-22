@@ -8,7 +8,7 @@ class TestWham(TestCase):
         import numpy as np
         a = np.exp(wham(np.array([[1, 10, 7], [2, 9, 6], [3, 8, 5]])).logW)
         self.assertAlmostEqual(np.sum((a-np.array([0.41728571, 0.39684866, 0.18586563]))**2), 0.0)
-        b = np.exp(wham(np.array([[1, 10], [2, 9], [3, 8]]), traj_weight=(1, 2)).logW)
+        b = np.exp(wham(np.array([[1, 10], [2, 9], [3, 8]]), traj_weight=(0.1, 0.2)).logW)
         self.assertAlmostEqual(np.sum((b-np.array([0.41728571, 0.39684866, 0.18586563]))**2), 0.0)
         c = np.exp(wham(np.array([[3, 5],
                                   [4, 4],
