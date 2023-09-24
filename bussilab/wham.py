@@ -5,7 +5,7 @@ See `bussilab.wham.wham()`.
 
 """
 import sys
-from typing import Optional, cast
+from typing import Optional, Union, cast
 import numpy as np
 from . import coretools
 
@@ -40,7 +40,7 @@ def wham(bias,
         verbose: bool = False,
         logZ: Optional[np.ndarray] = None,
         logW: Optional[np.ndarray] = None,
-        normalize: bool = True,
+        normalize: Union[bool, str] = "log",
         method: str = "minimize",
         minimize_opt: Optional[dict] = None):
     """Compute weights according to binless WHAM.
@@ -54,13 +54,9 @@ def wham(bias,
        It is crucial however to compute the potential according to each of the employed
        Hamiltonian on **all the frames**, not only on those simulated using that Hamiltonian.
 
-       Notice that, unless one passes `normalize=False`, the returned weights are normalized.
-       In most practical cases, this means that one should decide a priori on which Hamiltonian
-       weights should be computed and subtract it first. E.g., to obtain the weights corresponding
-       to the first Hamiltonian, one should likely replace `bias` with `bias-bias[:,0][:,np.newaxis]`.
-       Not doing so, unless bias fluctuations are very small, will result in numerical issues.
-       If using `normalize=False`, weights are **not** normalized and biases are pre-shifted so as
-       to decrease numerical issues.
+       Notice that by default weights are normalized. It is possible to override this behavior with
+       normalize=False. However, starting with v0.0.40, this should not be necessary. The new
+       implementation of normalization should be numerically stable in all cases.
 
        Bugs
        ----
@@ -190,9 +186,9 @@ def wham(bias,
            the bias.  Providing an initial guess that is close to the converged value can speed up
            significantly the convergence. *If logW is provided, logZ is ignored*.
 
-       normalize: bool, optional
-           If False, do not normalize resulting weights. Useful when biases fluctuate a lot and one
-           does not want to choose first on which of the Hamiltonians they should be normalized.
+       normalize: bool or str, optional
+           By default, "log", which properly normalizes weights in all cases.
+           normalize=True or False is enabled for backward compatibility.
 
        method: str, optional
            If "substitute", solve self-consistent equations by substitution.
@@ -299,14 +295,24 @@ def wham(bias,
     else:
         raise ValueError("method should be 'minimize' or 'substitute'")
 
-    if normalize:
-        weight *= np.exp((shifts1-np.max(shifts1)))
-        # normalized weights
-        weight /= np.sum(weight)
-        with np.errstate(divide = 'ignore'):
-            logW = np.log(weight)
+    # this is the traditional implementation, either normalized or not
+    if isinstance(normalize,bool):
+        if normalize:
+            weight *= np.exp((shifts1-np.max(shifts1)))
+            # normalized weights
+            weight /= np.sum(weight)
+            with np.errstate(divide = 'ignore'):
+                logW = np.log(weight)
+        else:
+            logW = np.log(weight) + shifts1
+    # this is the new default, which allows normalizing also non-normalizable weights
     else:
-        logW = np.log(weight) + shifts1
+        if normalize == "log":
+            logW = np.log(weight) + shifts1
+            logW -= np.max(logW)
+            logW -= np.log(np.sum(np.exp(logW)))
+        else:
+            raise ValueError("normalize should be True, False, or 'log'")
 
     if verbose:
         sys.stderr.write("WHAM: end")
