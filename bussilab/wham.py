@@ -61,7 +61,7 @@ def wham(bias,
        Bugs
        ----
 
-       Currently, method="minimize" does not work correctly when setting traj_weights.
+       Up to version 0.042, method="minimize" does not work correctly when setting traj_weights.
        As a consequence, results produced with v0.0.41, where this method is the default,
        might be incorrect. In v0.0.42 this is temporarily fixed by reverting to method="substitute"
        when using traj_weights. In v0.0.43 this should be finally fixed: both methods should
