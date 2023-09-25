@@ -27,6 +27,8 @@ class TestWham(TestCase):
         ]))**2), 0.0)
         d = np.exp(wham(np.array([[3, 5], [4, 4]]), frame_weight=(1, 10)).logW)
         self.assertAlmostEqual(np.sum((d-np.array([[0.06421006, 0.93578994]]))**2), 0.0)
+        e = np.exp(wham(np.array([[1, 5, 14], [2, 4.5, 12], [3, 4, 10]]),T=[1.0,0.5,2.0]).logW)
+        self.assertAlmostEqual(np.sum((e-np.array([0.41728571, 0.39684866, 0.18586563]))**2), 0.0)
 
     def test_wham1s(self):
         import numpy as np
@@ -52,6 +54,8 @@ class TestWham(TestCase):
         ]))**2), 0.0)
         d = np.exp(wham(np.array([[3, 5], [4, 4]]), frame_weight=(1, 10),method="substitute").logW)
         self.assertAlmostEqual(np.sum((d-np.array([[0.06421006, 0.93578994]]))**2), 0.0)
+        e = np.exp(wham(np.array([[1, 5, 14], [2, 4.5, 12], [3, 4, 10]]),T=[1.0,0.5,2.0],method="substitute").logW)
+        self.assertAlmostEqual(np.sum((e-np.array([0.41728571, 0.39684866, 0.18586563]))**2), 0.0)
 
     def test_wham2(self):
         # test passing lists instead of np arrays

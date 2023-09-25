@@ -162,7 +162,8 @@ def wham(bias,
 
        T: float, optional
            The temperature of the system. This number is just used to divide the `bias` array in
-           order to make it adimensional.
+           order to make it adimensional. In case replicas are simulated at different temperatures,
+           it is possible to pass an array here, with ntraj elements.
 
        maxiter: int, optional
            Maximum number of iterations in the minimization procedure.
@@ -209,6 +210,10 @@ def wham(bias,
     nframes = bias.shape[0]
     ntraj = bias.shape[1]
 
+    if isinstance(T,float):
+        T=T*np.ones(ntraj)
+    T = coretools.ensure_np_array(T)
+
     # default values
     if frame_weight is None:
         frame_weight = np.ones(nframes)
@@ -219,7 +224,7 @@ def wham(bias,
     assert len(frame_weight) == nframes
 
     # divide by T once for all
-    shifted_bias = bias/T
+    shifted_bias = bias/T[np.newaxis,:]
     # track shifts
     shifts0 = np.min(shifted_bias, axis=0)
     shifted_bias -= shifts0[np.newaxis,:]
