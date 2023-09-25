@@ -104,6 +104,7 @@ from typing import cast
 def _try_multiple_times(func,*args,**kwargs):
      max_attempts=10
      num_attempts=0
+     num_attempts_delay=5
      while True:
         try:
             num_attempts+=1
@@ -113,19 +114,27 @@ def _try_multiple_times(func,*args,**kwargs):
                 raise
 
             if "error" in e.response and e.response["error"]=="ratelimited" and "Retry-After" in e.response.headers:
+                wait=float(e.response.headers["Retry-After"])
+                if num_attempts>num_attempts_delay:
+                  wait*=2**(num_attempts-num_attempts_delay)
                 warnings.warn("Slack API, retry-after "
-                              +str(e.response.headers["Retry-After"])
+                              +str(wait)
                               +" seconds"+
                               " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
                               UserWarning)
-                time.sleep(float(e.response.headers["Retry-After"]))
+                time.sleep(wait)
             elif not hasattr(e.response,"status_code") or e.response.status_code!=200:
+                wait=30
+                if num_attempts>num_attempts_delay:
+                  wait*=2**(num_attempts-num_attempts_delay)
                 warnings.warn("Slack API, server-side problem: "
                               +str(e.response)+"\n"+
-                              "retrying after 30 seconds"+
+                              "retrying after "
+                              +str(wait)
+                              +" seconds"+
                               " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
                               UserWarning)
-                time.sleep(30)
+                time.sleep(wait)
             else:
                 raise
 
