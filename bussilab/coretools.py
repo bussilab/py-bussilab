@@ -29,13 +29,13 @@ def file_or_path(arg, mode: str):
     return arg
 
 def import_numba_jit():
-    """Return a numba.jit object. If import fails, return a fake jit object and emits a warning.
+    """Return a numba.njit object. If import fails, return a fake jit object and emits a warning.
 
-       Currently, the returned object can only be used as @jit (no option). It might be extended
+       Currently, the returned object can only be used as @njit (no option). It might be extended
        to allow more jit options.
     """
     try:
-        from numba import jit as numba_jit
+        from numba import njit as numba_jit
         return numba_jit
     except ImportError:
         import warnings
