@@ -226,10 +226,10 @@ def wham(bias,
     # divide by T once for all
     shifted_bias = bias/T[np.newaxis,:]
     # track shifts
-    shifts0 = np.min(shifted_bias, axis=0)
-    shifted_bias -= shifts0[np.newaxis,:]
     shifts1 = np.min(shifted_bias, axis=1)
     shifted_bias -= shifts1[:,np.newaxis]
+    shifts0 = np.min(shifted_bias, axis=0)
+    shifted_bias -= shifts0[np.newaxis,:]
 
     # do exponentials only once
     expv = np.exp(-shifted_bias)
