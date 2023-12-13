@@ -119,6 +119,22 @@ class TestWham(TestCase):
             self.assertAlmostEqual(w.logW[1]-w.logW[0],diffW)
             self.assertAlmostEqual(w.logZ[1]-w.logZ[0],0.0)
 
+    def test_wham6(self):
+        import numpy as np
+        large=1e+3
+        bias=np.array([
+            [0,large],
+            [0,0],
+            [large,0]
+        ]
+        )
+        bias1=np.array(bias)
+        bias2=bias-bias[:,0][:,np.newaxis]
+        w1=wham(bias1)
+        w2=wham(bias2)
+        self.assertAlmostEqual(w1.logZ[0],w1.logZ[1])
+        self.assertAlmostEqual(w2.logZ[0],w2.logZ[1])
+
     def test_wham_restart(self):
         import numpy as np
         w0=wham(((0,10),(-4,11)),T=0.2)
