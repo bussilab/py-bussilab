@@ -445,21 +445,28 @@ def notify(message: str = "",
         if footer:
             initial_comment += footer_text
 
-        v2=False
-# # Note:
-# # UserWarning: client.files_upload() may cause some issues like timeouts for
-# # relatively large files. Our latest recommendation is to use client.files_upload_v2(),
-# # which is mostly compatible and much stabler, instead.
-# # However, to me v2 does not work (the file is not accessible and not posted to the channel)
-#         try:
-#             x=client.files_upload_v2
-#             v2=True
-#         except AttributeError:
-#             pass
+        # v2 will be the only supported way in Feb 2025
+        # https://api.slack.com/changelog/2024-04-a-better-way-to-upload-files-is-here-to-stay
 
+        try:
+            _=client.files_upload_v2
+            v2=True
+        except AttributeError:
+            v2=False
 
         if v2:
-            response = _try_multiple_times(client.files_upload_v2,file=file,title=file,channel=channel)
+            if reply:
+                response = _try_multiple_times(client.files_upload_v2,
+                                               file=file,
+                                               channel=reply_dict["channel"],
+                                               title=file,
+                                               thread_ts=reply_dict["ts"])
+            else:
+                response = _try_multiple_times(client.files_upload_v2,
+                                               file=file,
+                                               title=file,
+                                               channel=channel,
+                                               initial_comment=initial_comment)
         else:
             if reply:
                 response = _try_multiple_times(client.files_upload,
