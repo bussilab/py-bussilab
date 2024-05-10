@@ -64,7 +64,7 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 bussilab bin --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics | tee flake8_report.txt
     - name: Doc
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
       run: |
         pip install --upgrade pdoc3 jupyter nbconvert
         pdoc3 -f --html -o doc/ bussilab
@@ -74,25 +74,25 @@ jobs:
         ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
         ( sudo apt-get install pandoc texlive-xetex && pdoc3 -f --pdf bussilab > bussilab.md && pandoc --metadata=title:"Py-Bussilab Documentation" --from=markdown+abbreviations+tex_math_single_backslash --pdf-engine=xelatex --toc --toc-depth=4 --output=doc/bussilab.pdf bussilab.md )
     - name: Push doc to GitHub Pages
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' && github.ref == 'refs/heads/master' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && github.ref == 'refs/heads/master' }}
       env:
         BUSSILABBOT_TOKEN: ${{ secrets.BUSSILABBOT_TOKEN }}
       run: |
         .ci/pushdoc
     - name: Upload doc to artifact
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
       uses: actions/upload-artifact@v3
       with:
         path: doc
         name: doc
     - name: Upload doc to artifact
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
       uses: actions/upload-artifact@v3
       with:
         path: flake8_report.txt
         name: flake8_report
     - name: Deploy PyPI
-      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11' && startsWith(github.ref, 'refs/tags/') }}
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && startsWith(github.ref, 'refs/tags/') }}
       env:
         BUSSILABBOT_PYPI: ${{ secrets.BUSSILABBOT_PYPI }}
       run: |
