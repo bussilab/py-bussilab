@@ -467,6 +467,24 @@ def notify(message: str = "",
                                                title=file,
                                                channel=channel,
                                                initial_comment=initial_comment)
+
+            if len(list(response["files"][0]["shares"].keys()))>0:
+                k=list(response["files"][0]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
+                channel=list(response["files"][0]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
+                ts=response["files"][0]["shares"][k][channel][0]["ts"]
+            else:
+                file_id=response["files"][0]["id"]
+                for i in range(10):
+                    if len(list(response["file"]["shares"].keys()))>0:
+                      k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
+                      channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
+                      ts=response["file"]["shares"][k][channel][0]["ts"]
+                      time.sleep(1)
+                      break
+                    warnings.warn("Slack API, missing shares for file ID " + file_id  +", retrying " + str(i))
+                    response = _try_multiple_times(client.files_info, file=file_id)
+
+
         else:
             if reply:
                 response = _try_multiple_times(client.files_upload,
@@ -480,6 +498,10 @@ def notify(message: str = "",
                                                title=file,
                                                channels=channel,
                                                initial_comment=initial_comment)
+            k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
+            channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
+            ts=response["file"]["shares"][k][channel][0]["ts"]
+
     elif reply:
         response = _try_multiple_times(client.chat_postMessage,
                    blocks=blocks,
@@ -509,10 +531,6 @@ def notify(message: str = "",
     if len(file)==0:
         url=base_url + "archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
     else:
-        
-        k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
-        channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
-        ts=response["file"]["shares"][k][channel][0]["ts"]
         url=base_url + "archives/" + channel + "/p" + ts[:-7] + ts[-6:]
         url+="," + base_url + "files/" + response["file"]["user"] + "/" + response["file"]["id"]
 
