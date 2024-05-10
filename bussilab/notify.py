@@ -474,17 +474,28 @@ def notify(message: str = "",
                 ts=response["files"][0]["shares"][k][channel][0]["ts"]
             else:
                 file_id=response["files"][0]["id"]
-                for i in range(10):
+                max_attempts=10
+                num_attempts=0
+                num_attempts_delay=5
+                while True:
+                    num_attempts+=1
+                    response = _try_multiple_times(client.files_info, file=file_id)
                     if len(list(response["file"]["shares"].keys()))>0:
                       k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
                       channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
                       ts=response["file"]["shares"][k][channel][0]["ts"]
-                      time.sleep(1)
                       break
-                    warnings.warn("Slack API, missing shares for file ID " + file_id  +", retrying " + str(i))
-                    response = _try_multiple_times(client.files_info, file=file_id)
-
-
+                    if num_attempts>=max_attempts:
+                      raise RuntimeError("Cannot obtain shares info for file ID "+str(file_id))
+                    wait=1.0
+                    if num_attempts>num_attempts_delay:
+                      wait=2**(num_attempts-num_attempts_delay)
+                    warnings.warn("Slack API, missing shares for file ID " + file_id  +", retry after "
+                                  +str(wait)
+                                  +" seconds"+
+                                  " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                                  UserWarning)
+                    time.sleep(wait)
         else:
             if reply:
                 response = _try_multiple_times(client.files_upload,
