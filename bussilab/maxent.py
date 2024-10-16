@@ -72,6 +72,8 @@ def _heavy_part(logW: np.ndarray,
         logW_ME.subtract(float(shift_ME))
         if weights:
             save_logW_ME=logW_ME.copy()
+        else:
+            save_logW_ME=None
         cm.exp(logW_ME)
         _ensure_ones(logW_ME.shape[0])
         Z=logW_ME.sum(0).asarray()[0,0]
