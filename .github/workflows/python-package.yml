@@ -150,6 +150,7 @@ jobs:
         source ./macports-ci install
     - name: Setup environment
       run: |
+        # 3.13 not yet supported (numba)
         echo MACPORTS_PY_VERSIONS="3.10 3.11 3.12" >> $GITHUB_ENV
     - name: Install python
       run: |
@@ -247,6 +248,7 @@ jobs:
         conda create -n py312 -c conda-forge -c local python=3.12 py-bussilab pytest
         source activate py312
         pytest -v
+        # 3.13 not yet supported (numba)
     - name: Deploy conda
       if: ${{ matrix.os == 'ubuntu-latest' && startsWith(github.ref, 'refs/tags/') }}
       env: 
