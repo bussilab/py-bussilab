@@ -119,7 +119,7 @@ def _try_multiple_times(func,*args,**kwargs):
                 wait=float(e.response.headers["Retry-After"])
                 if num_attempts>num_attempts_delay:
                   wait*=2**(num_attempts-num_attempts_delay)
-                wait*=random.uniform(1-jittering,1+jittering)
+                wait*=random.uniform(1,1+jittering)
                 warnings.warn("Slack API, retry-after "
                               +str(wait)
                               +" seconds"+
@@ -130,7 +130,7 @@ def _try_multiple_times(func,*args,**kwargs):
                 wait=30
                 if num_attempts>num_attempts_delay:
                   wait*=2**(num_attempts-num_attempts_delay)
-                wait*=random.uniform(1-jittering,1+jittering)
+                wait*=random.uniform(1,1+jittering)
                 warnings.warn("Slack API, server-side problem: "
                               +str(e.response)+"\n"+
                               "retrying after "
@@ -492,10 +492,10 @@ def notify(message: str = "",
                       break
                     if num_attempts>=max_attempts:
                       raise RuntimeError("Cannot obtain shares info for file ID "+str(file_id))
-                    wait=1.0
+                    wait=2.0
                     if num_attempts>num_attempts_delay:
-                      wait=2**(num_attempts-num_attempts_delay)
-                    wait*=random.uniform(1-jittering,1+jittering)
+                      wait*=2**(num_attempts-num_attempts_delay)
+                    wait*=random.uniform(1,1+jittering)
                     warnings.warn("Slack API, missing shares for file ID " + file_id  +", retry after "
                                   +str(wait)
                                   +" seconds"+
