@@ -81,13 +81,13 @@ jobs:
         .ci/pushdoc
     - name: Upload doc to artifact
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         path: doc
         name: doc
     - name: Upload doc to artifact
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         path: flake8_report.txt
         name: flake8_report
