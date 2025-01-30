@@ -150,11 +150,7 @@ jobs:
         source ./macports-ci install
     - name: Setup environment
       run: |
-        # 3.11 and 3.12 failing for some unknown reason on GHA
-        # this is only failing with MacOS-12, maybe it's worth checking why
-        # meanwhil they are disabled
-        # NB: test with 3.10 3.11 and 3.12
-        echo MACPORTS_PY_VERSIONS="3.10 3.11 3.12" >> $GITHUB_ENV
+        echo MACPORTS_PY_VERSIONS="3.10 3.11 3.12 3.13" >> $GITHUB_ENV
     - name: Install python
       run: |
         for pyver in $MACPORTS_PY_VERSIONS
