@@ -85,6 +85,7 @@ import os
 import socket
 import time
 import warnings
+import random
 
 try:
     # slack client 3
@@ -104,7 +105,8 @@ from typing import cast
 def _try_multiple_times(func,*args,**kwargs):
      max_attempts=10
      num_attempts=0
-     num_attempts_delay=5
+     num_attempts_delay=3
+     jittering=0.2
      while True:
         try:
             num_attempts+=1
@@ -117,6 +119,7 @@ def _try_multiple_times(func,*args,**kwargs):
                 wait=float(e.response.headers["Retry-After"])
                 if num_attempts>num_attempts_delay:
                   wait*=2**(num_attempts-num_attempts_delay)
+                wait*=random.uniform(1-jittering,1+jittering)
                 warnings.warn("Slack API, retry-after "
                               +str(wait)
                               +" seconds"+
@@ -127,6 +130,7 @@ def _try_multiple_times(func,*args,**kwargs):
                 wait=30
                 if num_attempts>num_attempts_delay:
                   wait*=2**(num_attempts-num_attempts_delay)
+                wait*=random.uniform(1-jittering,1+jittering)
                 warnings.warn("Slack API, server-side problem: "
                               +str(e.response)+"\n"+
                               "retrying after "
@@ -476,7 +480,8 @@ def notify(message: str = "",
                 file_id=response["files"][0]["id"]
                 max_attempts=10
                 num_attempts=0
-                num_attempts_delay=5
+                num_attempts_delay=3
+                jittering=0.2
                 while True:
                     num_attempts+=1
                     response = _try_multiple_times(client.files_info, file=file_id)
@@ -490,6 +495,7 @@ def notify(message: str = "",
                     wait=1.0
                     if num_attempts>num_attempts_delay:
                       wait=2**(num_attempts-num_attempts_delay)
+                    wait*=random.uniform(1-jittering,1+jittering)
                     warnings.warn("Slack API, missing shares for file ID " + file_id  +", retry after "
                                   +str(wait)
                                   +" seconds"+
