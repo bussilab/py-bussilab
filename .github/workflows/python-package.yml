@@ -212,6 +212,7 @@ jobs:
         export CPU_COUNT=2
         conda-build -c conda-forge conda
         rm -fr bussilab # make sure this is not imported by mistake in tests
+        conda install -c conda-forge tree
         tree $CONDA_PREFIX/conda-bld/ # check installed files
     - name: Test 3.7
       if: ${{ matrix.os != 'macos-14' }}
