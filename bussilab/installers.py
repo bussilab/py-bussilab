@@ -29,11 +29,10 @@ _DEFAULT_VIENNARNA_VERSION = "2.7.2-patch1"
 def _in_colab() -> bool:
     """Return True when running inside a Google Colab kernel."""
     try:
-        import google.colab  # noqa: F401
+        importlib.import_module("google.colab")
     except ImportError:
         return False
     return True
-
 
 def _require_colab() -> None:
     """Raise an exception unless the current runtime is Google Colab."""
