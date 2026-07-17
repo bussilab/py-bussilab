@@ -72,9 +72,12 @@ jobs:
         ( sudo apt-get install pandoc texlive-xetex && pdoc3 -f --pdf bussilab > bussilab.md && pandoc --metadata=title:"Py-Bussilab Documentation" --from=markdown+abbreviations+tex_math_single_backslash --pdf-engine=xelatex --toc --toc-depth=4 --output=doc/bussilab.pdf bussilab.md )
     - name: Push doc to GitHub Pages
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' && github.ref == 'refs/heads/master' }}
-      env:
-        BUSSILABBOT_TOKEN: ${{ secrets.BUSSILABBOT_TOKEN }}
       run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.DOC_DEPLOY_KEY }}" > ~/.ssh/doc_deploy_key
+        chmod 600 ~/.ssh/doc_deploy_key
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        git config --global core.sshCommand "ssh -i ~/.ssh/doc_deploy_key -o IdentitiesOnly=yes"
         .ci/pushdoc
     - name: Upload doc to artifact
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
