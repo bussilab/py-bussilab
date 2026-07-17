@@ -482,6 +482,7 @@ def notify(message: str = "",
                 num_attempts=0
                 num_attempts_delay=3
                 jittering=0.2
+                time.sleep(2.0) # wait before first attempt
                 while True:
                     num_attempts+=1
                     response = _try_multiple_times(client.files_info, file=file_id)
