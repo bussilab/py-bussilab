@@ -11,7 +11,7 @@ This is the documentation for version __version__.
 
 # Install
 
-This package is only compatible with Python >=3.6 (no compatibility with Python 2!).
+This package is only compatible with Python >=3.8 (no compatibility with Python 2!).
 The recommended way to install this package depends on how you prefer to manage your
 python dependencies.
 
@@ -427,17 +427,16 @@ def required_conda() -> str:
 def required_pip() -> str:
     return str(' '.join(_required_))
 
-# See this https://www.python.org/dev/peps/pep-0562/
-# Also notice that this solution only works with python>=3.7
-if _sys.version_info >= (3, 7):
-    def __getattr__(name):
-        if name in list_submodules(_hidden=True):
-            import importlib
-            import os
-            importlib.import_module("."+name, os.path.basename(os.path.dirname(__file__)))
-            return globals()[name]
-        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+# See PEP 562.
+def __getattr__(name):
+    if name in list_submodules(_hidden=True):
+        import importlib
+        import os
+        importlib.import_module("." + name, os.path.basename(os.path.dirname(__file__)))
+        return globals()[name]
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
-    def __dir__():
-        # if later on we support __all__, globals() should be replaced by __all__
-        return sorted(list(globals()) + list_submodules(_hidden=True))
+
+def __dir__():
+    # If later on we support __all__, globals() should be replaced by __all__.
+    return sorted(list(globals()) + list_submodules(_hidden=True))
