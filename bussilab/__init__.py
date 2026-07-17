@@ -260,7 +260,6 @@ pip install jupyter nbconvert
 # setup will fail (this package is imported to find our requirements).
 
 from typing import List as _List
-import sys as _sys
 from ._version import __version__
 
 # required packages:
