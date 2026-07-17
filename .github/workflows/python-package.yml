@@ -169,6 +169,7 @@ jobs:
         pytest -v
     - name: Check anaconda
       if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
         which anaconda
         anaconda --version
         find "$CONDA_PREFIX/conda-bld" -name "py-bussilab*.conda" -print
