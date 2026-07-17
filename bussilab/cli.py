@@ -403,7 +403,7 @@ def _check(check_import: bool = False):
 @arg("-T", "--temperature", type=float, default=1.0,
      help="system temperature in energy units", dest="T")
 @arg("-m", "--maxiter", type=int, default=1000, help="maximum number of iterations")
-@arg("-t", "--threshold", type=int, default=1e-40, help="threshold for convergence")
+@arg("-t", "--threshold", type=float, default=1e-40, help="threshold for convergence")
 @arg("-v", "--verbose", action="store_true")
 def _wham(**args):
     from . import wham
@@ -443,7 +443,7 @@ def _wham(**args):
 @arg("-d", "--dry-run", action='store_true',
      help="show command instead of executing it")
 @arg("--lab", help="use jupyterlab", action="store_true")
-@arg("--port", help="set port", default=0)
+@arg("--port", help="set port", default=0, type=int)
 @arg("--screen-cmd", help="screen command", default="screen")
 @arg("--screen-log", help="screen logfile (no logfile by default)", default="")
 @arg("--python-exec", help="python executable", default="")
@@ -490,7 +490,7 @@ def _jrun(**kargs):
      help="show command instead of executing it")
 @arg("-l", "--list-only", action='store_true',
      help="only report a list or servers")
-@arg("--port", help="set port", default=0)
+@arg("--port", help="set port", default=0, type=int)
 @arg("-i", "--index", type=int, help="choose server, by default interactive choice", default=0)
 @arg("--python-exec",
      help="remote python executable (e.g. module load python3 python-home; python)",
@@ -514,7 +514,7 @@ def _jremote(**kargs):
        ``--python-exec``. You can also run other scripts before, for instance
        loading relevant modules:
        ```bash
-       bussilab jremote giorgione.phys.sissa.it --python-exec \
+       bussilab jremote giorgione.phys.sissa.it \
            --python-exec "module load python3 python-home; python3"
        ```
 
@@ -574,7 +574,7 @@ def _pip_upgrade_all(**kargs):
 @arg("--screenlog", help="screenlog file")
 @arg("--screenlog-maxlines", help="maximum number of lines in screenlog (0 means all)", default=0, type=int)
 @arg("--type", help="'plain_text' or 'mrkdwn'", default='mrkdwn')
-@arg("--token", help="token (check ~/.bussilabrc by default")
+@arg("--token", help="token (check ~/.bussilabrc by default)")
 @arg("-q","--quiet", help="quiet (do not write output)", action="store_true")
 def _notify(**kargs):
     """
@@ -618,14 +618,14 @@ def _cron(**kargs):
 @command("required", help="print requirements",
          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 @group(exclusive=True)
-@arg("--macports", help="conda syntax", action="store_true")
-@arg("--conda", help="macports syntax", action="store_true")
+@arg("--macports", help="macports syntax", action="store_true")
+@arg("--conda", help="conda syntax", action="store_true")
 @endgroup
 @arg("--pyver", help="pyversion (e.g. 38), for macports only", default="")
 def _required(macports: bool = False, conda: bool = False, pyver: str = ""):
     if conda:
         from . import required_conda
-        print(required_conda())
+        print(" ".join(required_conda()))
     elif macports:
         from . import required_macports
         print(required_macports(pyver))

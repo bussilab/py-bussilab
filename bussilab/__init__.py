@@ -258,7 +258,7 @@ pip install jupyter nbconvert
 # Notice that we should not import any required package here, or
 # setup will fail (this package is imported to find our requirements).
 
-from typing import List as _List
+from typing import List
 from ._version import __version__
 
 # required packages:
@@ -275,7 +275,7 @@ _required_ = [
 
 _macports_py_ = "3.9"
 
-def _process_macports(macports: _List[str]) -> _List[str]:
+def _process_macports(macports: List[str]) -> List[str]:
     import re
     l = []
     for d in _required_:
@@ -302,7 +302,7 @@ def _process_doc(doc: str) -> str:
 
 __doc__ = _process_doc(__doc__)
 
-def list_submodules(*, _hidden: bool = False) -> _List[str]:
+def list_submodules(*, _hidden: bool = False) -> List[str]:
     """Return a list of all the available submodules.
 
        It can be used to quickly show which submodules are available for importing.
@@ -419,8 +419,8 @@ def required_macports(pyver="") -> str:
         req = re.sub("-slack-sdk","-slackclient",req)
     return req
 
-def required_conda() -> str:
-    return str(_required_)
+def required_conda() -> List[str]:
+    return list(_required_)
 
 def required_pip() -> str:
     return str(' '.join(_required_))
