@@ -21,7 +21,7 @@ If you manage your dependencies with pip and install packages in your home, use:
 pip install --user bussilab
 # make sure the user installed packages can be imported, or add this to your python path
 export PYTHONPATH="$(python -c 'import site; print(site.USER_SITE)'):$PYTHONPATH"
-# make sure the bussilab script is your execution the path, or add this to your shell path
+# make sure the bussilab script is in your execution the path, or add this to your shell path
 export PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
 ```
 Required packages will be downloaded and installed automatically in your home.
@@ -126,8 +126,7 @@ from bussilab import wham
 ```
 Check their documentation to see how to use them.
 
-If you are using Python >=3.7, you can directly use the submodules
-without importing them explicitly, e.g.:
+You can directly use the submodules without importing them explicitly:
 ```python
 import bussilab as bl
 bl.wham.wham()
