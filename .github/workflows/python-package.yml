@@ -96,7 +96,7 @@ jobs:
       env:
         BUSSILABBOT_PYPI: ${{ secrets.BUSSILABBOT_PYPI }}
       run: |
-        pip install twine
+        python -m pip install --upgrade pip setuptools twine
         python setup.py sdist
         python -m twine upload -u __token__ -p "$BUSSILABBOT_PYPI" dist/bussilab-*.tar.gz
 
