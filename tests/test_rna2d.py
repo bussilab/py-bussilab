@@ -222,7 +222,7 @@ class TestRNA2D(unittest.TestCase):
         numerator = 0.0
         denominator = 0.0
 
-        for structure, logw in mol.sample(10000):
+        for structure, logw in mol.sample(100000):
             w = np.exp(logw)
 
             denominator += w
