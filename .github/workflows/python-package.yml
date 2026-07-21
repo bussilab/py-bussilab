@@ -31,6 +31,7 @@ jobs:
     - name: Install
       run: |
         pip install .
+        pip install viennarna # needed to test rna2d
     - name: Test with pytest
       env:
         BUSSILAB_TEST_NOTIFY_TOKEN: ${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}
