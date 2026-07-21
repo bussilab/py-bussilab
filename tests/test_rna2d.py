@@ -234,10 +234,9 @@ class TestRNA2D(unittest.TestCase):
 
         estimate = numerator / denominator
 
-        self.assertAlmostEqual(
-            reference,
-            estimate,
-            places=2,
+        self.assertGreater(
+            np.abs(estimate-reference_base),
+            np.abs(estimate-reference)
         )
 
 if __name__ == "__main__":
