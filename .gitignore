@@ -11,3 +11,4 @@ env
 .coverage
 /dist
 .DS_Store
+/build
