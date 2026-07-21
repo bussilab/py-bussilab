@@ -31,7 +31,11 @@ jobs:
     - name: Install
       run: |
         pip install .
-        pip install viennarna # needed to test rna2d
+    - name: Install viennarna # needed to test rna2d
+      # avoid slow builds in cases where binary is not available
+      if: contains(fromJson('["3.10","3.11","3.12","3.13"]'), matrix.python-version)
+      run: |
+        pip install viennarna
     - name: Test with pytest
       env:
         BUSSILAB_TEST_NOTIFY_TOKEN: ${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}
