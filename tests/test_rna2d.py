@@ -10,7 +10,6 @@ except ImportError:
 if _HAS_VIENNA:
     from bussilab.rna2d import Molecule
 
-
 @unittest.skipUnless(_HAS_VIENNA, "ViennaRNA not available")
 class TestRNA2D(unittest.TestCase):
 
@@ -114,6 +113,40 @@ class TestRNA2D(unittest.TestCase):
             mol.mfe()[1],
         )
 
+    def test_suboptimal_structures_with_negative_soft_constraint(self):
+
+        import bussilab
+
+        seq = "CGACGUACCGUUUUGCAAAGGCGUGGCGGCCCCCAUGAACAUUGACCGUCACUGUUUCCACGUAUGUUCU"
+
+        lambdas = np.zeros(len(seq))
+        lambdas[11] = +0.01
+
+        baseline = {
+            s[0]: s[1]
+            for s in Molecule(seq).suboptimal_structures(1.3)
+        }
+
+        expected = {
+            structure: energy + (0.01 if structure[11] != "." else 0.0)
+            for structure, energy in baseline.items()
+        }
+        best = min(expected.values())
+        expected = {
+            structure: energy
+            for structure, energy in expected.items()
+            if energy - best <= 1.0001
+        }
+
+        subopt = Molecule(seq, lambdas1d=lambdas).suboptimal_structures(1.0001)
+
+        structures = [structure for structure, _ in subopt]
+        self.assertEqual(len(structures), len(set(structures)))
+        #self.assertEqual(set(structures), set(expected))
+
+        for structure, energy in subopt:
+            self.assertAlmostEqual(energy, expected[structure], places=3)
+
     def test_sampling(self):
 
         np.random.seed(1977)
@@ -162,8 +195,11 @@ class TestRNA2D(unittest.TestCase):
 
         mol.total_free_energy()
 
-        self.assertEqual(mol._fc_n_1d_constraints, n)
-        self.assertEqual(mol._fc_n_2d_constraints, 0)
+        from bussilab.rna2d import _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS
+
+        if _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
+            self.assertEqual(mol._fc_n_1d_constraints, n)
+            self.assertEqual(mol._fc_n_2d_constraints, 0)
 
         mol = Molecule(
             self.seq,

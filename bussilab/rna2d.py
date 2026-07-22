@@ -87,10 +87,42 @@ def _test_native_continuous_support():
 
     return F1-F0>1e-3 and F2-F1>1e-3
 
+def _test_viennarna_sc_add_up_subopt_is_patched():
+    seq = "CGACGUACCGUUUUGCAAAGGCGUGGCGGCCCCCAUGAACAUUGACCGUCACUGUUUCCACGUAUGUUCU"
+    baseline = RNA.fold_compound(seq).subopt(130)
+    fc = RNA.fold_compound(seq)
+    fc.sc_add_up(12, -0.01)
+
+    # sc_add_up() contributes to unpaired nucleotides.  This is equivalent to
+    # the wrapper's paired-nucleotide convention up to a structure-independent
+    # energy shift, which does not affect the suboptimal range.
+    expected_energies = {
+        s.structure: s.energy - (0.01 if s.structure[11] == "." else 0.0)
+        for s in baseline
+    }
+    best = min(expected_energies.values())
+    expected = {
+        structure
+        for structure, energy in expected_energies.items()
+        if energy - best <= 1.0001
+    }
+
+    solution = fc.subopt(100)
+    got = [s.structure for s in solution]
+    return (
+        len(got) == len(set(got))
+        and set(got) == expected
+        and all(
+            "%6.2f" % s.energy == "%6.2f" % fc.eval_structure(s.structure)
+            for s in solution
+        )
+    )
+
 # Variable storing the support for continuous lambdas
 # It can be hard modified for testing (forced to True or False)
 if RNA is not None:
     _SUPPORTS_NATIVE_CONTINUOUS=_test_native_continuous_support()
+    _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS=_test_viennarna_sc_add_up_subopt_is_patched()
     # A warning is issued upon import
     if not _SUPPORTS_NATIVE_CONTINUOUS:
         warnings.warn(
@@ -103,6 +135,7 @@ if RNA is not None:
     )
 else:
     _SUPPORTS_NATIVE_CONTINUOUS = False
+    _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS = False
 
 
 # internal variable according to Vienna rules
@@ -171,6 +204,10 @@ def _apply_constraint(fc,lambdas,kT):
     # Everything else positive is represented directly as pair energies.
     use_2d = (lambdas > 0.0) & ~use_1d
 
+    if not _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
+      use_1d[:] = False
+      use_2d[:] = True
+ 
     shift = 0.0
 
     # 1D representation:
@@ -562,5 +599,4 @@ class Molecule:
             (structure, -float(_correct_rounding_energy(structure, self._lambdas1d_residuals) * inverse_kT))
             for structure in structures
         ]
-
 
