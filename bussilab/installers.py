@@ -23,7 +23,7 @@ from typing import Dict, Optional, Tuple, Union
 PathLike = Union[str, os.PathLike]
 
 _VIENNARNA_RELEASE_REPOSITORY = "bussilab/ViennaRNA-patches"
-_DEFAULT_VIENNARNA_VERSION = "2.7.2-patch1"
+_DEFAULT_VIENNARNA_VERSION = "2.7.2-patch2"
 
 
 def _in_colab() -> bool:
@@ -44,7 +44,7 @@ def _require_colab() -> None:
 
 
 def _parse_viennarna_version(version: str) -> Tuple[str, int]:
-    """Parse strings such as '2.7.2-patch1'."""
+    """Parse strings such as ``'2.7.2-patch1'``."""
     match = re.fullmatch(
         r"(?P<upstream>[0-9]+(?:\.[0-9]+)+)-patch(?P<patch>[1-9][0-9]*)",
         version,
@@ -158,6 +158,15 @@ def _viennarna_release_url(
     )
 
 
+def _viennarna_patch_files(version: str) -> Tuple[str, ...]:
+    """Return all patches required to build a requested patch level."""
+    upstream, patch = _parse_viennarna_version(version)
+    return tuple(
+        "patch-viennarna-{}-{}.patch".format(upstream, number)
+        for number in range(1, patch + 1)
+    )
+
+
 def _safe_extract_viennarna(
     archive: Path,
     destination: Path,
@@ -238,7 +247,7 @@ def install_viennarna(
     Parameters
     ----------
     version
-        Patched release identifier, for example ``"2.7.2-patch1"``.
+        Patched release identifier, for example ``"2.7.2-patch2"``.
     prefix
         Installation directory. The default is ``ViennaRNA`` below the
         current working directory.
@@ -363,7 +372,7 @@ def build_viennarna(
     Parameters
     ----------
     version
-        Patched release identifier, for example ``"2.7.2-patch1"``.
+        Patched release identifier, for example ``"2.7.2-patch2"``.
     output_directory
         Destination for the ``.tgz`` and ``.log`` files. The default is the
         current working directory.
@@ -380,7 +389,7 @@ def build_viennarna(
     """
     _require_colab()
 
-    upstream, patch = _parse_viennarna_version(version)
+    upstream, _ = _parse_viennarna_version(version)
 
     if output_directory is None:
         output_path = Path.cwd()
@@ -402,20 +411,17 @@ def build_viennarna(
     prefix = Path("/content/ViennaRNA")
     build_directory = Path("/content/build-viennarna")
 
-    patch_file = "patch-viennarna-{}-{}.patch".format(
-        upstream,
-        patch,
-    )
+    patch_files = _viennarna_patch_files(version)
 
     source_url = (
         "https://github.com/ViennaRNA/ViennaRNA/releases/download/"
         "v{version}/ViennaRNA-{version}.tar.gz"
     ).format(version=upstream)
 
-    patch_url = (
+    patch_base_url = (
         "https://raw.githubusercontent.com/"
-        "bussilab/ViennaRNA-patches/main/{patch_file}"
-    ).format(patch_file=patch_file)
+        "bussilab/ViennaRNA-patches/main"
+    )
 
     script = r"""
 set -euo pipefail
@@ -443,7 +449,7 @@ echo "Python executable: $PYTHON"
 python --version
 swig -version
 echo "Source URL: $SOURCE_URL"
-echo "Patch URL: $PATCH_URL"
+echo "Patch files: $PATCH_FILES"
 echo "Prefix: $PREFIX"
 echo "Parallel jobs: $JOBS"
 
@@ -454,10 +460,15 @@ cd "$BUILD_DIRECTORY"
 wget -O "ViennaRNA-${UPSTREAM}.tar.gz" "$SOURCE_URL"
 tar -xzf "ViennaRNA-${UPSTREAM}.tar.gz"
 
-wget -O "$PATCH_FILE" "$PATCH_URL"
+read -r -a PATCH_FILE_LIST <<< "$PATCH_FILES"
+for patch_file in "${PATCH_FILE_LIST[@]}"; do
+    wget -O "$patch_file" "$PATCH_BASE_URL/$patch_file"
+done
 
 cd "ViennaRNA-${UPSTREAM}"
-patch -p1 < "../${PATCH_FILE}"
+for patch_file in "${PATCH_FILE_LIST[@]}"; do
+    patch -p1 < "../${patch_file}"
+done
 
 ./configure \
     PYTHON="$PYTHON" \
@@ -482,9 +493,9 @@ echo "Build completed: $(date --iso-8601=seconds)"
     environment.update(
         {
             "UPSTREAM": upstream,
-            "PATCH_FILE": patch_file,
+            "PATCH_FILES": " ".join(patch_files),
             "SOURCE_URL": source_url,
-            "PATCH_URL": patch_url,
+            "PATCH_BASE_URL": patch_base_url,
             "PREFIX": str(prefix),
             "BUILD_DIRECTORY": str(build_directory),
             "ARCHIVE": str(archive),
