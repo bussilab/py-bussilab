@@ -186,6 +186,12 @@ def _apply_constraint(fc,lambdas,kT):
     # Stay well below the largest representable double.
     budget = _PARTITION_OVERFLOW_SAFETY_FRACTION * kT * math.log(sys.float_info.max)
 
+    # Vanilla ViennaRNA has a bug that makes subopt with negative sc_add_up problematic.
+    # Avoid negative sc_add_up values by excluding positive lambdas from the 1D scheme.
+
+    if not _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
+        budget = 0.0
+
     # All negative lambdas use the safe 1D representation.
     use_1d = lambdas < 0.0
 
@@ -203,10 +209,6 @@ def _apply_constraint(fc,lambdas,kT):
     # Everything else positive is represented directly as pair energies.
     use_2d = (lambdas > 0.0) & ~use_1d
 
-    if not _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
-      use_1d[:] = False
-      use_2d[:] = True
- 
     shift = 0.0
 
     # 1D representation:
