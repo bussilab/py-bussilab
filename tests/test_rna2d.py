@@ -8,10 +8,22 @@ except ImportError:
     _HAS_VIENNA = False
 
 if _HAS_VIENNA:
+    import bussilab.rna2d as rna2d
     from bussilab.rna2d import Molecule
 
 @unittest.skipUnless(_HAS_VIENNA, "ViennaRNA not available")
 class TestRNA2D(unittest.TestCase):
+
+    def _run_in_vanilla_mode(self, test):
+        native = rna2d._SUPPORTS_NATIVE_CONTINUOUS
+        subopt = rna2d._SUPPORTS_SUBOPT_SOFT_CONSTRAINTS
+        rna2d._SUPPORTS_NATIVE_CONTINUOUS = False
+        rna2d._SUPPORTS_SUBOPT_SOFT_CONSTRAINTS = False
+        try:
+            test()
+        finally:
+            rna2d._SUPPORTS_NATIVE_CONTINUOUS = native
+            rna2d._SUPPORTS_SUBOPT_SOFT_CONSTRAINTS = subopt
 
     def setUp(self):
         self.seq = "GGGAAACCC"
@@ -85,6 +97,9 @@ class TestRNA2D(unittest.TestCase):
         self.assertTrue(np.allclose(bpp, bpp.T))
         self.assertAlmostEqual(np.trace(bpp), 0.0)
 
+    def test_partition_function_vanilla(self):
+        self._run_in_vanilla_mode(self.test_partition_function)
+
     def test_copy_semantics(self):
 
         mol = Molecule(self.seq)
@@ -112,6 +127,9 @@ class TestRNA2D(unittest.TestCase):
             energies[0],
             mol.mfe()[1],
         )
+
+    def test_suboptimal_vanilla(self):
+        self._run_in_vanilla_mode(self.test_suboptimal)
 
     def test_suboptimal_structures_with_negative_soft_constraint(self):
 
@@ -160,6 +178,9 @@ class TestRNA2D(unittest.TestCase):
         for structure, logw in samples:
             self.assertEqual(len(structure), len(self.seq))
             self.assertIsInstance(logw, float)
+
+    def test_sampling_vanilla(self):
+        self._run_in_vanilla_mode(self.test_sampling)
 
     def test_sampling_zero_residuals(self):
 
@@ -274,6 +295,9 @@ class TestRNA2D(unittest.TestCase):
             np.abs(estimate-reference_base),
             np.abs(estimate-reference)
         )
+
+    def test_importance_sampling_vanilla(self):
+        self._run_in_vanilla_mode(self.test_importance_sampling)
 
 if __name__ == "__main__":
     unittest.main()
