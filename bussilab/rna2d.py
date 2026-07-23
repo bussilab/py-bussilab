@@ -137,7 +137,6 @@ else:
     _SUPPORTS_NATIVE_CONTINUOUS = False
     _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS = False
 
-
 # internal variable according to Vienna rules
 if RNA is not None:
     _PAIR_DECOMPOSITIONS = {
@@ -600,3 +599,221 @@ class Molecule:
             for structure in structures
         ]
 
+    def suboptimal_coverage(self, delta):
+        """
+        Return the fraction of the partition function represented by the
+        suboptimal ensemble.
+
+        The suboptimal ensemble contains all structures whose exact energy is
+        within ``delta`` kcal/mol of the minimum-free-energy structure.
+
+        Parameters
+        ----------
+        delta : float
+            Maximum energy difference (kcal/mol) above the exact MFE.
+
+        Returns
+        -------
+        float
+            Fraction of the total partition function represented by the
+            enumerated structures. The result lies between zero and one, apart
+            from possible small numerical errors.
+        """
+        suboptimal = self.suboptimal_structures(delta)
+
+        reference_energy = suboptimal[0][1]
+        inverse_kT = 1.0 / (_KB * self._temperature)
+
+        relative_partition_function = math.fsum(
+            math.exp(-(energy - reference_energy) * inverse_kT)
+            for _, energy in suboptimal
+        )
+
+        log_coverage = (
+            math.log(relative_partition_function)
+            + (self.total_free_energy() - reference_energy) * inverse_kT
+        )
+
+        coverage = float(math.exp(log_coverage))
+
+        if coverage > 1.0:
+            if coverage <= 1.0 + 1e-5:
+                coverage = 1.0
+            else:
+                raise RuntimeError(
+                    f"Suboptimal coverage is unexpectedly larger than one: {coverage}"
+                )
+
+        return coverage
+
+    def _pairing_correlation_matrix_from_iterable(self, iterable):
+        """
+        Accumulate the pairing correlation matrix from an iterable yielding
+        (structure, log_weight) pairs.
+        """
+        n = len(self._seq)
+
+        matrix = np.zeros((n, n))
+        # Keep all weights relative to the largest log weight seen so far.
+        # This is an online log-sum-exp accumulation and avoids both overflow
+        # and underflow in importance-sampling calculations.
+        log_weight_max = -math.inf
+        scaled_weight_sum = 0.0
+
+        for structure, log_weight in iterable:
+            if not math.isfinite(log_weight):
+                raise ValueError("log weights must be finite")
+
+            if log_weight > log_weight_max:
+                if scaled_weight_sum:
+                    scale = math.exp(log_weight_max - log_weight)
+                    matrix *= scale
+                    scaled_weight_sum *= scale
+                log_weight_max = log_weight
+
+            weight = math.exp(log_weight - log_weight_max)
+
+            paired = (
+                np.frombuffer(structure.encode("ascii"), dtype=np.uint8)
+                != ord(".")
+            )
+
+            matrix[np.ix_(paired, paired)] += weight
+            scaled_weight_sum += weight
+
+        if not scaled_weight_sum:
+            raise ValueError("at least one weighted structure is required")
+
+        matrix /= scaled_weight_sum
+
+        return matrix
+
+    def _pairing_correlation_matrix_sampled(self, number):
+        """
+        Estimate the joint pairing-probability matrix by importance sampling.
+        """
+        number = int(number)
+        if number <= 0:
+            raise ValueError("number must be a positive integer")
+
+        return self._pairing_correlation_matrix_from_iterable(
+            self.sample(number)
+        )
+    def _pairing_correlation_matrix_subopt(self, delta):
+        """
+        Estimate the joint pairing-probability matrix by exact summation over
+        suboptimal structures.
+
+        Parameters
+        ----------
+        delta : float
+            Energy window above the MFE (kcal/mol).
+
+        Returns
+        -------
+        ndarray
+            Joint pairing-probability matrix within the enumerated ensemble.
+        """
+
+        structure0, energy0 = self.mfe()
+
+        iterable = (
+            (
+                structure,
+                -(energy - energy0) / (_KB * self._temperature),
+            )
+            for structure, energy in self.suboptimal_structures(delta)
+        )
+
+        return self._pairing_correlation_matrix_from_iterable(iterable)
+
+    def _pairing_correlation_matrix_pf(self):
+        """
+        Return the joint pairing-probability matrix.
+
+        Element (i, j) is the probability that nucleotides i and j are both
+        paired, irrespective of their pairing partners.
+        """
+        self._ensure_pf()
+        fc = self._fc
+
+        n = len(self._seq)
+        conditional = np.empty((n, n))
+
+        for i in range(n):
+            fc.hc_add_up(i + 1)
+
+            # Invalidate the cached unconstrained result and compute the
+            # probabilities conditional on nucleotide i being unpaired.
+            self._base_pairing_probability = None
+            conditional[i, :] = np.sum(
+                self.base_pairing_probability(),
+                axis=1,
+            )
+
+            fc.hc_init()
+
+        # Recompute and retain the ordinary, unconstrained PF/BPP.
+        self._base_pairing_probability = None
+        p = np.sum(self.base_pairing_probability(), axis=1)
+
+        matrix = np.empty((n, n))
+        for i in range(n):
+            matrix[i, :] = p - (1.0 - p[i]) * conditional[i, :]
+
+        # Since s_i**2 = s_i, the diagonal must equal P(s_i = 1).
+        # remove potentially small numerical artifacts by setting it by hand
+        np.fill_diagonal(matrix, p)
+
+        # Remove small numerical asymmetries from independent constrained PF runs.
+        return 0.5 * (matrix + matrix.T)
+
+    def pairing_correlation_matrix(
+        self,
+        *,
+        samples=None,
+        suboptimal_delta=None,
+    ):
+        """
+        Return the joint pairing-probability matrix.
+
+        Element ``(i, j)`` is the probability that nucleotides ``i`` and ``j``
+        are simultaneously paired, irrespective of their pairing partners.
+
+        By default the matrix is computed exactly using constrained
+        partition-function calculations. Alternatively, it can be estimated
+        either by importance sampling or by exact summation over suboptimal
+        structures.
+
+        Parameters
+        ----------
+        samples : int or None, optional
+            Estimate the matrix from the specified number of sampled
+            structures. If provided, `suboptimal_delta` must be None.
+
+        suboptimal_delta : float or None, optional
+            Estimate the matrix by exact summation over all suboptimal
+            structures within this energy window (kcal/mol) above the MFE.
+            If provided, `samples` must be None.
+
+        Returns
+        -------
+        ndarray
+            Symmetric NxN matrix whose diagonal contains the pairing
+            probabilities.
+        """
+
+        if samples is not None and suboptimal_delta is not None:
+            raise ValueError(
+                "samples and suboptimal_delta are mutually exclusive"
+            )
+
+        if samples is not None:
+            return self._pairing_correlation_matrix_sampled(samples)
+
+        if suboptimal_delta is not None:
+            return self._pairing_correlation_matrix_subopt(
+                suboptimal_delta
+            )
+
+        return self._pairing_correlation_matrix_pf()
