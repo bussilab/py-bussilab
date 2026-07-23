@@ -46,6 +46,30 @@ def test_viennarna_asset_and_url(colab_runtime):
     )
 
 
+def test_viennarna_patch2_asset_url_and_patch_sequence(colab_runtime):
+    asset = installers._viennarna_asset_name("2.7.2-patch2")
+
+    assert asset == (
+        "ViennaRNA-2.7.2-patch2-colab-x86_64-ubuntu22.04-"
+        "glibc2.35-python3.12-cpu.tgz"
+    )
+
+    assert installers._viennarna_release_url("2.7.2-patch2") == (
+        "https://github.com/bussilab/ViennaRNA-patches/releases/download/"
+        "v2.7.2-patch2/"
+        + asset
+    )
+
+    assert installers._viennarna_patch_files("2.7.2-patch2") == (
+        "patch-viennarna-2.7.2-1.patch",
+        "patch-viennarna-2.7.2-2.patch",
+    )
+
+
+def test_viennarna_default_is_patch2():
+    assert installers._DEFAULT_VIENNARNA_VERSION == "2.7.2-patch2"
+
+
 def test_invalid_viennarna_version():
     with pytest.raises(ValueError, match="2.7.2-patch1"):
         installers._parse_viennarna_version("2.7.2")
