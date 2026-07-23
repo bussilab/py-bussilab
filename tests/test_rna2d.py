@@ -9,7 +9,25 @@ except ImportError:
 
 if _HAS_VIENNA:
     import bussilab.rna2d as rna2d
-    from bussilab.rna2d import Molecule
+    from bussilab.rna2d import Molecule, _KB
+
+
+def _enumerate_secondary_structures(sequence):
+    """Enumerate all pseudoknot-free structures for a short RNA sequence."""
+    if not sequence:
+        yield ""
+        return
+
+    yield from ("." + structure
+                for structure in _enumerate_secondary_structures(sequence[1:]))
+
+    canonical_pairs = {"AU", "UA", "CG", "GC", "GU", "UG"}
+    for j in range(4, len(sequence)):
+        if sequence[0] + sequence[j] not in canonical_pairs:
+            continue
+        for left in _enumerate_secondary_structures(sequence[1:j]):
+            for right in _enumerate_secondary_structures(sequence[j + 1:]):
+                yield "(" + left + ")" + right
 
 @unittest.skipUnless(_HAS_VIENNA, "ViennaRNA not available")
 class TestRNA2D(unittest.TestCase):
@@ -298,6 +316,146 @@ class TestRNA2D(unittest.TestCase):
 
     def test_importance_sampling_vanilla(self):
         self._run_in_vanilla_mode(self.test_importance_sampling)
+
+    def test_pairing_correlation_matrix_exhaustive(self):
+        seq = "GCGCGCGC"
+        mol = Molecule(seq)
+        mol._ensure_pf()
+
+        structures = list(_enumerate_secondary_structures(seq))
+        energies = np.array([
+            mol._fc.eval_structure(structure)
+            for structure in structures
+        ])
+        weights = np.exp(
+            -(energies - np.min(energies))
+            / (1.98717 / 1000 * mol._temperature)
+        )
+        weights /= np.sum(weights)
+
+        expected = np.zeros((len(seq), len(seq)))
+        for structure, weight in zip(structures, weights):
+            paired = np.array([base != "." for base in structure])
+            expected[np.ix_(paired, paired)] += weight
+
+        actual = mol.pairing_correlation_matrix()
+
+        np.testing.assert_allclose(actual, expected, atol=1e-7)
+        np.testing.assert_allclose(actual, actual.T, atol=1e-14)
+
+    def test_pairing_correlation_matrix_exhaustive_with_soft_constraints(self):
+        seq = "GCGCGCGC"
+        lambdas = np.array(
+            [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012]
+        )
+        mol = Molecule(seq, lambdas1d=lambdas)
+        mol._ensure_pf()
+        base_fc = mol._make_fold_compound()
+
+        structures = list(_enumerate_secondary_structures(seq))
+        energies = np.array([
+            base_fc.eval_structure(structure)
+            + sum(
+                penalty
+                for penalty, base in zip(lambdas, structure)
+                if base != "."
+            )
+            for structure in structures
+        ])
+        weights = np.exp(
+            -(energies - np.min(energies)) / (_KB * mol._temperature)
+        )
+        weights /= np.sum(weights)
+
+        expected = np.zeros((len(seq), len(seq)))
+        for structure, weight in zip(structures, weights):
+            paired = np.array([base != "." for base in structure])
+            expected[np.ix_(paired, paired)] += weight
+
+        actual = mol.pairing_correlation_matrix()
+
+        np.testing.assert_allclose(actual, expected, atol=1e-7)
+
+    def test_pairing_correlation_matrix_suboptimal_and_coverage(self):
+        mol = Molecule("GCGCGCGC")
+
+        exhaustive = mol.pairing_correlation_matrix(suboptimal_delta=5.0)
+        exact = mol.pairing_correlation_matrix()
+
+        np.testing.assert_allclose(exhaustive, exact, atol=1e-7)
+        self.assertAlmostEqual(mol.suboptimal_coverage(5.0), 1.0, places=6)
+
+    def test_pairing_correlation_matrix_suboptimal_with_soft_constraints(self):
+        lambdas = np.array(
+            [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012]
+        )
+        mol = Molecule("GCGCGCGC", lambdas1d=lambdas)
+
+        exhaustive = mol.pairing_correlation_matrix(suboptimal_delta=5.0)
+        exact = mol.pairing_correlation_matrix()
+
+        np.testing.assert_allclose(exhaustive, exact, atol=1e-7)
+        self.assertAlmostEqual(mol.suboptimal_coverage(5.0), 1.0, places=6)
+
+    def test_pairing_correlation_matrix_sampling(self):
+        mol = Molecule("GCGCGCGC")
+        exact = mol.pairing_correlation_matrix()
+        sampled = mol.pairing_correlation_matrix(samples=20000)
+
+        np.testing.assert_allclose(sampled, exact, atol=0.03)
+
+    def test_pairing_correlation_matrix_sampling_with_soft_constraints(self):
+        lambdas = np.array(
+            [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012]
+        )
+        mol = Molecule("GCGCGCGC", lambdas1d=lambdas)
+        exact = mol.pairing_correlation_matrix()
+        sampled = mol.pairing_correlation_matrix(samples=20000)
+
+        np.testing.assert_allclose(sampled, exact, atol=0.03)
+
+    def test_pairing_correlation_matrix_stable_log_weights(self):
+        mol = Molecule("GC")
+        probability = np.exp(1.0) / (1.0 + np.exp(1.0))
+
+        matrix = mol._pairing_correlation_matrix_from_iterable(
+            [("..", 1000.0), ("()", 1001.0)]
+        )
+
+        np.testing.assert_allclose(
+            matrix,
+            np.full((2, 2), probability),
+        )
+
+        matrix = mol._pairing_correlation_matrix_from_iterable(
+            [("..", -1000.0), ("()", -999.0)]
+        )
+
+        np.testing.assert_allclose(
+            matrix,
+            np.full((2, 2), probability),
+        )
+
+    def test_pairing_correlation_matrix_restores_unconstrained_pf(self):
+        mol = Molecule("GCGCGCGC")
+        before = mol.base_pairing_probability()
+
+        mol.pairing_correlation_matrix()
+
+        after = mol.base_pairing_probability()
+        np.testing.assert_allclose(after, before, atol=1e-12)
+
+    def test_pairing_correlation_matrix_restores_soft_constrained_pf(self):
+        lambdas = np.array(
+            [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012]
+        )
+        mol = Molecule("GCGCGCGC", lambdas1d=lambdas)
+        before = mol.base_pairing_probability()
+
+        mol.pairing_correlation_matrix()
+
+        after = mol.base_pairing_probability()
+        np.testing.assert_allclose(after, before, atol=1e-12)
 
 if __name__ == "__main__":
     unittest.main()
