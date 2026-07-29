@@ -686,6 +686,8 @@ class Molecule:
         NaCl=None,
         parameters="turner2004",
     ):
+        self._has_state_biases = state_positions is not None
+
         if (state_positions is None) != (state_biases is None):
             raise ValueError(
                 "state_positions and state_biases must be provided together"
@@ -933,6 +935,47 @@ class Molecule:
         """
         total_free_energy, _ = self._component_probabilities()
         return total_free_energy
+
+    def d_free_energy_d_lambdas1d(self):
+        """
+        Return the derivatives of the free energy with respect to `lambdas1d`.
+
+        The derivative for nucleotide ``i`` is its equilibrium pairing
+        probability,
+
+        ``dF / d lambda_i = <s_i>``.
+
+        Returns
+        -------
+        ndarray
+            One-dimensional array containing one derivative per nucleotide.
+        """
+        return np.sum(self.base_pairing_probability(), axis=1)
+
+    def d_free_energy_d_state_biases(self):
+        """
+        Return the derivatives of the free energy with respect to state biases.
+
+        The derivative with respect to a state's energy bias is the equilibrium
+        probability of that state.
+
+        Returns
+        -------
+        ndarray
+            Array with the same shape as `state_biases`.
+
+        Raises
+        ------
+        ValueError
+            If this molecule was not initialized with state biases.
+        """
+        if not self._has_state_biases:
+            raise ValueError(
+                "This molecule was not initialized with state biases"
+            )
+
+        _, probabilities = self._component_probabilities()
+        return probabilities.reshape(self._state_biases.shape).copy()
 
     def suboptimal_structures(self, delta):
         """

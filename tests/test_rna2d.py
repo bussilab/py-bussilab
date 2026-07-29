@@ -194,6 +194,83 @@ class TestRNA2D(unittest.TestCase):
     def test_partition_function_vanilla(self):
         self._run_in_vanilla_mode(self.test_partition_function)
 
+    def test_free_energy_derivatives(self):
+
+        lambdas = np.array(
+            [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012, 0.003]
+        )
+        mol = Molecule(self.seq, lambdas1d=lambdas)
+
+        derivatives = mol.d_free_energy_d_lambdas1d()
+        np.testing.assert_allclose(
+            derivatives,
+            np.sum(mol.base_pairing_probability(), axis=1),
+            atol=1e-14,
+        )
+
+        epsilon = 1e-3
+        position = 0
+        lambdas_plus = lambdas.copy()
+        lambdas_minus = lambdas.copy()
+        lambdas_plus[position] += epsilon
+        lambdas_minus[position] -= epsilon
+        finite_difference = (
+            Molecule(
+                self.seq,
+                lambdas1d=lambdas_plus,
+            ).total_free_energy()
+            - Molecule(
+                self.seq,
+                lambdas1d=lambdas_minus,
+            ).total_free_energy()
+        ) / (2.0 * epsilon)
+        self.assertAlmostEqual(
+            derivatives[position],
+            finite_difference,
+            delta=2e-4,
+        )
+
+        with self.assertRaises(ValueError):
+            mol.d_free_energy_d_state_biases()
+
+        biases = np.array([
+            [0.0, 0.2],
+            [-0.1, 0.7],
+        ])
+        mixture = Molecule(
+            self.seq,
+            state_positions=(0, 1),
+            state_biases=biases,
+        )
+        state_derivatives = (
+            mixture.d_free_energy_d_state_biases()
+        )
+        self.assertEqual(state_derivatives.shape, biases.shape)
+        self.assertAlmostEqual(np.sum(state_derivatives), 1.0)
+
+        index = (1, 0)
+        biases_plus = biases.copy()
+        biases_minus = biases.copy()
+        biases_plus[index] += epsilon
+        biases_minus[index] -= epsilon
+        finite_difference = (
+            Molecule(
+                self.seq,
+                state_positions=(0, 1),
+                state_biases=biases_plus,
+            ).total_free_energy()
+            - Molecule(
+                self.seq,
+                state_positions=(0, 1),
+                state_biases=biases_minus,
+            ).total_free_energy()
+        ) / (2.0 * epsilon)
+        self.assertAlmostEqual(
+            state_derivatives[index],
+            finite_difference,
+            delta=2e-4,
+        )
+
     def test_zero_bias_state_mixture(self):
 
         reference = Molecule(self.seq)
