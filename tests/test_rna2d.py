@@ -223,9 +223,10 @@ class TestRNA2D(unittest.TestCase):
         )
 
         mol.total_free_energy()
+        dp_mol = mol._dp_molecules[0]
 
-        self.assertEqual(mol._fc_n_1d_constraints, 0)
-        self.assertEqual(mol._fc_n_2d_constraints, 0)
+        self.assertEqual(dp_mol._fc_n_1d_constraints, 0)
+        self.assertEqual(dp_mol._fc_n_2d_constraints, 0)
 
         mol = Molecule(
             self.seq,
@@ -233,12 +234,13 @@ class TestRNA2D(unittest.TestCase):
         )
 
         mol.total_free_energy()
+        dp_mol = mol._dp_molecules[0]
 
         from bussilab.rna2d import _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS
 
         if _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
-            self.assertEqual(mol._fc_n_1d_constraints, n)
-            self.assertEqual(mol._fc_n_2d_constraints, 0)
+            self.assertEqual(dp_mol._fc_n_1d_constraints, n)
+            self.assertEqual(dp_mol._fc_n_2d_constraints, 0)
 
         mol = Molecule(
             self.seq,
@@ -246,9 +248,10 @@ class TestRNA2D(unittest.TestCase):
         )
 
         mol.total_free_energy()
+        dp_mol = mol._dp_molecules[0]
 
-        self.assertEqual(mol._fc_n_1d_constraints, 0)
-        self.assertGreater(mol._fc_n_2d_constraints, 0)
+        self.assertEqual(dp_mol._fc_n_1d_constraints, 0)
+        self.assertGreater(dp_mol._fc_n_2d_constraints, 0)
 
     def test_importance_sampling(self):
 
@@ -320,16 +323,17 @@ class TestRNA2D(unittest.TestCase):
     def test_pairing_correlation_matrix_exhaustive(self):
         seq = "GCGCGCGC"
         mol = Molecule(seq)
-        mol._ensure_pf()
+        dp_mol = mol._dp_molecules[0]
+        dp_mol._ensure_pf()
 
         structures = list(_enumerate_secondary_structures(seq))
         energies = np.array([
-            mol._fc.eval_structure(structure)
+            dp_mol._fc.eval_structure(structure)
             for structure in structures
         ])
         weights = np.exp(
             -(energies - np.min(energies))
-            / (1.98717 / 1000 * mol._temperature)
+            / (1.98717 / 1000 * dp_mol._temperature)
         )
         weights /= np.sum(weights)
 
@@ -349,8 +353,9 @@ class TestRNA2D(unittest.TestCase):
             [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012]
         )
         mol = Molecule(seq, lambdas1d=lambdas)
-        mol._ensure_pf()
-        base_fc = mol._make_fold_compound()
+        dp_mol = mol._dp_molecules[0]
+        dp_mol._ensure_pf()
+        base_fc = dp_mol._make_fold_compound()
 
         structures = list(_enumerate_secondary_structures(seq))
         energies = np.array([
@@ -363,7 +368,7 @@ class TestRNA2D(unittest.TestCase):
             for structure in structures
         ])
         weights = np.exp(
-            -(energies - np.min(energies)) / (_KB * mol._temperature)
+            -(energies - np.min(energies)) / (_KB * dp_mol._temperature)
         )
         weights /= np.sum(weights)
 
@@ -416,9 +421,10 @@ class TestRNA2D(unittest.TestCase):
 
     def test_pairing_correlation_matrix_stable_log_weights(self):
         mol = Molecule("GC")
+        dp_mol = mol._dp_molecules[0]
         probability = np.exp(1.0) / (1.0 + np.exp(1.0))
 
-        matrix = mol._pairing_correlation_matrix_from_iterable(
+        matrix = dp_mol._pairing_correlation_matrix_from_iterable(
             [("..", 1000.0), ("()", 1001.0)]
         )
 
@@ -427,7 +433,7 @@ class TestRNA2D(unittest.TestCase):
             np.full((2, 2), probability),
         )
 
-        matrix = mol._pairing_correlation_matrix_from_iterable(
+        matrix = dp_mol._pairing_correlation_matrix_from_iterable(
             [("..", -1000.0), ("()", -999.0)]
         )
 

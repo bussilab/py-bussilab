@@ -248,50 +248,9 @@ def _correct_rounding_energy(structure, dlambdas):
             correction += d
     return float(correction)
 
-class Molecule:
+class _DPMolecule:
     """
-    RNA secondary-structure model with continuous pairing penalties.
-
-    The class wraps ViennaRNA and supports continuous per-nucleotide pairing
-    penalties while preserving compatibility with ViennaRNA's dynamic programming
-    algorithms.
-
-    A penalty λᵢ is added whenever nucleotide *i* is paired. Internally, these
-    penalties are automatically represented as an equivalent hybrid combination of
-    unpaired and pair soft constraints. This representation avoids numerical
-    overflows in partition-function calculations while preserving the requested
-    thermodynamic model.
-
-    Partition-function calculations use the exact continuous penalties. Minimum-
-    free-energy and suboptimal structure prediction use ViennaRNA's rounded soft
-    constraints to generate candidate structures, which are then rescored using the
-    exact continuous penalties.
-
-    Parameters
-    ----------
-    seq : str
-        RNA sequence.
-
-    lambdas1d : array-like, optional
-        Per-nucleotide pairing penalties (kcal/mol). Positive values penalize
-        pairing, whereas negative values favor pairing. If omitted, all penalties
-        are zero.
-
-    T : float, default=310.15
-        Temperature in kelvin.
-
-    NaCl : float or None, default=None
-        Sodium concentration (M). If None, ViennaRNA's default value is used.
-
-    parameters : {"turner1999", "turner2004", "andronescu2007", "langdon2018"}
-        Thermodynamic parameter set.
-
-    Notes
-    -----
-    Default ViennaRNA builds round soft constraints to the nearest 0.01 kcal/mol in
-    partition-function calculations. When continuous soft constraints are not
-    natively supported, this class automatically applies a lightweight Python
-    callback to recover the exact continuous model.
+    Internal dynamic-programming implementation of a single RNA ensemble.
     """
 
     def _make_md_params(self):
@@ -819,3 +778,234 @@ class Molecule:
             )
 
         return self._pairing_correlation_matrix_pf()
+
+
+class Molecule:
+    """
+    RNA secondary-structure model with continuous pairing penalties.
+
+    The class wraps ViennaRNA and supports continuous per-nucleotide pairing
+    penalties while preserving compatibility with ViennaRNA's dynamic programming
+    algorithms.
+
+    A penalty λᵢ is added whenever nucleotide *i* is paired. Internally, these
+    penalties are automatically represented as an equivalent hybrid combination of
+    unpaired and pair soft constraints. This representation avoids numerical
+    overflows in partition-function calculations while preserving the requested
+    thermodynamic model.
+
+    Partition-function calculations use the exact continuous penalties. Minimum-
+    free-energy and suboptimal structure prediction use ViennaRNA's rounded soft
+    constraints to generate candidate structures, which are then rescored using the
+    exact continuous penalties.
+
+    Parameters
+    ----------
+    seq : str
+        RNA sequence.
+
+    lambdas1d : array-like, optional
+        Per-nucleotide pairing penalties (kcal/mol). Positive values penalize
+        pairing, whereas negative values favor pairing. If omitted, all penalties
+        are zero.
+
+    T : float, default=310.15
+        Temperature in kelvin.
+
+    NaCl : float or None, default=None
+        Sodium concentration (M). If None, ViennaRNA's default value is used.
+
+    parameters : {"turner1999", "turner2004", "andronescu2007", "langdon2018"}
+        Thermodynamic parameter set.
+
+    Notes
+    -----
+    Default ViennaRNA builds round soft constraints to the nearest 0.01 kcal/mol in
+    partition-function calculations. When continuous soft constraints are not
+    natively supported, this class automatically applies a lightweight Python
+    callback to recover the exact continuous model.
+    """
+
+    def __init__(
+        self,
+        seq: str,
+        *,
+        lambdas1d=None,
+        temperature=37 + _CELSIUS_TO_KELVIN,
+        NaCl=None,
+        parameters="turner2004",
+    ):
+        self._dp_molecules = [
+            _DPMolecule(
+                seq,
+                lambdas1d=lambdas1d,
+                temperature=temperature,
+                NaCl=NaCl,
+                parameters=parameters,
+            )
+        ]
+
+    def _require_single_dp_molecule(self):
+        """
+        Return the sole dynamic-programming component.
+
+        Methods using this helper have not yet been generalized to mixtures.
+        """
+        if len(self._dp_molecules) != 1:
+            raise NotImplementedError(
+                "This operation is not yet implemented for a mixture of "
+                "dynamic-programming ensembles"
+            )
+        return self._dp_molecules[0]
+
+    def mfe(self):
+        """
+        Return the minimum-free-energy structure.
+
+        The returned energy always corresponds to the exact continuous pairing
+        penalties, even when ViennaRNA internally rounds soft constraints.
+
+        Returns
+        -------
+        structure : str
+            Dot-bracket representation of the MFE structure.
+
+        energy : float
+            Exact free energy (kcal/mol).
+        """
+        return self._require_single_dp_molecule().mfe()
+
+    def base_pairing_probability(self):
+        """
+        Return the base-pairing probability matrix.
+
+        Returns
+        -------
+        ndarray
+            Symmetric NxN matrix whose element (i,j) is the equilibrium
+            probability that nucleotides i and j form a base pair.
+        """
+        return self._require_single_dp_molecule().base_pairing_probability()
+
+    def total_free_energy(self):
+        """
+        Return the ensemble free energy.
+
+        Returns
+        -------
+        float
+            Ensemble free energy (kcal/mol) corresponding to the exact continuous
+            pairing penalties.
+        """
+        return self._require_single_dp_molecule().total_free_energy()
+
+    def suboptimal_structures(self, delta):
+        """
+        Enumerate suboptimal secondary structures.
+
+        Candidate structures are generated using ViennaRNA's rounded soft
+        constraints, rescored with the exact continuous penalties, and returned
+        sorted by exact energy.
+
+        Parameters
+        ----------
+        delta : float
+            Maximum energy difference (kcal/mol) above the exact MFE.
+
+        Returns
+        -------
+        list of (str, float)
+            List of (structure, energy) pairs sorted by increasing exact energy.
+        """
+        return self._require_single_dp_molecule().suboptimal_structures(delta)
+
+    def sample(self, number):
+        """
+        Generate Boltzmann-distributed secondary structures.
+
+        Structures are sampled from the rounded ViennaRNA model. For each sampled
+        structure, the returned log-weight corrects the rounded distribution to the
+        exact continuous-lambda distribution by importance sampling.
+
+        The returned log-weights are intentionally left unnormalized so that
+        independent samples can be concatenated and optionally deduplicated before
+        normalization.
+
+        Parameters
+        ----------
+        number : int
+            Number of structures to sample.
+
+        Returns
+        -------
+        list of (str, float)
+            Each element contains a dot-bracket structure and its unnormalized
+            log-weight correction
+
+                log(w) = -(E_exact - E_rounded) / (k_B T).
+
+            When all lambdas are multiples of 0.01 kcal/mol, every returned
+            log-weight is zero.
+        """
+        return self._require_single_dp_molecule().sample(number)
+
+    def suboptimal_coverage(self, delta):
+        """
+        Return the fraction of the partition function represented by the
+        suboptimal ensemble.
+
+        The suboptimal ensemble contains all structures whose exact energy is
+        within ``delta`` kcal/mol of the minimum-free-energy structure.
+
+        Parameters
+        ----------
+        delta : float
+            Maximum energy difference (kcal/mol) above the exact MFE.
+
+        Returns
+        -------
+        float
+            Fraction of the total partition function represented by the
+            enumerated structures. The result lies between zero and one, apart
+            from possible small numerical errors.
+        """
+        return self._require_single_dp_molecule().suboptimal_coverage(delta)
+
+    def pairing_correlation_matrix(
+        self,
+        *,
+        samples=None,
+        suboptimal_delta=None,
+    ):
+        """
+        Return the joint pairing-probability matrix.
+
+        Element ``(i, j)`` is the probability that nucleotides ``i`` and ``j``
+        are simultaneously paired, irrespective of their pairing partners.
+
+        By default the matrix is computed exactly using constrained
+        partition-function calculations. Alternatively, it can be estimated
+        either by importance sampling or by exact summation over suboptimal
+        structures.
+
+        Parameters
+        ----------
+        samples : int or None, optional
+            Estimate the matrix from the specified number of sampled
+            structures. If provided, `suboptimal_delta` must be None.
+
+        suboptimal_delta : float or None, optional
+            Estimate the matrix by exact summation over all suboptimal
+            structures within this energy window (kcal/mol) above the MFE.
+            If provided, `samples` must be None.
+
+        Returns
+        -------
+        ndarray
+            Symmetric NxN matrix whose diagonal contains the pairing
+            probabilities.
+        """
+        return self._require_single_dp_molecule().pairing_correlation_matrix(
+            samples=samples,
+            suboptimal_delta=suboptimal_delta,
+        )
