@@ -222,6 +222,11 @@ class TestRNA2D(unittest.TestCase):
             mixture.suboptimal_structures(2.0),
             reference.suboptimal_structures(2.0),
         )
+        self.assertAlmostEqual(
+            mixture.suboptimal_coverage(2.0),
+            reference.suboptimal_coverage(2.0),
+            places=6,
+        )
 
     def test_biased_state_mixture(self):
 
@@ -314,6 +319,18 @@ class TestRNA2D(unittest.TestCase):
             atol=1e-7,
         )
 
+        equivalent_lambdas = np.zeros(len(self.seq))
+        equivalent_lambdas[position] = biases[1] - biases[0]
+        equivalent = Molecule(
+            self.seq,
+            lambdas1d=equivalent_lambdas,
+        )
+        np.testing.assert_allclose(
+            mixture.pairing_correlation_matrix(),
+            equivalent.pairing_correlation_matrix(),
+            atol=1e-7,
+        )
+
         samples = mixture.sample(5000)
         sampled_paired_probability = np.mean([
             structure[position] != "."
@@ -333,20 +350,6 @@ class TestRNA2D(unittest.TestCase):
                 component.sample_rounding_correction(),
                 0.0,
             )
-
-    def test_unimplemented_state_mixture_methods(self):
-
-        mixture = Molecule(
-            self.seq,
-            state_positions=(0,),
-            state_biases=np.zeros(2),
-        )
-
-        with self.assertRaises(NotImplementedError):
-            mixture.suboptimal_coverage(1.0)
-
-        with self.assertRaises(NotImplementedError):
-            mixture.pairing_correlation_matrix()
 
     def test_copy_semantics(self):
 
@@ -650,66 +653,62 @@ class TestRNA2D(unittest.TestCase):
         np.testing.assert_allclose(actual, expected, atol=1e-7)
         np.testing.assert_allclose(bpp_after, bpp_before, atol=1e-14)
 
-    def test_pairing_correlation_matrix_suboptimal_and_coverage(self):
+    def test_pairing_correlation_matrix_state_mixture(self):
+        seq = "GCGCGCGC"
+        positions = (0, 1)
+        biases = np.array([
+            [0.0, 0.2],
+            [-0.1, 0.7],
+        ])
+        mol = Molecule(
+            seq,
+            state_positions=positions,
+            state_biases=biases,
+        )
+        base_fc = mol._dp_molecules[0]._make_fold_compound()
+
+        structures = list(_enumerate_secondary_structures(seq))
+        energies = np.array([
+            base_fc.eval_structure(structure)
+            + biases[
+                int(structure[positions[0]] != "."),
+                int(structure[positions[1]] != "."),
+            ]
+            for structure in structures
+        ])
+        weights = np.exp(
+            -(energies - np.min(energies))
+            / (_KB * mol._temperature)
+        )
+        weights /= np.sum(weights)
+
+        expected = np.zeros((len(seq), len(seq)))
+        for structure, weight in zip(structures, weights):
+            is_paired = np.array([base != "." for base in structure])
+            expected[np.ix_(is_paired, is_paired)] += weight
+
+        exact = mol.pairing_correlation_matrix()
+        np.testing.assert_allclose(exact, expected, atol=1e-7)
+
+        delta = float(np.max(energies) - np.min(energies) + 0.01)
+        self.assertAlmostEqual(
+            mol.suboptimal_coverage(delta),
+            1.0,
+            places=6,
+        )
+
+    def test_suboptimal_coverage(self):
         mol = Molecule("GCGCGCGC")
 
-        exhaustive = mol.pairing_correlation_matrix(suboptimal_delta=5.0)
-        exact = mol.pairing_correlation_matrix()
-
-        np.testing.assert_allclose(exhaustive, exact, atol=1e-7)
         self.assertAlmostEqual(mol.suboptimal_coverage(5.0), 1.0, places=6)
 
-    def test_pairing_correlation_matrix_suboptimal_with_soft_constraints(self):
+    def test_suboptimal_coverage_with_soft_constraints(self):
         lambdas = np.array(
             [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012]
         )
         mol = Molecule("GCGCGCGC", lambdas1d=lambdas)
 
-        exhaustive = mol.pairing_correlation_matrix(suboptimal_delta=5.0)
-        exact = mol.pairing_correlation_matrix()
-
-        np.testing.assert_allclose(exhaustive, exact, atol=1e-7)
         self.assertAlmostEqual(mol.suboptimal_coverage(5.0), 1.0, places=6)
-
-    def test_pairing_correlation_matrix_sampling(self):
-        mol = Molecule("GCGCGCGC")
-        exact = mol.pairing_correlation_matrix()
-        sampled = mol.pairing_correlation_matrix(samples=20000)
-
-        np.testing.assert_allclose(sampled, exact, atol=0.03)
-
-    def test_pairing_correlation_matrix_sampling_with_soft_constraints(self):
-        lambdas = np.array(
-            [0.004, -0.006, 0.013, -0.017, 0.021, -0.009, 0.007, -0.012]
-        )
-        mol = Molecule("GCGCGCGC", lambdas1d=lambdas)
-        exact = mol.pairing_correlation_matrix()
-        sampled = mol.pairing_correlation_matrix(samples=20000)
-
-        np.testing.assert_allclose(sampled, exact, atol=0.03)
-
-    def test_pairing_correlation_matrix_stable_log_weights(self):
-        mol = Molecule("GC")
-        dp_mol = mol._dp_molecules[0]
-        probability = np.exp(1.0) / (1.0 + np.exp(1.0))
-
-        matrix = dp_mol._pairing_correlation_matrix_from_iterable(
-            [("..", 1000.0), ("()", 1001.0)]
-        )
-
-        np.testing.assert_allclose(
-            matrix,
-            np.full((2, 2), probability),
-        )
-
-        matrix = dp_mol._pairing_correlation_matrix_from_iterable(
-            [("..", -1000.0), ("()", -999.0)]
-        )
-
-        np.testing.assert_allclose(
-            matrix,
-            np.full((2, 2), probability),
-        )
 
     def test_pairing_correlation_matrix_restores_unconstrained_pf(self):
         mol = Molecule("GCGCGCGC")
