@@ -86,6 +86,38 @@ class TestRNA2D(unittest.TestCase):
         ):
             Molecule(self.seq, parameters=p).mfe()
 
+    def test_hard_constraints(self):
+
+        paired = 0
+        unpaired = 1
+        mol = Molecule(
+            self.seq,
+            force_paired=(paired,),
+            force_unpaired=(unpaired,),
+        )
+
+        def satisfies_constraints(structure):
+            return structure[paired] != "." and structure[unpaired] == "."
+
+        structure, _ = mol.mfe()
+        self.assertTrue(satisfies_constraints(structure))
+
+        probabilities = np.sum(
+            mol.base_pairing_probability(),
+            axis=1,
+        )
+        self.assertAlmostEqual(probabilities[paired], 1.0)
+        self.assertAlmostEqual(probabilities[unpaired], 0.0)
+
+        self.assertTrue(all(
+            satisfies_constraints(structure)
+            for structure, _ in mol.suboptimal_structures(3.0)
+        ))
+        self.assertTrue(all(
+            satisfies_constraints(structure)
+            for structure, _ in mol.sample(100)
+        ))
+
     def test_mfe(self):
 
         mol = Molecule(self.seq)
@@ -380,6 +412,45 @@ class TestRNA2D(unittest.TestCase):
         actual = mol.pairing_correlation_matrix()
 
         np.testing.assert_allclose(actual, expected, atol=1e-7)
+
+    def test_pairing_correlation_matrix_with_hard_constraints(self):
+        seq = "GCGCGCGC"
+        paired = 0
+        unpaired = 1
+        mol = Molecule(
+            seq,
+            force_paired=(paired,),
+            force_unpaired=(unpaired,),
+        )
+        dp_mol = mol._dp_molecules[0]
+        base_fc = dp_mol._make_fold_compound()
+
+        structures = [
+            structure
+            for structure in _enumerate_secondary_structures(seq)
+            if structure[paired] != "." and structure[unpaired] == "."
+        ]
+        energies = np.array([
+            base_fc.eval_structure(structure)
+            for structure in structures
+        ])
+        weights = np.exp(
+            -(energies - np.min(energies))
+            / (_KB * dp_mol._temperature)
+        )
+        weights /= np.sum(weights)
+
+        expected = np.zeros((len(seq), len(seq)))
+        for structure, weight in zip(structures, weights):
+            is_paired = np.array([base != "." for base in structure])
+            expected[np.ix_(is_paired, is_paired)] += weight
+
+        bpp_before = mol.base_pairing_probability()
+        actual = mol.pairing_correlation_matrix()
+        bpp_after = mol.base_pairing_probability()
+
+        np.testing.assert_allclose(actual, expected, atol=1e-7)
+        np.testing.assert_allclose(bpp_after, bpp_before, atol=1e-14)
 
     def test_pairing_correlation_matrix_suboptimal_and_coverage(self):
         mol = Molecule("GCGCGCGC")

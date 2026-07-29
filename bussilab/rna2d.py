@@ -237,6 +237,14 @@ def _apply_constraint(fc,lambdas,kT):
 
     return shift, n_1d, n_2d
 
+def _apply_hard_constraint(fc, paired, unpaired):
+
+    for p in paired:
+        fc.hc_add_bp_nonspecific(int(p+1), 0, RNA.CONSTRAINT_CONTEXT_ENFORCE | RNA.CONSTRAINT_CONTEXT_ALL_LOOPS)
+
+    for p in unpaired:
+        fc.hc_add_up(int(p+1), RNA.CONSTRAINT_CONTEXT_ALL_LOOPS)
+
 def _correct_rounding_energy(structure, dlambdas):
     """
     Compute the energy correction associated with residuals for
@@ -286,6 +294,7 @@ class _DPMolecule:
             (self._fc_rounded_shift,
              self._fc_rounded_n_1d_constraints,
              self._fc_rounded_n_2d_constraints) = _apply_constraint(self._fc_rounded, self._lambdas1d_rounded, _KB * self._temperature)
+            _apply_hard_constraint(self._fc_rounded, paired=self._force_paired, unpaired=self._force_unpaired)
 
     def _ensure_fc(self):
         """
@@ -312,6 +321,8 @@ class _DPMolecule:
             else:
                 # note that the callback only applies the residuals
                 self._pf_callback = _apply_residual_callback(self._fc, self._lambdas1d_residuals, _KB * self._temperature)
+
+            _apply_hard_constraint(self._fc, paired=self._force_paired, unpaired=self._force_unpaired)
 
     def _ensure_pf(self):
         """
@@ -355,6 +366,8 @@ class _DPMolecule:
         *,
         lambdas1d = None,
         temperature = 37 + _CELSIUS_TO_KELVIN,
+        force_paired = None,
+        force_unpaired = None,
         NaCl = None,
         parameters = "turner2004"):
 
@@ -400,6 +413,14 @@ class _DPMolecule:
             raise ValueError("lambdas1d must contain only finite values")
 
         self._lambdas1d_residuals_range=np.sum(np.abs(self._lambdas1d_residuals))
+
+        if force_paired is None:
+           force_paired = []
+        self._force_paired = force_paired
+
+        if force_unpaired is None:
+           force_unpaired = []
+        self._force_unpaired = force_unpaired
 
         self._fc_rounded = None
         self._fc_rounded_shift = 0.0
@@ -702,9 +723,17 @@ class _DPMolecule:
         conditional = np.empty((n, n))
 
         for i in range(n):
+            # Restore the baseline hard constraints before adding the temporary
+            # constraint used for this conditional calculation.
+            fc.hc_init()
+            _apply_hard_constraint(
+                fc,
+                paired=self._force_paired,
+                unpaired=self._force_unpaired,
+            )
             fc.hc_add_up(i + 1)
 
-            # Invalidate the cached unconstrained result and compute the
+            # Invalidate the cached baseline result and compute the
             # probabilities conditional on nucleotide i being unpaired.
             self._base_pairing_probability = None
             conditional[i, :] = np.sum(
@@ -712,11 +741,19 @@ class _DPMolecule:
                 axis=1,
             )
 
-            fc.hc_init()
-
-        # Recompute and retain the ordinary, unconstrained PF/BPP.
+        # Recompute and retain the baseline PF/BPP.
+        fc.hc_init()
+        _apply_hard_constraint(
+            fc,
+            paired=self._force_paired,
+            unpaired=self._force_unpaired,
+        )
         self._base_pairing_probability = None
         p = np.sum(self.base_pairing_probability(), axis=1)
+
+        # Remove numerical noise from probabilities fixed by hard constraints.
+        p[np.asarray(self._force_paired, dtype=int)] = 1.0
+        p[np.asarray(self._force_unpaired, dtype=int)] = 0.0
 
         matrix = np.empty((n, n))
         for i in range(n):
@@ -809,6 +846,13 @@ class Molecule:
         pairing, whereas negative values favor pairing. If omitted, all penalties
         are zero.
 
+    force_paired : array-like of int, optional
+        Zero-based indices of nucleotides that are required to be paired, without
+        specifying their pairing partners.
+
+    force_unpaired : array-like of int, optional
+        Zero-based indices of nucleotides that are required to be unpaired.
+
     T : float, default=310.15
         Temperature in kelvin.
 
@@ -832,6 +876,8 @@ class Molecule:
         *,
         lambdas1d=None,
         temperature=37 + _CELSIUS_TO_KELVIN,
+        force_paired = None,
+        force_unpaired = None,
         NaCl=None,
         parameters="turner2004",
     ):
@@ -841,6 +887,8 @@ class Molecule:
                 lambdas1d=lambdas1d,
                 temperature=temperature,
                 NaCl=NaCl,
+                force_paired=force_paired,
+                force_unpaired=force_unpaired,
                 parameters=parameters,
             )
         ]
