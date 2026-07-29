@@ -561,7 +561,15 @@ class TestRNA2D(unittest.TestCase):
         dp_mol = mol._dp_molecules[0]
 
         self.assertEqual(dp_mol._fc_n_1d_constraints, 0)
-        self.assertGreater(dp_mol._fc_n_2d_constraints, 0)
+        from bussilab.rna2d import _ALLOWED_PAIRS
+
+        expected_pairs = sum(
+            self.seq[i] + self.seq[j] in _ALLOWED_PAIRS
+            for i in range(n)
+            for j in range(i + 1, n)
+        )
+        self.assertEqual(dp_mol._fc_n_2d_constraints, expected_pairs)
+        self.assertLess(expected_pairs, n * (n - 1) // 2)
 
     def test_importance_sampling(self):
 

@@ -30,6 +30,9 @@ def _require_viennarna():
 # However, it should be a multiple of the true internal rounding (0.01)
 _ROUNDING_FACTOR=0.01
 
+# Canonical and wobble pairs, including both sequence orientations.
+_ALLOWED_PAIRS = frozenset(("AU", "UA", "CG", "GC", "GU", "UG"))
+
 # Boltzmann constant, as obtained from vienna source code
 _KB = 1.98717/1000
 
@@ -170,7 +173,7 @@ def _apply_residual_callback(fc, residuals, kT):
     fc.sc_add_exp_f(callback)
     return callback
 
-def _apply_constraint(fc,lambdas,kT):
+def _apply_constraint(fc, sequence, lambdas, kT):
     """
     Apply per-nucleotide pairing penalties using a hybrid 1D/2D scheme.
     Returns the structure-independent energy shift that must be added to reported
@@ -229,6 +232,9 @@ def _apply_constraint(fc,lambdas,kT):
     n_2d = 0
     for i in range(n):
         for j in range(i + 1, n):
+            if sequence[i] + sequence[j] not in _ALLOWED_PAIRS:
+                continue
+
             value = float(lambda_2d[i] + lambda_2d[j])
 
             if value != 0.0:
@@ -293,7 +299,7 @@ class _DPMolecule:
             self._fc_rounded = self._make_fold_compound()
             (self._fc_rounded_shift,
              self._fc_rounded_n_1d_constraints,
-             self._fc_rounded_n_2d_constraints) = _apply_constraint(self._fc_rounded, self._lambdas1d_rounded, _KB * self._temperature)
+             self._fc_rounded_n_2d_constraints) = _apply_constraint(self._fc_rounded, self._seq, self._lambdas1d_rounded, _KB * self._temperature)
             _apply_hard_constraint(self._fc_rounded, paired=self._force_paired, unpaired=self._force_unpaired)
 
     def _ensure_fc(self):
@@ -314,7 +320,7 @@ class _DPMolecule:
 
             (self._fc_shift,
             self._fc_n_1d_constraints,
-            self._fc_n_2d_constraints) = _apply_constraint(self._fc, use_lambdas, _KB * self._temperature)
+            self._fc_n_2d_constraints) = _apply_constraint(self._fc, self._seq, use_lambdas, _KB * self._temperature)
 
             if _SUPPORTS_NATIVE_CONTINUOUS:
                 self._pf_callback = None
