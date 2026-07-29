@@ -78,8 +78,14 @@ class TestRNA2D(unittest.TestCase):
 
     def test_state_mixture_constructor(self):
 
-        with self.assertRaises(ValueError):
-            Molecule(self.seq, state_positions=(0,))
+        unbiased = Molecule(self.seq, state_positions=(0,))
+        np.testing.assert_array_equal(
+            unbiased._state_biases,
+            np.zeros(2),
+        )
+        populations = unbiased.d_free_energy_d_state_biases()
+        self.assertEqual(populations.shape, (2,))
+        self.assertAlmostEqual(np.sum(populations), 1.0)
 
         with self.assertRaises(ValueError):
             Molecule(self.seq, state_biases=np.zeros(2))
@@ -277,7 +283,6 @@ class TestRNA2D(unittest.TestCase):
         mixture = Molecule(
             self.seq,
             state_positions=(0, 1),
-            state_biases=np.zeros((2, 2)),
         )
 
         self.assertEqual(len(mixture._dp_molecules), 4)

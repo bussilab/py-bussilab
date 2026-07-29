@@ -654,13 +654,14 @@ class Molecule:
         Zero-based indices of nucleotides that are required to be unpaired.
 
     state_positions : array-like of int, optional
-        Zero-based indices defining binary paired/unpaired states. When provided,
-        `state_biases` must contain one energy bias for every state.
+        Zero-based indices defining binary paired/unpaired states. If
+        `state_biases` is omitted, every state is assigned zero bias.
 
     state_biases : array-like, optional
         Energy biases (kcal/mol) for the states defined by `state_positions`.
         Its shape must be `(2,) * len(state_positions)`, with index zero denoting
-        an unpaired nucleotide and index one denoting a paired nucleotide.
+        an unpaired nucleotide and index one denoting a paired nucleotide. It
+        cannot be provided without `state_positions`.
 
     T : float, default=310.15
         Temperature in kelvin.
@@ -694,9 +695,9 @@ class Molecule:
     ):
         self._has_state_biases = state_positions is not None
 
-        if (state_positions is None) != (state_biases is None):
+        if state_positions is None and state_biases is not None:
             raise ValueError(
-                "state_positions and state_biases must be provided together"
+                "state_biases cannot be provided without state_positions"
             )
 
         base_force_paired = (
@@ -740,10 +741,16 @@ class Molecule:
                 )
 
             expected_shape = (2,) * len(self._state_positions)
-            self._state_biases = np.asarray(
-                state_biases,
-                dtype=float,
-            ).copy()
+            if state_biases is None:
+                self._state_biases = np.zeros(
+                    expected_shape,
+                    dtype=float,
+                )
+            else:
+                self._state_biases = np.asarray(
+                    state_biases,
+                    dtype=float,
+                ).copy()
             if self._state_biases.shape != expected_shape:
                 raise ValueError(
                     f"state_biases must have shape {expected_shape}"
