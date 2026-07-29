@@ -76,6 +76,50 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaises(ValueError):
             Molecule(self.seq, parameters="foo")
 
+    def test_state_mixture_constructor(self):
+
+        with self.assertRaises(ValueError):
+            Molecule(self.seq, state_positions=(0,))
+
+        with self.assertRaises(ValueError):
+            Molecule(self.seq, state_biases=np.zeros(2))
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                state_positions=(0, 1),
+                state_biases=np.zeros(4),
+            )
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                state_positions=(0, 0),
+                state_biases=np.zeros((2, 2)),
+            )
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                state_positions=(len(self.seq),),
+                state_biases=np.zeros(2),
+            )
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                state_positions=(0,),
+                state_biases=np.array([0.0, np.nan]),
+            )
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                force_paired=(0,),
+                state_positions=(0,),
+                state_biases=np.zeros(2),
+            )
+
     def test_parameter_sets(self):
 
         for p in (
@@ -149,6 +193,160 @@ class TestRNA2D(unittest.TestCase):
 
     def test_partition_function_vanilla(self):
         self._run_in_vanilla_mode(self.test_partition_function)
+
+    def test_zero_bias_state_mixture(self):
+
+        reference = Molecule(self.seq)
+        mixture = Molecule(
+            self.seq,
+            state_positions=(0, 1),
+            state_biases=np.zeros((2, 2)),
+        )
+
+        self.assertEqual(len(mixture._dp_molecules), 4)
+        self.assertAlmostEqual(
+            mixture.total_free_energy(),
+            reference.total_free_energy(),
+            places=6,
+        )
+        np.testing.assert_allclose(
+            mixture.base_pairing_probability(),
+            reference.base_pairing_probability(),
+            atol=1e-7,
+        )
+        self.assertAlmostEqual(
+            mixture.mfe()[1],
+            reference.mfe()[1],
+        )
+        self.assertEqual(
+            mixture.suboptimal_structures(2.0),
+            reference.suboptimal_structures(2.0),
+        )
+
+    def test_biased_state_mixture(self):
+
+        position = 0
+        biases = np.array([0.0, 0.8])
+        mixture = Molecule(
+            self.seq,
+            state_positions=(position,),
+            state_biases=biases,
+        )
+        components = [
+            Molecule(self.seq, force_unpaired=(position,)),
+            Molecule(self.seq, force_paired=(position,)),
+        ]
+
+        component_free_energies = np.array([
+            molecule.total_free_energy()
+            for molecule in components
+        ])
+        biased_free_energies = component_free_energies + biases
+        reference = np.min(biased_free_energies)
+        relative_weights = np.exp(
+            -(biased_free_energies - reference)
+            / (_KB * mixture._dp_molecules[0]._temperature)
+        )
+        probabilities = relative_weights / np.sum(relative_weights)
+        expected_free_energy = (
+            reference
+            - _KB * mixture._dp_molecules[0]._temperature
+            * np.log(np.sum(relative_weights))
+        )
+
+        self.assertAlmostEqual(
+            mixture.total_free_energy(),
+            expected_free_energy,
+        )
+
+        expected_bpp = sum(
+            probability * molecule.base_pairing_probability()
+            for probability, molecule in zip(probabilities, components)
+        )
+        np.testing.assert_allclose(
+            mixture.base_pairing_probability(),
+            expected_bpp,
+            atol=1e-14,
+        )
+
+        component_mfes = [
+            molecule.mfe()
+            for molecule in components
+        ]
+        expected_mfe_index = np.argmin([
+            result[1] + bias
+            for result, bias in zip(component_mfes, biases)
+        ])
+        expected_mfe = component_mfes[expected_mfe_index]
+        structure, energy = mixture.mfe()
+        self.assertEqual(structure, expected_mfe[0])
+        self.assertAlmostEqual(
+            energy,
+            expected_mfe[1] + biases[expected_mfe_index],
+        )
+
+        base_fc = mixture._dp_molecules[0]._make_fold_compound()
+        exhaustive = [
+            (
+                structure,
+                float(
+                    base_fc.eval_structure(structure)
+                    + biases[int(structure[position] != ".")]
+                ),
+            )
+            for structure in _enumerate_secondary_structures(self.seq)
+        ]
+        exhaustive.sort(key=lambda item: item[1])
+        cutoff = exhaustive[0][1] + 2.0
+        expected_suboptimal = [
+            item
+            for item in exhaustive
+            if item[1] <= cutoff
+        ]
+        actual_suboptimal = mixture.suboptimal_structures(2.0)
+        self.assertEqual(
+            [item[0] for item in actual_suboptimal],
+            [item[0] for item in expected_suboptimal],
+        )
+        np.testing.assert_allclose(
+            [item[1] for item in actual_suboptimal],
+            [item[1] for item in expected_suboptimal],
+            atol=1e-7,
+        )
+
+        samples = mixture.sample(5000)
+        sampled_paired_probability = np.mean([
+            structure[position] != "."
+            for structure, _ in samples
+        ])
+        self.assertAlmostEqual(
+            sampled_paired_probability,
+            probabilities[1],
+            delta=0.03,
+        )
+        self.assertTrue(all(
+            abs(log_weight) < 1e-12
+            for _, log_weight in samples
+        ))
+        for component in mixture._dp_molecules:
+            self.assertAlmostEqual(
+                component.sample_rounding_correction(),
+                0.0,
+            )
+
+    def test_unimplemented_state_mixture_methods(self):
+
+        mixture = Molecule(
+            self.seq,
+            state_positions=(0,),
+            state_biases=np.zeros(2),
+        )
+
+        with self.assertRaises(NotImplementedError):
+            mixture.suboptimal_coverage(1.0)
+
+        with self.assertRaises(NotImplementedError):
+            mixture.pairing_correlation_matrix()
 
     def test_copy_semantics(self):
 

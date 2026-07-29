@@ -357,7 +357,8 @@ class _DPMolecule:
             self._ensure_fc_rounded()
             native_mfe = self._fc_rounded.mfe()[1]
             self._fc_rounded.exp_params_rescale(native_mfe)
-            self._fc_rounded.pf()
+            self._rounded_total_free_energy = self._fc_rounded.pf()[1]
+            self._rounded_total_free_energy += self._fc_rounded_shift
             self._fc_rounded_pf=True
 
     def __init__(
@@ -425,6 +426,7 @@ class _DPMolecule:
         self._fc_rounded = None
         self._fc_rounded_shift = 0.0
         self._fc_rounded_pf = False
+        self._rounded_total_free_energy = None
         self._fc = None
         self._fc_shift = 0.0
 
@@ -436,6 +438,14 @@ class _DPMolecule:
 
         self._pf_callback = None
 
+    def _satisfies_hard_constraints(self, structure):
+        """
+        Return whether a structure satisfies this component's hard constraints.
+        """
+        return (
+            all(structure[int(i)] != "." for i in self._force_paired)
+            and all(structure[int(i)] == "." for i in self._force_unpaired)
+        )
 
     def mfe(self):
         """
@@ -580,6 +590,25 @@ class _DPMolecule:
             (structure, -float(_correct_rounding_energy(structure, self._lambdas1d_residuals) * inverse_kT))
             for structure in structures
         ]
+
+    def sample_rounding_correction(self):
+        """
+        Return the component normalization correction for sampled log weights.
+
+        This dimensionless correction accounts for the difference between the
+        exact and rounded partition functions. It is structure-independent within
+        one ensemble, but generally differs between components and is therefore
+        required when their samples are combined.
+        """
+        self._ensure_pf()
+        self._ensure_rounded_pf()
+        inverse_kT = 1.0 / (_KB * self._temperature)
+        return float(
+            (
+                self._total_free_energy
+                - self._rounded_total_free_energy
+            ) * inverse_kT
+        )
 
     def suboptimal_coverage(self, delta):
         """
@@ -821,9 +850,10 @@ class Molecule:
     """
     RNA secondary-structure model with continuous pairing penalties.
 
-    The class wraps ViennaRNA and supports continuous per-nucleotide pairing
-    penalties while preserving compatibility with ViennaRNA's dynamic programming
-    algorithms.
+    The class wraps one or more ViennaRNA dynamic-programming ensembles and
+    supports continuous per-nucleotide pairing penalties. Multiple ensembles may
+    be used to assign arbitrary energy biases to the paired/unpaired states of
+    selected nucleotides.
 
     A penalty λᵢ is added whenever nucleotide *i* is paired. Internally, these
     penalties are automatically represented as an equivalent hybrid combination of
@@ -853,6 +883,15 @@ class Molecule:
     force_unpaired : array-like of int, optional
         Zero-based indices of nucleotides that are required to be unpaired.
 
+    state_positions : array-like of int, optional
+        Zero-based indices defining binary paired/unpaired states. When provided,
+        `state_biases` must contain one energy bias for every state.
+
+    state_biases : array-like, optional
+        Energy biases (kcal/mol) for the states defined by `state_positions`.
+        Its shape must be `(2,) * len(state_positions)`, with index zero denoting
+        an unpaired nucleotide and index one denoting a paired nucleotide.
+
     T : float, default=310.15
         Temperature in kelvin.
 
@@ -878,20 +917,92 @@ class Molecule:
         temperature=37 + _CELSIUS_TO_KELVIN,
         force_paired = None,
         force_unpaired = None,
+        state_positions=None,
+        state_biases=None,
         NaCl=None,
         parameters="turner2004",
     ):
-        self._dp_molecules = [
-            _DPMolecule(
-                seq,
-                lambdas1d=lambdas1d,
-                temperature=temperature,
-                NaCl=NaCl,
-                force_paired=force_paired,
-                force_unpaired=force_unpaired,
-                parameters=parameters,
+        if (state_positions is None) != (state_biases is None):
+            raise ValueError(
+                "state_positions and state_biases must be provided together"
             )
-        ]
+
+        base_force_paired = (
+            [] if force_paired is None else list(force_paired)
+        )
+        base_force_unpaired = (
+            [] if force_unpaired is None else list(force_unpaired)
+        )
+
+        if state_positions is None:
+            self._state_positions = ()
+            self._state_biases = np.zeros((), dtype=float)
+        else:
+            positions = np.asarray(state_positions)
+            if positions.ndim != 1:
+                raise ValueError("state_positions must be one-dimensional")
+            if not np.issubdtype(positions.dtype, np.integer):
+                raise ValueError("state_positions must contain integers")
+
+            self._state_positions = tuple(int(i) for i in positions)
+            if len(set(self._state_positions)) != len(self._state_positions):
+                raise ValueError("state_positions must not contain duplicates")
+            if any(
+                i < 0 or i >= len(str(seq))
+                for i in self._state_positions
+            ):
+                raise ValueError(
+                    "state_positions must contain valid nucleotide indices"
+                )
+
+            fixed_positions = (
+                set(base_force_paired) | set(base_force_unpaired)
+            )
+            if fixed_positions.intersection(self._state_positions):
+                raise ValueError(
+                    "state_positions must not overlap force_paired or "
+                    "force_unpaired"
+                )
+
+            expected_shape = (2,) * len(self._state_positions)
+            self._state_biases = np.asarray(
+                state_biases,
+                dtype=float,
+            ).copy()
+            if self._state_biases.shape != expected_shape:
+                raise ValueError(
+                    f"state_biases must have shape {expected_shape}"
+                )
+            if not np.all(np.isfinite(self._state_biases)):
+                raise ValueError(
+                    "state_biases must contain only finite values"
+                )
+
+        self._states = list(np.ndindex(self._state_biases.shape))
+        self._dp_molecules = []
+
+        for state in self._states:
+            state_paired = [
+                position
+                for position, value in zip(self._state_positions, state)
+                if value
+            ]
+            state_unpaired = [
+                position
+                for position, value in zip(self._state_positions, state)
+                if not value
+            ]
+            self._dp_molecules.append(
+                _DPMolecule(
+                    seq,
+                    lambdas1d=lambdas1d,
+                    temperature=temperature,
+                    NaCl=NaCl,
+                    force_paired=base_force_paired + state_paired,
+                    force_unpaired=base_force_unpaired + state_unpaired,
+                    parameters=parameters,
+                )
+            )
 
     def _require_single_dp_molecule(self):
         """
@@ -905,6 +1016,61 @@ class Molecule:
                 "dynamic-programming ensembles"
             )
         return self._dp_molecules[0]
+
+    def _component_probabilities(self):
+        """
+        Return the total free energy and normalized component probabilities.
+        """
+        free_energies = np.array([
+            molecule.total_free_energy()
+            for molecule in self._dp_molecules
+        ])
+        biased_free_energies = (
+            free_energies + self._state_biases.ravel()
+        )
+
+        finite = np.isfinite(biased_free_energies)
+        if not np.any(finite):
+            raise RuntimeError(
+                "No state has a finite partition function"
+            )
+
+        reference = np.min(biased_free_energies[finite])
+        kT = _KB * self._dp_molecules[0]._temperature
+        relative_weights = np.zeros(len(self._dp_molecules))
+        relative_weights[finite] = np.exp(
+            -(biased_free_energies[finite] - reference) / kT
+        )
+        normalization = math.fsum(relative_weights)
+        probabilities = relative_weights / normalization
+        total_free_energy = reference - kT * math.log(normalization)
+
+        return float(total_free_energy), probabilities
+
+    def _component_mfes(self):
+        """
+        Return component MFE structures and their biased energies.
+        """
+        structures = []
+        energies = []
+        for molecule, bias in zip(
+            self._dp_molecules,
+            self._state_biases.ravel(),
+        ):
+            structure, energy = molecule.mfe()
+            structures.append(structure)
+            if molecule._satisfies_hard_constraints(structure):
+                energies.append(energy + bias)
+            else:
+                energies.append(math.inf)
+
+        energies = np.asarray(energies)
+        if not np.any(np.isfinite(energies)):
+            raise RuntimeError(
+                "No state has a feasible MFE structure"
+            )
+
+        return structures, energies
 
     def mfe(self):
         """
@@ -921,7 +1087,18 @@ class Molecule:
         energy : float
             Exact free energy (kcal/mol).
         """
-        return self._require_single_dp_molecule().mfe()
+        # Preserve the original direct MFE path when no state mixture is
+        # present.
+        if len(self._dp_molecules) == 1:
+            structure, energy = self._dp_molecules[0].mfe()
+            return (
+                structure,
+                float(energy + self._state_biases.item()),
+            )
+
+        structures, energies = self._component_mfes()
+        index = int(np.argmin(energies))
+        return structures[index], float(energies[index])
 
     def base_pairing_probability(self):
         """
@@ -933,7 +1110,20 @@ class Molecule:
             Symmetric NxN matrix whose element (i,j) is the equilibrium
             probability that nucleotides i and j form a base pair.
         """
-        return self._require_single_dp_molecule().base_pairing_probability()
+        _, probabilities = self._component_probabilities()
+        matrix = np.zeros_like(
+            self._dp_molecules[0].base_pairing_probability()
+        )
+        for probability, molecule in zip(
+            probabilities,
+            self._dp_molecules,
+        ):
+            if probability == 0.0:
+                continue
+            matrix += (
+                probability * molecule.base_pairing_probability()
+            )
+        return matrix
 
     def total_free_energy(self):
         """
@@ -945,7 +1135,8 @@ class Molecule:
             Ensemble free energy (kcal/mol) corresponding to the exact continuous
             pairing penalties.
         """
-        return self._require_single_dp_molecule().total_free_energy()
+        total_free_energy, _ = self._component_probabilities()
+        return total_free_energy
 
     def suboptimal_structures(self, delta):
         """
@@ -954,6 +1145,10 @@ class Molecule:
         Candidate structures are generated using ViennaRNA's rounded soft
         constraints, rescored with the exact continuous penalties, and returned
         sorted by exact energy.
+
+        For state mixtures, the MFE of every feasible state is calculated first.
+        Each component is then enumerated with the local energy window required
+        by the common, globally biased cutoff.
 
         Parameters
         ----------
@@ -965,7 +1160,50 @@ class Molecule:
         list of (str, float)
             List of (structure, energy) pairs sorted by increasing exact energy.
         """
-        return self._require_single_dp_molecule().suboptimal_structures(delta)
+        # Preserve the original direct enumeration path when no state mixture is
+        # present.
+        if len(self._dp_molecules) == 1:
+            suboptimal = self._dp_molecules[0].suboptimal_structures(
+                delta
+            )
+            bias = float(self._state_biases.item())
+            if bias == 0.0:
+                return suboptimal
+            return [
+                (structure, float(energy + bias))
+                for structure, energy in suboptimal
+            ]
+
+        delta = float(delta)
+        if not np.isfinite(delta) or delta < 0.0:
+            raise ValueError("delta must be finite and non-negative")
+
+        _, component_mfe_energies = self._component_mfes()
+        global_mfe_energy = float(np.min(component_mfe_energies))
+        cutoff = global_mfe_energy + delta
+        merged = []
+
+        for molecule, bias, component_mfe_energy in zip(
+            self._dp_molecules,
+            self._state_biases.ravel(),
+            component_mfe_energies,
+        ):
+            if not np.isfinite(component_mfe_energy):
+                continue
+
+            local_delta = cutoff - component_mfe_energy
+            if local_delta < 0.0:
+                continue
+
+            for structure, energy in molecule.suboptimal_structures(
+                local_delta
+            ):
+                biased_energy = float(energy + bias)
+                if biased_energy <= cutoff:
+                    merged.append((structure, biased_energy))
+
+        merged.sort(key=lambda item: item[1])
+        return merged
 
     def sample(self, number):
         """
@@ -992,10 +1230,51 @@ class Molecule:
 
                 log(w) = -(E_exact - E_rounded) / (k_B T).
 
+            For state mixtures, the log-weight also includes the
+            component-specific exact/rounded normalization correction. This
+            correction is caused only by lambda rounding, not by the state bias.
+
             When all lambdas are multiples of 0.01 kcal/mol, every returned
             log-weight is zero.
         """
-        return self._require_single_dp_molecule().sample(number)
+        number = int(number)
+        if number <= 0:
+            raise ValueError("number must be a positive integer")
+
+        # Preserve the original direct sampling path when no state mixture is
+        # present.
+        if len(self._dp_molecules) == 1:
+            return self._dp_molecules[0].sample(number)
+
+        _, probabilities = self._component_probabilities()
+        component_indices = np.random.choice(
+            len(self._dp_molecules),
+            size=number,
+            p=probabilities,
+        )
+        result = [None] * number
+        for component_index, molecule in enumerate(self._dp_molecules):
+            output_indices = np.flatnonzero(
+                component_indices == component_index
+            )
+            if not len(output_indices):
+                continue
+
+            samples = molecule.sample(len(output_indices))
+            rounding_correction = (
+                molecule.sample_rounding_correction()
+            )
+
+            for output_index, (structure, log_weight) in zip(
+                output_indices,
+                samples,
+            ):
+                result[output_index] = (
+                    structure,
+                    float(log_weight + rounding_correction),
+                )
+
+        return result
 
     def suboptimal_coverage(self, delta):
         """
