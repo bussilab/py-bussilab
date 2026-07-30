@@ -30,6 +30,10 @@ def _require_viennarna():
 # However, it should be a multiple of the true internal rounding (0.01)
 _ROUNDING_FACTOR=0.01
 
+# Maximum assumed candidates-per-accepted-sample ratio used when choosing the
+# next rejection-sampling batch.
+_MAX_ASSUMED_INFLATION = 1.1
+
 # Canonical and wobble pairs, including both sequence orientations.
 _ALLOWED_PAIRS = frozenset(("AU", "UA", "CG", "GC", "GU", "UG"))
 
@@ -555,28 +559,52 @@ class _DPMolecule:
             if energies[i]-energies[index[0]] <= delta
         ]
 
-    def sample(self, number):
+    def _sample_weighted(self, number):
+        """
+        Sample from the rounded model and return exact-model log weights.
+        """
+        self._ensure_rounded_pf()
+
+        structures = self._fc_rounded.pbacktrack(number)
+        inverse_kT = 1.0 / (_KB * self._temperature)
+
+        return [
+            (
+                structure,
+                -float(
+                    _correct_rounding_energy(
+                        structure,
+                        self._lambdas1d_residuals,
+                    ) * inverse_kT
+                ),
+            )
+            for structure in structures
+        ]
+
+    def sample(self, number, weights=False):
         """
         Generate Boltzmann-distributed secondary structures.
 
-        Structures are sampled from the rounded ViennaRNA model. For each sampled
-        structure, the returned log-weight corrects the rounded distribution to the
-        exact continuous-lambda distribution by importance sampling.
-
-        The returned log-weights are intentionally left unnormalized so that
-        independent samples can be concatenated and optionally deduplicated before
-        normalization.
+        By default, rejection sampling corrects samples from ViennaRNA's rounded
+        model to the exact continuous-lambda distribution. Alternatively, the
+        rounded samples and their importance weights can be returned directly.
 
         Parameters
         ----------
         number : int
             Number of structures to sample.
 
+        weights : bool, default=False
+            If False, return unweighted structures sampled from the exact model.
+            If True, return samples from the rounded model together with
+            unnormalized log-weight corrections.
+
         Returns
         -------
-        list of (str, float)
-            Each element contains a dot-bracket structure and its unnormalized
-            log-weight correction
+        list of str or list of (str, float)
+            With ``weights=False``, a list of dot-bracket structures. With
+            ``weights=True``, each element contains a structure and its
+            unnormalized log-weight correction
 
                 log(w) = -(E_exact - E_rounded) / (k_B T).
 
@@ -587,15 +615,56 @@ class _DPMolecule:
         number = int(number)
         if number <= 0:
             raise ValueError("number must be a positive integer")
-        self._ensure_rounded_pf()
+        if not isinstance(weights, (bool, np.bool_)):
+            raise ValueError("weights must be a boolean")
 
-        structures = self._fc_rounded.pbacktrack(number)
+        if weights:
+            return self._sample_weighted(number)
+
         inverse_kT = 1.0 / (_KB * self._temperature)
+        max_log_weight = -float(np.sum(
+            np.minimum(self._lambdas1d_residuals, 0.0)
+        )) * inverse_kT
 
-        return [
-            (structure, -float(_correct_rounding_energy(structure, self._lambdas1d_residuals) * inverse_kT))
-            for structure in structures
-        ]
+        # Initialize the assumed candidates-per-accepted-sample ratio from the
+        # worst-case log-weight range.
+        log_weight_span = (
+            self._lambdas1d_residuals_range * inverse_kT
+        )
+        if log_weight_span < math.log(_MAX_ASSUMED_INFLATION):
+            assumed_inflation = math.exp(log_weight_span)
+        else:
+            assumed_inflation = _MAX_ASSUMED_INFLATION
+
+        accepted = []
+        while len(accepted) < number:
+            remaining = number - len(accepted)
+            batch_size = int(remaining * assumed_inflation)
+            candidates = self._sample_weighted(batch_size)
+            accepted_in_batch = 0
+
+            for structure, log_weight in candidates:
+                acceptance_probability = math.exp(
+                    log_weight - max_log_weight
+                )
+                if np.random.random() < acceptance_probability:
+                    accepted.append(structure)
+                    accepted_in_batch += 1
+                    if len(accepted) == number:
+                        break
+
+            if len(accepted) < number:
+                # Replace the initial worst-case estimate, or the estimate from
+                # the previous batch, with the observed rejection rate.
+                if accepted_in_batch:
+                    assumed_inflation = min(
+                        _MAX_ASSUMED_INFLATION,
+                        batch_size / accepted_in_batch
+                    )
+                else:
+                    assumed_inflation = _MAX_ASSUMED_INFLATION
+
+        return accepted
 
     def sample_rounding_correction(self):
         """
@@ -1160,28 +1229,31 @@ class Molecule:
         merged.sort(key=lambda item: item[1])
         return merged
 
-    def sample(self, number):
+    def sample(self, number, weights=False):
         """
         Generate Boltzmann-distributed secondary structures.
 
-        Structures are sampled from the rounded ViennaRNA model. For each sampled
-        structure, the returned log-weight corrects the rounded distribution to the
-        exact continuous-lambda distribution by importance sampling.
-
-        The returned log-weights are intentionally left unnormalized so that
-        independent samples can be concatenated and optionally deduplicated before
-        normalization.
+        By default, rejection sampling corrects ViennaRNA's rounded soft
+        constraints and returns unweighted structures from the exact continuous
+        model. Weighted samples from the rounded model can be requested instead.
 
         Parameters
         ----------
         number : int
             Number of structures to sample.
 
+        weights : bool, default=False
+            If False, return unweighted structures sampled from the exact model.
+            If True, return rounded-model samples and their log-weight
+            corrections. The weighted path is faster when rounding corrections
+            are present.
+
         Returns
         -------
-        list of (str, float)
-            Each element contains a dot-bracket structure and its unnormalized
-            log-weight correction
+        list of str or list of (str, float)
+            With ``weights=False``, a list of dot-bracket structures. With
+            ``weights=True``, each element contains a structure and its
+            unnormalized log-weight correction
 
                 log(w) = -(E_exact - E_rounded) / (k_B T).
 
@@ -1195,10 +1267,15 @@ class Molecule:
         number = int(number)
         if number <= 0:
             raise ValueError("number must be a positive integer")
+        if not isinstance(weights, (bool, np.bool_)):
+            raise ValueError("weights must be a boolean")
 
         # A single DP component needs no mixture-level sampling.
         if len(self._dp_molecules) == 1:
-            return self._dp_molecules[0].sample(number)
+            return self._dp_molecules[0].sample(
+                number,
+                weights=weights,
+            )
 
         _, probabilities = self._component_probabilities()
         component_indices = np.random.choice(
@@ -1214,19 +1291,29 @@ class Molecule:
             if not len(output_indices):
                 continue
 
-            samples = molecule.sample(len(output_indices))
-            rounding_correction = (
-                molecule.sample_rounding_correction()
+            samples = molecule.sample(
+                len(output_indices),
+                weights=weights,
             )
-
-            for output_index, (structure, log_weight) in zip(
-                output_indices,
-                samples,
-            ):
-                result[output_index] = (
-                    structure,
-                    float(log_weight + rounding_correction),
+            if weights:
+                rounding_correction = (
+                    molecule.sample_rounding_correction()
                 )
+
+                for output_index, (structure, log_weight) in zip(
+                    output_indices,
+                    samples,
+                ):
+                    result[output_index] = (
+                        structure,
+                        float(log_weight + rounding_correction),
+                    )
+            else:
+                for output_index, structure in zip(
+                    output_indices,
+                    samples,
+                ):
+                    result[output_index] = structure
 
         return result
 

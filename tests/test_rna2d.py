@@ -168,7 +168,7 @@ class TestRNA2D(unittest.TestCase):
         ))
         self.assertTrue(all(
             satisfies_constraints(structure)
-            for structure, _ in mol.sample(100)
+            for structure in mol.sample(100)
         ))
 
     def test_mfe(self):
@@ -483,16 +483,18 @@ class TestRNA2D(unittest.TestCase):
         samples = mixture.sample(5000)
         sampled_paired_probability = np.mean([
             structure[position] != "."
-            for structure, _ in samples
+            for structure in samples
         ])
         self.assertAlmostEqual(
             sampled_paired_probability,
             probabilities[1],
             delta=0.03,
         )
+
+        weighted_samples = mixture.sample(20, weights=True)
         self.assertTrue(all(
             abs(log_weight) < 1e-12
-            for _, log_weight in samples
+            for _, log_weight in weighted_samples
         ))
         for component in mixture._dp_molecules:
             self.assertAlmostEqual(
@@ -575,9 +577,20 @@ class TestRNA2D(unittest.TestCase):
 
         self.assertEqual(len(samples), 100)
 
-        for structure, logw in samples:
+        for structure in samples:
+            self.assertEqual(len(structure), len(self.seq))
+            self.assertIsInstance(structure, str)
+
+        weighted_samples = mol.sample(100, weights=True)
+
+        self.assertEqual(len(weighted_samples), 100)
+
+        for structure, logw in weighted_samples:
             self.assertEqual(len(structure), len(self.seq))
             self.assertIsInstance(logw, float)
+
+        with self.assertRaises(ValueError):
+            mol.sample(1, weights="yes")
 
     def test_sampling_vanilla(self):
         self._run_in_vanilla_mode(self.test_sampling)
@@ -590,7 +603,7 @@ class TestRNA2D(unittest.TestCase):
 
         mol = Molecule(self.seq, lambdas1d=lam)
 
-        samples = mol.sample(20)
+        samples = mol.sample(20, weights=True)
 
         for _, logw in samples:
             self.assertAlmostEqual(logw, 0.0)
@@ -690,7 +703,7 @@ class TestRNA2D(unittest.TestCase):
         numerator = 0.0
         denominator = 0.0
 
-        for structure, logw in mol.sample(100000):
+        for structure, logw in mol.sample(100000, weights=True):
             w = np.exp(logw)
 
             denominator += w
@@ -705,6 +718,18 @@ class TestRNA2D(unittest.TestCase):
         self.assertGreater(
             np.abs(estimate-reference_base),
             np.abs(estimate-reference)
+        )
+
+        unweighted_samples = mol.sample(50000)
+        unweighted_estimate = np.mean([
+            sum(c != "." for c in structure[:len(seq)])
+            / len(seq)
+            for structure in unweighted_samples
+        ])
+        self.assertAlmostEqual(
+            unweighted_estimate,
+            reference,
+            delta=0.005,
         )
 
     def test_importance_sampling_vanilla(self):
