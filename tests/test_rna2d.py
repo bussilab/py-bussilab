@@ -91,6 +91,9 @@ class TestRNA2D(unittest.TestCase):
             Molecule(self.seq, state_biases=np.zeros(2))
 
         with self.assertRaises(ValueError):
+            Molecule(self.seq, reduce_state_space="yes")
+
+        with self.assertRaises(ValueError):
             Molecule(
                 self.seq,
                 state_positions=(0, 1),
@@ -285,7 +288,7 @@ class TestRNA2D(unittest.TestCase):
             state_positions=(0, 1),
         )
 
-        self.assertEqual(len(mixture._dp_molecules), 4)
+        self.assertEqual(len(mixture._dp_molecules), 2)
         self.assertAlmostEqual(
             mixture.total_free_energy(),
             reference.total_free_energy(),
@@ -308,6 +311,70 @@ class TestRNA2D(unittest.TestCase):
             mixture.suboptimal_coverage(2.0),
             reference.suboptimal_coverage(2.0),
             places=6,
+        )
+
+    def test_reduced_state_mixture_representation(self):
+
+        positions = (0, 1, 2)
+        biases = np.arange(8, dtype=float).reshape((2, 2, 2)) / 10.0
+        lambdas = np.arange(len(self.seq), dtype=float) / 100.0
+        mixture = Molecule(
+            self.seq,
+            lambdas1d=lambdas,
+            state_positions=positions,
+            state_biases=biases,
+        )
+
+        self.assertEqual(len(mixture._dp_molecules), 4)
+        np.testing.assert_array_equal(mixture._lambdas1d, lambdas)
+
+        for state, component in zip(
+            mixture._states,
+            mixture._dp_molecules,
+        ):
+            expected_lambdas = lambdas.copy()
+            expected_lambdas[positions[-1]] += (
+                biases[state + (1,)] - biases[state + (0,)]
+            )
+            np.testing.assert_allclose(
+                component._lambdas1d,
+                expected_lambdas,
+            )
+            self.assertEqual(
+                mixture._component_biases[state],
+                biases[state + (0,)],
+            )
+            self.assertNotIn(
+                positions[-1],
+                component._force_paired,
+            )
+            self.assertNotIn(
+                positions[-1],
+                component._force_unpaired,
+            )
+
+        full = Molecule(
+            self.seq,
+            lambdas1d=lambdas,
+            state_positions=positions,
+            state_biases=biases,
+            reduce_state_space=False,
+        )
+        self.assertEqual(len(full._dp_molecules), 8)
+        self.assertAlmostEqual(
+            mixture.total_free_energy(),
+            full.total_free_energy(),
+            places=6,
+        )
+        np.testing.assert_allclose(
+            mixture.base_pairing_probability(),
+            full.base_pairing_probability(),
+            atol=1e-7,
+        )
+        np.testing.assert_allclose(
+            mixture.d_free_energy_d_state_biases(),
+            full.d_free_energy_d_state_biases(),
+            atol=1e-7,
         )
 
     def test_biased_state_mixture(self):

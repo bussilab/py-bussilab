@@ -663,6 +663,12 @@ class Molecule:
         an unpaired nucleotide and index one denoting a paired nucleotide. It
         cannot be provided without `state_positions`.
 
+    reduce_state_space : bool, default=True
+        If True, represent the final selected state position as an equivalent
+        1D pairing penalty, reducing the number of dynamic-programming ensembles
+        from 2**N to 2**(N-1). If False, use one hard-conditioned ensemble for
+        every state.
+
     T : float, default=310.15
         Temperature in kelvin.
 
@@ -674,6 +680,12 @@ class Molecule:
 
     Notes
     -----
+    By default, N selected state positions use 2**(N-1)
+    dynamic-programming ensembles. The final position is represented within
+    each ensemble by an equivalent constant energy shift and 1D pairing
+    penalty. Set `reduce_state_space=False` to use all 2**N explicitly
+    conditioned ensembles.
+
     Default ViennaRNA builds round soft constraints to the nearest 0.01 kcal/mol in
     partition-function calculations. When continuous soft constraints are not
     natively supported, this class automatically applies a lightweight Python
@@ -690,10 +702,15 @@ class Molecule:
         force_unpaired = None,
         state_positions=None,
         state_biases=None,
+        reduce_state_space=True,
         NaCl=None,
         parameters="turner2004",
     ):
         self._has_state_biases = state_positions is not None
+
+        if not isinstance(reduce_state_space, (bool, np.bool_)):
+            raise ValueError("reduce_state_space must be a boolean")
+        self._reduce_state_space = bool(reduce_state_space)
 
         if state_positions is None and state_biases is not None:
             raise ValueError(
@@ -760,24 +777,79 @@ class Molecule:
                     "state_biases must contain only finite values"
                 )
 
-        self._states = list(np.ndindex(self._state_biases.shape))
+        if lambdas1d is None:
+            base_lambdas1d = np.zeros(len(str(seq)))
+        else:
+            base_lambdas1d = np.asarray(
+                lambdas1d,
+                dtype=float,
+            ).copy()
+        if base_lambdas1d.ndim != 1:
+            raise ValueError("lambdas1d must be one-dimensional")
+        if len(base_lambdas1d) != len(str(seq)):
+            raise ValueError(
+                "lambdas1d must contain one value per nucleotide"
+            )
+        if not np.all(np.isfinite(base_lambdas1d)):
+            raise ValueError(
+                "lambdas1d must contain only finite values"
+            )
+
+        # The final state variable does not require explicit branching. For
+        # each assignment of the preceding variables, its two biases b0 and b1
+        # are exactly equivalent to a constant b0 and a pairing penalty b1-b0.
+        # This reduces the number of DP ensembles from 2**N to 2**(N-1).
+        if self._state_positions and self._reduce_state_space:
+            explicit_state_positions = self._state_positions[:-1]
+            self._implicit_state_position = self._state_positions[-1]
+            component_shape = (2,) * len(explicit_state_positions)
+        else:
+            explicit_state_positions = self._state_positions
+            self._implicit_state_position = None
+            component_shape = (2,) * len(explicit_state_positions)
+
+        self._states = list(np.ndindex(component_shape))
+        self._component_biases = np.empty(component_shape, dtype=float)
         self._dp_molecules = []
 
         for state in self._states:
             state_paired = [
                 position
-                for position, value in zip(self._state_positions, state)
+                for position, value in zip(
+                    explicit_state_positions,
+                    state,
+                )
                 if value
             ]
             state_unpaired = [
                 position
-                for position, value in zip(self._state_positions, state)
+                for position, value in zip(
+                    explicit_state_positions,
+                    state,
+                )
                 if not value
             ]
+
+            component_lambdas1d = base_lambdas1d.copy()
+            if self._implicit_state_position is None:
+                component_bias = float(self._state_biases[state])
+            else:
+                unpaired_bias = float(
+                    self._state_biases[state + (0,)]
+                )
+                paired_bias = float(
+                    self._state_biases[state + (1,)]
+                )
+                component_bias = unpaired_bias
+                component_lambdas1d[
+                    self._implicit_state_position
+                ] += paired_bias - unpaired_bias
+
+            self._component_biases[state] = component_bias
             self._dp_molecules.append(
                 _DPMolecule(
                     seq,
-                    lambdas1d=lambdas1d,
+                    lambdas1d=component_lambdas1d,
                     temperature=temperature,
                     NaCl=NaCl,
                     force_paired=base_force_paired + state_paired,
@@ -788,7 +860,7 @@ class Molecule:
 
         first_molecule = self._dp_molecules[0]
         self._seq = first_molecule._seq
-        self._lambdas1d = first_molecule._lambdas1d.copy()
+        self._lambdas1d = base_lambdas1d
         self._temperature = first_molecule._temperature
         self._salt = first_molecule._salt
         self._parameters = first_molecule._parameters
@@ -824,6 +896,7 @@ class Molecule:
             force_unpaired=force_unpaired,
             state_positions=state_positions,
             state_biases=state_biases,
+            reduce_state_space=self._reduce_state_space,
             NaCl=self._salt,
             parameters=self._parameters,
         )
@@ -837,7 +910,7 @@ class Molecule:
             for molecule in self._dp_molecules
         ])
         biased_free_energies = (
-            free_energies + self._state_biases.ravel()
+            free_energies + self._component_biases.ravel()
         )
 
         finite = np.isfinite(biased_free_energies)
@@ -866,7 +939,7 @@ class Molecule:
         energies = []
         for molecule, bias in zip(
             self._dp_molecules,
-            self._state_biases.ravel(),
+            self._component_biases.ravel(),
         ):
             structure, energy = molecule.mfe()
             structures.append(structure)
@@ -898,13 +971,12 @@ class Molecule:
         energy : float
             Exact free energy (kcal/mol).
         """
-        # Preserve the original direct MFE path when no state mixture is
-        # present.
+        # A single DP component needs no mixture-level search.
         if len(self._dp_molecules) == 1:
             structure, energy = self._dp_molecules[0].mfe()
             return (
                 structure,
-                float(energy + self._state_biases.item()),
+                float(energy + self._component_biases.item()),
             )
 
         structures, energies = self._component_mfes()
@@ -987,8 +1059,40 @@ class Molecule:
                 "This molecule was not initialized with state biases"
             )
 
-        _, probabilities = self._component_probabilities()
-        return probabilities.reshape(self._state_biases.shape).copy()
+        _, component_probabilities = self._component_probabilities()
+        if self._implicit_state_position is None:
+            return component_probabilities.reshape(
+                self._state_biases.shape
+            ).copy()
+
+        probabilities = np.zeros_like(self._state_biases)
+
+        for state, component_probability, molecule in zip(
+            self._states,
+            component_probabilities,
+            self._dp_molecules,
+        ):
+            if component_probability == 0.0:
+                continue
+            paired_probability = float(np.sum(
+                molecule.base_pairing_probability()[
+                    self._implicit_state_position,
+                    :,
+                ]
+            ))
+            paired_probability = float(np.clip(
+                paired_probability,
+                0.0,
+                1.0,
+            ))
+            probabilities[state + (0,)] = (
+                component_probability * (1.0 - paired_probability)
+            )
+            probabilities[state + (1,)] = (
+                component_probability * paired_probability
+            )
+
+        return probabilities
 
     def suboptimal_structures(self, delta):
         """
@@ -1012,13 +1116,12 @@ class Molecule:
         list of (str, float)
             List of (structure, energy) pairs sorted by increasing exact energy.
         """
-        # Preserve the original direct enumeration path when no state mixture is
-        # present.
+        # A single DP component needs no mixture-level enumeration.
         if len(self._dp_molecules) == 1:
             suboptimal = self._dp_molecules[0].suboptimal_structures(
                 delta
             )
-            bias = float(self._state_biases.item())
+            bias = float(self._component_biases.item())
             if bias == 0.0:
                 return suboptimal
             return [
@@ -1037,7 +1140,7 @@ class Molecule:
 
         for molecule, bias, component_mfe_energy in zip(
             self._dp_molecules,
-            self._state_biases.ravel(),
+            self._component_biases.ravel(),
             component_mfe_energies,
         ):
             if not np.isfinite(component_mfe_energy):
@@ -1093,8 +1196,7 @@ class Molecule:
         if number <= 0:
             raise ValueError("number must be a positive integer")
 
-        # Preserve the original direct sampling path when no state mixture is
-        # present.
+        # A single DP component needs no mixture-level sampling.
         if len(self._dp_molecules) == 1:
             return self._dp_molecules[0].sample(number)
 
