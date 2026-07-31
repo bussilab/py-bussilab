@@ -162,6 +162,7 @@ def _apply_residual_callback(fc, residuals, kT):
     """
     residuals = np.asarray(residuals, dtype=float)
 
+    # do not add callback if all residuals are negligible
     if np.max(np.abs(residuals)) <= 10 * sys.float_info.epsilon:
         return None
 
@@ -195,6 +196,8 @@ def _apply_constraint(fc, sequence, lambdas, kT):
 
     # Vanilla ViennaRNA has a bug that makes subopt with negative sc_add_up problematic.
     # Avoid negative sc_add_up values by excluding positive lambdas from the 1D scheme.
+    # Technically, this is only needed for using subopt. However, to keep the code simpler
+    # we apply the rule in general for build fold compounds.
 
     if not _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
         budget = 0.0
