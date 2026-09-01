@@ -1,5 +1,7 @@
 import unittest
 import numpy as np
+import subprocess
+import sys
 
 try:
     import RNA
@@ -288,13 +290,44 @@ class TestRNA2D(unittest.TestCase):
 
     def test_parameter_sets(self):
 
-        for p in (
-            "turner1999",
-            "turner2004",
-            "andronescu2007",
-            "langdon2018",
-        ):
-            Molecule(self.seq, parameters=p).mfe()
+        parameter_loaders = {
+            "turner1999": "params_load_RNA_Turner1999",
+            "turner2004": "params_load_RNA_Turner2004",
+            "andronescu2007": "params_load_RNA_Andronescu2007",
+            "langdon2018": "params_load_RNA_Langdon2018",
+        }
+
+        for parameters, loader in parameter_loaders.items():
+            # The first parameter load in a fresh process is reliable even in
+            # ViennaRNA 2.7.2. It provides an independent reference that makes
+            # this test sensitive to stale cache reuse between loads here.
+            code = (
+                "import RNA; "
+                f"RNA.{loader}(); "
+                "md=RNA.md(); md.uniq_ML=1; "
+                f"fc=RNA.fold_compound({self.seq!r}, md); "
+                "print(fc.mfe()[1], fc.pf()[1])"
+            )
+            output = subprocess.check_output(
+                [sys.executable, "-c", code],
+                text=True,
+            )
+            reference_mfe, reference_free_energy = map(
+                float,
+                output.splitlines()[-1].split(),
+            )
+
+            molecule = Molecule(self.seq, parameters=parameters)
+            self.assertAlmostEqual(
+                molecule.mfe()[1],
+                reference_mfe,
+                places=6,
+            )
+            self.assertAlmostEqual(
+                molecule.total_free_energy(),
+                reference_free_energy,
+                places=6,
+            )
 
     def test_hard_constraints(self):
 

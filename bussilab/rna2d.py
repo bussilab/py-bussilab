@@ -151,6 +151,24 @@ def _resolve_default_parameters(
         defaults["parameters"] if parameters is None else parameters,
     )
 
+def _workaround_vienna_272_params_cache():
+    """
+    Invalidate ViennaRNA 2.7.2's stale energy-parameter cache.
+
+    ViennaRNA 2.7.2 may reuse the parameter object created after the first
+    ``params_load`` call even after another parameter set is loaded. Creating
+    partition-function parameters with a slightly different model temperature
+    invalidates that cache. Call this while holding
+    ``_THERMODYNAMIC_PARAMETERS_LOCK``, immediately after loading parameters.
+
+    See https://github.com/ViennaRNA/ViennaRNA/issues/284.
+    """
+    if RNA is None or str(getattr(RNA, "__version__", "")) != "2.7.2":
+        return
+    md = RNA.md()
+    md.temperature += 0.001
+    RNA.fold_compound("AAAA", md).pf()
+
 def _test_native_continuous_support():
     """
     Return whether static ViennaRNA soft constraints preserve fractional
@@ -161,6 +179,7 @@ def _test_native_continuous_support():
     with _THERMODYNAMIC_PARAMETERS_LOCK:
         # make sure we use turner2004 parameters
         RNA.params_load_RNA_Turner2004()
+        _workaround_vienna_272_params_cache()
         fc=RNA.fold_compound(seq)
 
     F0=fc.pf()[1]
@@ -377,6 +396,7 @@ class _DPMolecule:
                     f"Could not load thermodynamic parameters "
                     f"{self._parameters!r}"
                 )
+            _workaround_vienna_272_params_cache()
             return RNA.fold_compound(self._seq, self._make_md_params())
 
     def _ensure_fc_rounded(self):
