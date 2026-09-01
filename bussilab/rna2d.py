@@ -70,6 +70,87 @@ if RNA is not None:
 else:
     _THERMODYNAMIC_PARAMETERS = {}
 
+_INITIAL_DEFAULT_PARAMETERS = {
+    "temperature": 37 + _CELSIUS_TO_KELVIN,
+    "no_lonely_pair": False,
+    "NaCl": None,
+    "parameters": "turner2004",
+}
+
+# Module defaults used by subsequently constructed molecules. Molecules copy
+# these values at construction time and are unaffected by later changes.
+_default_parameters = _INITIAL_DEFAULT_PARAMETERS.copy()
+_DEFAULT_PARAMETERS_LOCK = threading.Lock()
+
+def set_default_parameters(
+    *,
+    temperature=None,
+    no_lonely_pair=None,
+    NaCl=None,
+    parameters=None,
+):
+    """
+    Update the default thermodynamic parameters for new molecules.
+
+    Parameters set to ``None`` are left unchanged. Existing molecules are not
+    affected. Use :func:`reset_default_parameters` to restore all original
+    defaults, including ViennaRNA's default salt concentration.
+    """
+    updates = {}
+
+    if temperature is not None:
+        if not temperature >= 0.0:
+            raise ValueError(
+                f"Temperature {temperature} should be positive"
+            )
+        updates["temperature"] = temperature
+
+    if no_lonely_pair is not None:
+        if not isinstance(no_lonely_pair, (bool, np.bool_)):
+            raise ValueError("no_lonely_pair must be a boolean")
+        updates["no_lonely_pair"] = bool(no_lonely_pair)
+
+    if NaCl is not None:
+        if not NaCl >= 0.0:
+            raise ValueError(
+                f"Salt concentration {NaCl} should be positive"
+            )
+        updates["NaCl"] = NaCl
+
+    if parameters is not None:
+        parameters = str(parameters).lower()
+        if parameters not in _THERMODYNAMIC_PARAMETERS:
+            raise ValueError(
+                f"Thermodynamic parameters {parameters} not known"
+            )
+        updates["parameters"] = parameters
+
+    with _DEFAULT_PARAMETERS_LOCK:
+        _default_parameters.update(updates)
+
+def reset_default_parameters():
+    """Restore the original thermodynamic defaults for new molecules."""
+    with _DEFAULT_PARAMETERS_LOCK:
+        _default_parameters.clear()
+        _default_parameters.update(_INITIAL_DEFAULT_PARAMETERS)
+
+def _resolve_default_parameters(
+    temperature,
+    no_lonely_pair,
+    NaCl,
+    parameters,
+):
+    """Resolve ``None`` values against one consistent defaults snapshot."""
+    with _DEFAULT_PARAMETERS_LOCK:
+        defaults = _default_parameters.copy()
+    return (
+        defaults["temperature"] if temperature is None else temperature,
+        defaults["no_lonely_pair"]
+        if no_lonely_pair is None else no_lonely_pair,
+        defaults["NaCl"] if NaCl is None else NaCl,
+        defaults["parameters"] if parameters is None else parameters,
+    )
+
 def _test_native_continuous_support():
     """
     Return whether static ViennaRNA soft constraints preserve fractional
@@ -379,13 +460,14 @@ class _DPMolecule:
         self,
         seq: str,
         *,
-        lambdas1d = None,
-        temperature = 37 + _CELSIUS_TO_KELVIN,
-        force_paired = None,
-        force_unpaired = None,
-        no_lonely_pair = False,
-        NaCl = None,
-        parameters = "turner2004"):
+        lambdas1d,
+        temperature,
+        force_paired,
+        force_unpaired,
+        no_lonely_pair,
+        NaCl,
+        parameters,
+    ):
 
         _require_viennarna()
 
@@ -753,18 +835,21 @@ class Molecule:
         from 2**N to 2**(N-1). If False, use one hard-conditioned ensemble for
         every state.
 
-    no_lonely_pair : bool, default=False
+    no_lonely_pair : bool or None, default=None
         If True, exclude structures containing isolated base pairs using
-        ViennaRNA's `noLP` model option.
+        ViennaRNA's `noLP` model option. If None, use the current module
+        default.
 
-    T : float, default=310.15
-        Temperature in kelvin.
+    temperature : float or None, default=None
+        Temperature in kelvin. If None, use the current module default, which
+        is initially 310.15 K.
 
     NaCl : float or None, default=None
-        Sodium concentration (M). If None, ViennaRNA's default value is used.
+        Sodium concentration (M). If None, use the current module default,
+        which initially selects ViennaRNA's default value.
 
-    parameters : {"turner1999", "turner2004", "andronescu2007", "langdon2018"}
-        Thermodynamic parameter set.
+    parameters : {"turner1999", "turner2004", "andronescu2007", "langdon2018"} or None
+        Thermodynamic parameter set. If None, use the current module default.
 
     Notes
     -----
@@ -786,16 +871,28 @@ class Molecule:
         seq: str,
         *,
         lambdas1d=None,
-        temperature=37 + _CELSIUS_TO_KELVIN,
+        temperature=None,
         force_paired = None,
         force_unpaired = None,
         state_positions=None,
         state_biases=None,
         reduce_state_space=True,
-        no_lonely_pair=False,
+        no_lonely_pair=None,
         NaCl=None,
-        parameters="turner2004",
+        parameters=None,
     ):
+        (
+            temperature,
+            no_lonely_pair,
+            NaCl,
+            parameters,
+        ) = _resolve_default_parameters(
+            temperature,
+            no_lonely_pair,
+            NaCl,
+            parameters,
+        )
+
         self._has_state_biases = state_positions is not None
 
         if not isinstance(reduce_state_space, (bool, np.bool_)):

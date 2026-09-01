@@ -79,6 +79,84 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaises(ValueError):
             Molecule(self.seq, no_lonely_pair="yes")
 
+    def test_default_parameters(self):
+
+        rna2d.reset_default_parameters()
+        original = Molecule(self.seq)
+
+        try:
+            rna2d.set_default_parameters(
+                temperature=298.15,
+                no_lonely_pair=True,
+                NaCl=2.0,
+                parameters="turner1999",
+            )
+
+            inherited = Molecule(self.seq)
+            self.assertEqual(inherited._temperature, 298.15)
+            self.assertTrue(inherited._no_lonely_pair)
+            self.assertEqual(inherited._salt, 2.0)
+            self.assertEqual(inherited._parameters, "turner1999")
+
+            # Existing molecules retain the defaults captured at construction.
+            self.assertEqual(
+                original._temperature,
+                37 + rna2d._CELSIUS_TO_KELVIN,
+            )
+            self.assertFalse(original._no_lonely_pair)
+            self.assertIsNone(original._salt)
+            self.assertEqual(original._parameters, "turner2004")
+
+            explicit = Molecule(
+                self.seq,
+                temperature=305.0,
+                no_lonely_pair=False,
+                NaCl=0.5,
+                parameters="turner2004",
+            )
+            self.assertEqual(explicit._temperature, 305.0)
+            self.assertFalse(explicit._no_lonely_pair)
+            self.assertEqual(explicit._salt, 0.5)
+            self.assertEqual(explicit._parameters, "turner2004")
+
+            # None is consistently a sentinel for retaining/inheriting the
+            # current defaults, including NaCl.
+            defaults_before = rna2d._default_parameters.copy()
+            rna2d.set_default_parameters(
+                temperature=None,
+                no_lonely_pair=None,
+                NaCl=None,
+                parameters=None,
+            )
+            self.assertEqual(
+                rna2d._default_parameters,
+                defaults_before,
+            )
+            self.assertEqual(Molecule(self.seq, NaCl=None)._salt, 2.0)
+
+            # Validation is atomic: no valid values preceding an invalid one
+            # are installed.
+            with self.assertRaises(ValueError):
+                rna2d.set_default_parameters(
+                    temperature=280.0,
+                    no_lonely_pair="yes",
+                )
+            self.assertEqual(
+                rna2d._default_parameters,
+                defaults_before,
+            )
+        finally:
+            rna2d.reset_default_parameters()
+
+        reset = Molecule(self.seq)
+        self.assertEqual(
+            reset._temperature,
+            37 + rna2d._CELSIUS_TO_KELVIN,
+        )
+        self.assertFalse(reset._no_lonely_pair)
+        self.assertIsNone(reset._salt)
+        self.assertEqual(reset._parameters, "turner2004")
+
     def test_no_lonely_pair(self):
 
         default = Molecule(self.seq)
