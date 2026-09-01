@@ -157,6 +157,57 @@ class TestRNA2D(unittest.TestCase):
                 state_biases=np.zeros(2),
             )
 
+        multiple = Molecule(
+            self.seq,
+            state_positions=((0, 1), (7, 8)),
+        )
+        self.assertEqual(
+            multiple._state_position_sets,
+            ((0, 1), (7, 8)),
+        )
+        self.assertEqual(len(multiple._dp_molecules), 4)
+        derivatives = multiple.d_free_energy_d_state_biases()
+        self.assertIsInstance(derivatives, list)
+        self.assertEqual(len(derivatives), 2)
+        for derivative in derivatives:
+            self.assertEqual(derivative.shape, (2, 2))
+            self.assertAlmostEqual(np.sum(derivative), 1.0)
+
+        nested_single = Molecule(
+            self.seq,
+            state_positions=((0, 1),),
+            state_biases=(np.zeros((2, 2)),),
+        )
+        self.assertEqual(nested_single._state_positions, ((0, 1),))
+        self.assertIsInstance(nested_single._state_biases, tuple)
+        self.assertEqual(len(nested_single._state_biases), 1)
+        nested_derivatives = (
+            nested_single.d_free_energy_d_state_biases()
+        )
+        self.assertIsInstance(nested_derivatives, list)
+        self.assertEqual(len(nested_derivatives), 1)
+        self.assertEqual(nested_derivatives[0].shape, (2, 2))
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                state_positions=((0, 1), (1, 2)),
+            )
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                state_positions=((0, 1), (7, 8)),
+                state_biases=(np.zeros((2, 2)),),
+            )
+
+        with self.assertRaises(ValueError):
+            Molecule(
+                self.seq,
+                state_positions=((0, 1), (7, 8)),
+                state_biases=(np.zeros((2, 2)), np.zeros(4)),
+            )
+
     def test_parameter_sets(self):
 
         for p in (
@@ -403,6 +454,145 @@ class TestRNA2D(unittest.TestCase):
             mixture.d_free_energy_d_state_biases(),
             full.d_free_energy_d_state_biases(),
             atol=1e-7,
+        )
+
+    def test_multiple_state_sets(self):
+
+        positions_a = (0, 1)
+        positions_b = (7, 8)
+        biases_a = np.array([
+            [0.0, 0.2],
+            [-0.1, 0.7],
+        ])
+        biases_b = np.array([
+            [0.3, -0.2],
+            [0.4, 0.1],
+        ])
+        lambdas = np.arange(len(self.seq), dtype=float) / 100.0
+
+        separate = Molecule(
+            self.seq,
+            lambdas1d=lambdas,
+            state_positions=(positions_a, positions_b),
+            state_biases=(biases_a, biases_b),
+        )
+        self.assertEqual(len(separate._dp_molecules), 4)
+        for state, component in zip(
+            separate._states,
+            separate._dp_molecules,
+        ):
+            state_a = (state[0],)
+            state_b = (state[1],)
+            expected_lambdas = lambdas.copy()
+            expected_lambdas[positions_a[-1]] += (
+                biases_a[state_a + (1,)]
+                - biases_a[state_a + (0,)]
+            )
+            expected_lambdas[positions_b[-1]] += (
+                biases_b[state_b + (1,)]
+                - biases_b[state_b + (0,)]
+            )
+            np.testing.assert_allclose(
+                component._lambdas1d,
+                expected_lambdas,
+            )
+            self.assertAlmostEqual(
+                separate._component_biases[state],
+                biases_a[state_a + (0,)]
+                + biases_b[state_b + (0,)],
+            )
+
+        separate_full = Molecule(
+            self.seq,
+            lambdas1d=lambdas,
+            state_positions=(positions_a, positions_b),
+            state_biases=(biases_a, biases_b),
+            reduce_state_space=False,
+        )
+        self.assertEqual(len(separate_full._dp_molecules), 16)
+
+        joint_biases = (
+            biases_a[:, :, np.newaxis, np.newaxis]
+            + biases_b[np.newaxis, np.newaxis, :, :]
+        )
+        joint = Molecule(
+            self.seq,
+            lambdas1d=lambdas,
+            state_positions=positions_a + positions_b,
+            state_biases=joint_biases,
+        )
+        self.assertEqual(len(joint._dp_molecules), 8)
+
+        for reference in (separate_full, joint):
+            self.assertAlmostEqual(
+                separate.total_free_energy(),
+                reference.total_free_energy(),
+                places=6,
+            )
+            np.testing.assert_allclose(
+                separate.base_pairing_probability(),
+                reference.base_pairing_probability(),
+                atol=1e-7,
+            )
+            self.assertAlmostEqual(
+                separate.mfe()[1],
+                reference.mfe()[1],
+                places=6,
+            )
+
+        derivatives = separate.d_free_energy_d_state_biases()
+        full_derivatives = (
+            separate_full.d_free_energy_d_state_biases()
+        )
+        self.assertIsInstance(derivatives, list)
+        self.assertEqual(len(derivatives), 2)
+        for derivative, full_derivative in zip(
+            derivatives,
+            full_derivatives,
+        ):
+            self.assertAlmostEqual(np.sum(derivative), 1.0)
+            np.testing.assert_allclose(
+                derivative,
+                full_derivative,
+                atol=1e-7,
+            )
+
+        joint_derivatives = joint.d_free_energy_d_state_biases()
+        np.testing.assert_allclose(
+            derivatives[0],
+            np.sum(joint_derivatives, axis=(2, 3)),
+            atol=1e-7,
+        )
+        np.testing.assert_allclose(
+            derivatives[1],
+            np.sum(joint_derivatives, axis=(0, 1)),
+            atol=1e-7,
+        )
+
+        epsilon = 1e-3
+        index = (1, 0)
+        biases_a_plus = biases_a.copy()
+        biases_a_minus = biases_a.copy()
+        biases_a_plus[index] += epsilon
+        biases_a_minus[index] -= epsilon
+        finite_difference = (
+            Molecule(
+                self.seq,
+                lambdas1d=lambdas,
+                state_positions=(positions_a, positions_b),
+                state_biases=(biases_a_plus, biases_b),
+            ).total_free_energy()
+            - Molecule(
+                self.seq,
+                lambdas1d=lambdas,
+                state_positions=(positions_a, positions_b),
+                state_biases=(biases_a_minus, biases_b),
+            ).total_free_energy()
+        ) / (2.0 * epsilon)
+        self.assertAlmostEqual(
+            derivatives[0][index],
+            finite_difference,
+            delta=2e-4,
         )
 
     def test_biased_state_mixture(self):

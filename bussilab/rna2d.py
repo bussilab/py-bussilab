@@ -462,6 +462,8 @@ class _DPMolecule:
         Return whether a structure satisfies this component's hard constraints.
         """
         return (
+            len(structure) == len(self._seq)
+            and
             all(structure[int(i)] != "." for i in self._force_paired)
             and all(structure[int(i)] == "." for i in self._force_unpaired)
         )
@@ -731,15 +733,19 @@ class Molecule:
     force_unpaired : array-like of int, optional
         Zero-based indices of nucleotides that are required to be unpaired.
 
-    state_positions : array-like of int, optional
-        Zero-based indices defining binary paired/unpaired states. If
+    state_positions : array-like of int or sequence of array-like, optional
+        Zero-based indices defining binary paired/unpaired states. A flat
+        sequence defines one state set. A sequence of sequences defines
+        multiple disjoint state sets whose energy biases are additive. If
         `state_biases` is omitted, every state is assigned zero bias.
 
-    state_biases : array-like, optional
+    state_biases : array-like or sequence of array-like, optional
         Energy biases (kcal/mol) for the states defined by `state_positions`.
-        Its shape must be `(2,) * len(state_positions)`, with index zero denoting
-        an unpaired nucleotide and index one denoting a paired nucleotide. It
-        cannot be provided without `state_positions`.
+        For one state set, its shape must be `(2,) * len(state_positions)`.
+        For multiple sets, provide one tensor per set, with shape
+        `(2,) * len(positions)`. Index zero denotes an unpaired nucleotide and
+        index one a paired nucleotide. It cannot be provided without
+        `state_positions`.
 
     reduce_state_space : bool, default=True
         If True, represent the final selected state position as an equivalent
@@ -762,11 +768,12 @@ class Molecule:
 
     Notes
     -----
-    By default, N selected state positions use 2**(N-1)
-    dynamic-programming ensembles. The final position is represented within
+    By default, a state set containing N positions uses 2**(N-1)
+    dynamic-programming ensembles. For multiple sets of sizes N_k, the number
+    is 2**(sum(N_k)-K). The final position of each set is represented within
     each ensemble by an equivalent constant energy shift and 1D pairing
-    penalty. Set `reduce_state_space=False` to use all 2**N explicitly
-    conditioned ensembles.
+    penalty. Set `reduce_state_space=False` to explicitly condition every
+    selected position.
 
     Default ViennaRNA builds round soft constraints to the nearest 0.01 kcal/mol in
     partition-function calculations. When continuous soft constraints are not
@@ -812,57 +819,153 @@ class Molecule:
         )
 
         if state_positions is None:
-            self._state_positions = ()
-            self._state_biases = np.zeros((), dtype=float)
+            self._state_sets_were_nested = False
+            self._state_position_sets = ()
+            self._state_bias_sets = ()
         else:
-            positions = np.asarray(state_positions)
-            if positions.ndim != 1:
-                raise ValueError("state_positions must be one-dimensional")
-            if (
-                positions.size
-                and not np.issubdtype(positions.dtype, np.integer)
-            ):
-                raise ValueError("state_positions must contain integers")
-
-            self._state_positions = tuple(int(i) for i in positions)
-            if len(set(self._state_positions)) != len(self._state_positions):
-                raise ValueError("state_positions must not contain duplicates")
-            if any(
-                i < 0 or i >= len(str(seq))
-                for i in self._state_positions
-            ):
+            try:
+                raw_positions = list(state_positions)
+            except TypeError as error:
                 raise ValueError(
-                    "state_positions must contain valid nucleotide indices"
-                )
+                    "state_positions must be a sequence"
+                ) from error
+
+            # A flat sequence retains the original single-state-set syntax.
+            # Nesting is detected from state_positions rather than state_biases,
+            # since a two-element bias vector is inherently ambiguous.
+            if all(np.isscalar(value) for value in raw_positions):
+                self._state_sets_were_nested = False
+                raw_position_sets = [raw_positions]
+            else:
+                self._state_sets_were_nested = True
+                raw_position_sets = raw_positions
+
+            position_sets = []
+            for positions in raw_position_sets:
+                positions = np.asarray(positions)
+                if positions.ndim != 1:
+                    raise ValueError(
+                        "each state_positions set must be one-dimensional"
+                    )
+                if (
+                    positions.size
+                    and not np.issubdtype(positions.dtype, np.integer)
+                ):
+                    raise ValueError(
+                        "state_positions must contain integers"
+                    )
+                position_set = tuple(int(i) for i in positions)
+                if len(set(position_set)) != len(position_set):
+                    raise ValueError(
+                        "state_positions sets must not contain duplicates"
+                    )
+                if any(
+                    i < 0 or i >= len(str(seq))
+                    for i in position_set
+                ):
+                    raise ValueError(
+                        "state_positions must contain valid nucleotide indices"
+                    )
+                position_sets.append(position_set)
+
+            all_state_positions = [
+                position
+                for position_set in position_sets
+                for position in position_set
+            ]
+            if len(set(all_state_positions)) != len(all_state_positions):
+                raise ValueError("state_positions sets must be disjoint")
 
             fixed_positions = (
                 set(base_force_paired) | set(base_force_unpaired)
             )
-            if fixed_positions.intersection(self._state_positions):
+            if fixed_positions.intersection(all_state_positions):
                 raise ValueError(
                     "state_positions must not overlap force_paired or "
                     "force_unpaired"
                 )
 
-            expected_shape = (2,) * len(self._state_positions)
+            expected_shapes = [
+                (2,) * len(position_set)
+                for position_set in position_sets
+            ]
             if state_biases is None:
-                self._state_biases = np.zeros(
-                    expected_shape,
-                    dtype=float,
-                )
+                bias_sets = [
+                    np.zeros(shape, dtype=float)
+                    for shape in expected_shapes
+                ]
+            elif len(position_sets) == 1:
+                expected_shape = expected_shapes[0]
+                try:
+                    candidate = np.asarray(state_biases, dtype=float)
+                except (TypeError, ValueError):
+                    candidate = np.asarray([], dtype=float)
+                if candidate.shape == expected_shape:
+                    bias_sets = [candidate.copy()]
+                else:
+                    try:
+                        if len(state_biases) != 1:
+                            raise ValueError
+                        candidate = np.asarray(
+                            state_biases[0],
+                            dtype=float,
+                        )
+                    except (TypeError, ValueError, IndexError) as error:
+                        raise ValueError(
+                            f"state_biases must have shape {expected_shape}"
+                        ) from error
+                    if candidate.shape != expected_shape:
+                        raise ValueError(
+                            f"state_biases must have shape {expected_shape}"
+                        )
+                    bias_sets = [candidate.copy()]
             else:
-                self._state_biases = np.asarray(
+                try:
+                    if len(state_biases) != len(position_sets):
+                        raise ValueError(
+                            "state_biases must contain one tensor per "
+                            "state_positions set"
+                        )
+                except TypeError as error:
+                    raise ValueError(
+                        "state_biases must contain one tensor per "
+                        "state_positions set"
+                    ) from error
+                bias_sets = []
+                for biases, expected_shape in zip(
                     state_biases,
-                    dtype=float,
-                ).copy()
-            if self._state_biases.shape != expected_shape:
-                raise ValueError(
-                    f"state_biases must have shape {expected_shape}"
-                )
-            if not np.all(np.isfinite(self._state_biases)):
+                    expected_shapes,
+                ):
+                    biases = np.asarray(biases, dtype=float)
+                    if biases.shape != expected_shape:
+                        raise ValueError(
+                            "each state_biases tensor must have shape "
+                            f"{expected_shape}"
+                        )
+                    bias_sets.append(biases.copy())
+
+            if any(
+                not np.all(np.isfinite(biases))
+                for biases in bias_sets
+            ):
                 raise ValueError(
                     "state_biases must contain only finite values"
                 )
+
+            self._state_position_sets = tuple(position_sets)
+            self._state_bias_sets = tuple(bias_sets)
+
+        # Preserve the input representation for compatibility. New code uses
+        # the normalized plural attributes above.
+        if not self._state_position_sets:
+            self._state_positions = ()
+            self._state_biases = np.zeros((), dtype=float)
+        elif self._state_sets_were_nested:
+            self._state_positions = self._state_position_sets
+            self._state_biases = self._state_bias_sets
+        else:
+            self._state_positions = self._state_position_sets[0]
+            self._state_biases = self._state_bias_sets[0]
 
         if lambdas1d is None:
             base_lambdas1d = np.zeros(len(str(seq)))
@@ -882,18 +985,44 @@ class Molecule:
                 "lambdas1d must contain only finite values"
             )
 
-        # The final state variable does not require explicit branching. For
-        # each assignment of the preceding variables, its two biases b0 and b1
-        # are exactly equivalent to a constant b0 and a pairing penalty b1-b0.
-        # This reduces the number of DP ensembles from 2**N to 2**(N-1).
-        if self._state_positions and self._reduce_state_space:
-            explicit_state_positions = self._state_positions[:-1]
-            self._implicit_state_position = self._state_positions[-1]
-            component_shape = (2,) * len(explicit_state_positions)
-        else:
-            explicit_state_positions = self._state_positions
-            self._implicit_state_position = None
-            component_shape = (2,) * len(explicit_state_positions)
+        # The final variable of every state set does not require explicit
+        # branching. For each assignment of the preceding variables, its two
+        # biases are equivalent to a constant plus a 1D pairing penalty.
+        explicit_position_sets = []
+        implicit_positions = []
+        state_slices = []
+        offset = 0
+        for position_set in self._state_position_sets:
+            if position_set and self._reduce_state_space:
+                explicit_positions = position_set[:-1]
+                implicit_position = position_set[-1]
+            else:
+                explicit_positions = position_set
+                implicit_position = None
+            explicit_position_sets.append(explicit_positions)
+            implicit_positions.append(implicit_position)
+            state_slices.append(slice(
+                offset,
+                offset + len(explicit_positions),
+            ))
+            offset += len(explicit_positions)
+
+        self._explicit_state_position_sets = tuple(explicit_position_sets)
+        self._implicit_state_positions = tuple(implicit_positions)
+        self._state_slices = tuple(state_slices)
+        explicit_state_positions = tuple(
+            position
+            for position_set in explicit_position_sets
+            for position in position_set
+        )
+        component_shape = (2,) * len(explicit_state_positions)
+
+        # Preserve the legacy singular attribute for one state set.
+        self._implicit_state_position = (
+            implicit_positions[0]
+            if len(implicit_positions) == 1
+            else None
+        )
 
         self._states = list(np.ndindex(component_shape))
         self._component_biases = np.empty(component_shape, dtype=float)
@@ -918,19 +1047,22 @@ class Molecule:
             ]
 
             component_lambdas1d = base_lambdas1d.copy()
-            if self._implicit_state_position is None:
-                component_bias = float(self._state_biases[state])
-            else:
-                unpaired_bias = float(
-                    self._state_biases[state + (0,)]
-                )
-                paired_bias = float(
-                    self._state_biases[state + (1,)]
-                )
-                component_bias = unpaired_bias
-                component_lambdas1d[
-                    self._implicit_state_position
-                ] += paired_bias - unpaired_bias
+            component_bias = 0.0
+            for biases, state_slice, implicit_position in zip(
+                self._state_bias_sets,
+                self._state_slices,
+                self._implicit_state_positions,
+            ):
+                set_state = state[state_slice]
+                if implicit_position is None:
+                    component_bias += float(biases[set_state])
+                else:
+                    unpaired_bias = float(biases[set_state + (0,)])
+                    paired_bias = float(biases[set_state + (1,)])
+                    component_bias += unpaired_bias
+                    component_lambdas1d[implicit_position] += (
+                        paired_bias - unpaired_bias
+                    )
 
             self._component_biases[state] = component_bias
             self._dp_molecules.append(
@@ -967,15 +1099,32 @@ class Molecule:
             return self
 
         force_unpaired = self._force_unpaired + (position,)
-        state_positions = self._state_positions
-        state_biases = self._state_biases
+        state_position_sets = list(self._state_position_sets)
+        state_bias_sets = list(self._state_bias_sets)
 
-        if position in state_positions:
-            axis = state_positions.index(position)
-            state_positions = (
-                state_positions[:axis] + state_positions[axis + 1:]
+        for set_index, position_set in enumerate(state_position_sets):
+            if position not in position_set:
+                continue
+            axis = position_set.index(position)
+            state_position_sets[set_index] = (
+                position_set[:axis] + position_set[axis + 1:]
             )
-            state_biases = np.take(state_biases, 0, axis=axis)
+            state_bias_sets[set_index] = np.take(
+                state_bias_sets[set_index],
+                0,
+                axis=axis,
+            )
+            break
+
+        if not state_position_sets:
+            state_positions = None
+            state_biases = None
+        elif not self._state_sets_were_nested:
+            state_positions = state_position_sets[0]
+            state_biases = state_bias_sets[0]
+        else:
+            state_positions = state_position_sets
+            state_biases = state_bias_sets
 
         return Molecule(
             self._seq,
@@ -1136,8 +1285,10 @@ class Molecule:
 
         Returns
         -------
-        ndarray
-            Array with the same shape as `state_biases`.
+        ndarray or list of ndarray
+            With the flat, single-set `state_positions` syntax, an array with
+            the same shape as `state_biases`. With the list-of-sets syntax, one
+            array per set, including when the list contains only one set.
 
         Raises
         ------
@@ -1150,12 +1301,10 @@ class Molecule:
             )
 
         _, component_probabilities = self._component_probabilities()
-        if self._implicit_state_position is None:
-            return component_probabilities.reshape(
-                self._state_biases.shape
-            ).copy()
-
-        probabilities = np.zeros_like(self._state_biases)
+        probability_sets = [
+            np.zeros_like(biases)
+            for biases in self._state_bias_sets
+        ]
 
         for state, component_probability, molecule in zip(
             self._states,
@@ -1164,25 +1313,42 @@ class Molecule:
         ):
             if component_probability == 0.0:
                 continue
-            paired_probability = float(np.sum(
-                molecule.base_pairing_probability()[
-                    self._implicit_state_position,
-                    :,
-                ]
-            ))
-            paired_probability = float(np.clip(
-                paired_probability,
-                0.0,
-                1.0,
-            ))
-            probabilities[state + (0,)] = (
-                component_probability * (1.0 - paired_probability)
-            )
-            probabilities[state + (1,)] = (
-                component_probability * paired_probability
-            )
+            if any(
+                position is not None
+                for position in self._implicit_state_positions
+            ):
+                pairing_probabilities = np.sum(
+                    molecule.base_pairing_probability(),
+                    axis=1,
+                )
+            else:
+                pairing_probabilities = None
 
-        return probabilities
+            for probabilities, state_slice, implicit_position in zip(
+                probability_sets,
+                self._state_slices,
+                self._implicit_state_positions,
+            ):
+                set_state = state[state_slice]
+                if implicit_position is None:
+                    probabilities[set_state] += component_probability
+                    continue
+
+                paired_probability = float(np.clip(
+                    pairing_probabilities[implicit_position],
+                    0.0,
+                    1.0,
+                ))
+                probabilities[set_state + (0,)] += (
+                    component_probability * (1.0 - paired_probability)
+                )
+                probabilities[set_state + (1,)] += (
+                    component_probability * paired_probability
+                )
+
+        if not self._state_sets_were_nested:
+            return probability_sets[0]
+        return probability_sets
 
     def suboptimal_structures(self, delta):
         """
