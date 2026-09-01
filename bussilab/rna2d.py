@@ -280,6 +280,7 @@ class _DPMolecule:
         """
         md = RNA.md()
         md.uniq_ML = 1
+        md.noLP = int(self._no_lonely_pair)
         md.temperature = self._temperature - _CELSIUS_TO_KELVIN
         if self._salt is not None:
             md.salt = self._salt
@@ -382,6 +383,7 @@ class _DPMolecule:
         temperature = 37 + _CELSIUS_TO_KELVIN,
         force_paired = None,
         force_unpaired = None,
+        no_lonely_pair = False,
         NaCl = None,
         parameters = "turner2004"):
 
@@ -398,6 +400,10 @@ class _DPMolecule:
 
         if any(base not in "ACGU" for base in self._seq):
             raise ValueError("seq must contain only A, C, G, and U")
+
+        if not isinstance(no_lonely_pair, (bool, np.bool_)):
+            raise ValueError("no_lonely_pair must be a boolean")
+        self._no_lonely_pair = bool(no_lonely_pair)
 
         self._temperature = temperature
 
@@ -741,6 +747,10 @@ class Molecule:
         from 2**N to 2**(N-1). If False, use one hard-conditioned ensemble for
         every state.
 
+    no_lonely_pair : bool, default=False
+        If True, exclude structures containing isolated base pairs using
+        ViennaRNA's `noLP` model option.
+
     T : float, default=310.15
         Temperature in kelvin.
 
@@ -775,6 +785,7 @@ class Molecule:
         state_positions=None,
         state_biases=None,
         reduce_state_space=True,
+        no_lonely_pair=False,
         NaCl=None,
         parameters="turner2004",
     ):
@@ -783,6 +794,10 @@ class Molecule:
         if not isinstance(reduce_state_space, (bool, np.bool_)):
             raise ValueError("reduce_state_space must be a boolean")
         self._reduce_state_space = bool(reduce_state_space)
+
+        if not isinstance(no_lonely_pair, (bool, np.bool_)):
+            raise ValueError("no_lonely_pair must be a boolean")
+        self._no_lonely_pair = bool(no_lonely_pair)
 
         if state_positions is None and state_biases is not None:
             raise ValueError(
@@ -926,6 +941,7 @@ class Molecule:
                     NaCl=NaCl,
                     force_paired=base_force_paired + state_paired,
                     force_unpaired=base_force_unpaired + state_unpaired,
+                    no_lonely_pair=self._no_lonely_pair,
                     parameters=parameters,
                 )
             )
@@ -936,6 +952,7 @@ class Molecule:
         self._temperature = first_molecule._temperature
         self._salt = first_molecule._salt
         self._parameters = first_molecule._parameters
+        self._no_lonely_pair = first_molecule._no_lonely_pair
         self._force_paired = tuple(base_force_paired)
         self._force_unpaired = tuple(base_force_unpaired)
 
@@ -969,6 +986,7 @@ class Molecule:
             state_positions=state_positions,
             state_biases=state_biases,
             reduce_state_space=self._reduce_state_space,
+            no_lonely_pair=self._no_lonely_pair,
             NaCl=self._salt,
             parameters=self._parameters,
         )

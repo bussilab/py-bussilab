@@ -76,6 +76,34 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaises(ValueError):
             Molecule(self.seq, parameters="foo")
 
+        with self.assertRaises(ValueError):
+            Molecule(self.seq, no_lonely_pair="yes")
+
+    def test_no_lonely_pair(self):
+
+        default = Molecule(self.seq)
+        no_lonely_pair = Molecule(
+            self.seq,
+            state_positions=(0, 1),
+            no_lonely_pair=True,
+        )
+
+        self.assertEqual(
+            default._dp_molecules[0]._make_md_params().noLP,
+            0,
+        )
+        self.assertTrue(all(
+            component._make_md_params().noLP == 1
+            for component in no_lonely_pair._dp_molecules
+        ))
+
+        conditioned = no_lonely_pair._condition_unpaired(2)
+        self.assertTrue(conditioned._no_lonely_pair)
+        self.assertTrue(all(
+            component._make_md_params().noLP == 1
+            for component in conditioned._dp_molecules
+        ))
+
     def test_state_mixture_constructor(self):
 
         unbiased = Molecule(self.seq, state_positions=(0,))
