@@ -48,6 +48,116 @@ class TestRNA2D(unittest.TestCase):
     def setUp(self):
         self.seq = "GGGAAACCC"
 
+    def test_sample_to_numpy(self):
+
+        structures = [
+            "((..))",
+            "......",
+            "((..))",
+            "(....)",
+        ]
+        states, logweights = rna2d.sample_to_numpy(structures)
+
+        np.testing.assert_array_equal(states, np.array([
+            [5, 4, -1, -1, 1, 0],
+            [-1, -1, -1, -1, -1, -1],
+            [5, -1, -1, -1, -1, 0],
+        ], dtype=np.int16))
+        self.assertEqual(states.dtype, np.dtype(np.int16))
+        np.testing.assert_allclose(
+            np.exp(logweights),
+            [0.5, 0.25, 0.25],
+        )
+        self.assertAlmostEqual(np.sum(np.exp(logweights)), 1.0)
+
+        vienna_table = np.concatenate((
+            [states.shape[1]],
+            states[0] + 1,
+        ))
+        np.testing.assert_array_equal(
+            vienna_table,
+            np.asarray(RNA.ptable(structures[0])),
+        )
+
+        repeated_states, repeated_logweights = rna2d.sample_to_numpy(
+            structures,
+            deduplicate=False,
+        )
+        self.assertEqual(repeated_states.shape, (4, 6))
+        np.testing.assert_array_equal(
+            repeated_states[0],
+            repeated_states[2],
+        )
+        np.testing.assert_allclose(
+            np.exp(repeated_logweights),
+            np.full(4, 0.25),
+        )
+
+        weighted = [
+            ("((..))", np.log(2.0)),
+            ("......", np.log(3.0)),
+            ("((..))", np.log(4.0)),
+        ]
+        weighted_states, weighted_logweights = rna2d.sample_to_numpy(
+            weighted
+        )
+        self.assertEqual(weighted_states.shape, (2, 6))
+        np.testing.assert_allclose(
+            np.exp(weighted_logweights),
+            [2.0 / 3.0, 1.0 / 3.0],
+        )
+
+        with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy([])
+        with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy(["......", ("......", 0.0)])
+        with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy([("......", np.inf)])
+        with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy([".....", "......"])
+        with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy(["((...)"])
+        with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy(["[....]"])
+        with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy(["......"], deduplicate="yes")
+
+    def test_suboptimal_to_numpy(self):
+
+        suboptimal = [
+            ("((..))", 0.0),
+            ("......", np.log(2.0)),
+        ]
+        states, logweights = rna2d.suboptimal_to_numpy(
+            suboptimal,
+            temperature=1.0 / _KB,
+        )
+
+        np.testing.assert_array_equal(states, np.array([
+            [5, 4, -1, -1, 1, 0],
+            [-1, -1, -1, -1, -1, -1],
+        ], dtype=np.int16))
+        np.testing.assert_allclose(
+            np.exp(logweights),
+            [2.0 / 3.0, 1.0 / 3.0],
+        )
+        self.assertAlmostEqual(np.sum(np.exp(logweights)), 1.0)
+
+        with self.assertRaises(ValueError):
+            rna2d.suboptimal_to_numpy([], temperature=310.15)
+        with self.assertRaises(ValueError):
+            rna2d.suboptimal_to_numpy(["......"], temperature=310.15)
+        with self.assertRaises(ValueError):
+            rna2d.suboptimal_to_numpy(
+                [("......", np.nan)],
+                temperature=310.15,
+            )
+        with self.assertRaises(ValueError):
+            rna2d.suboptimal_to_numpy(
+                [("......", 0.0)],
+                temperature=0.0,
+            )
+
     def test_constructor(self):
 
         Molecule(self.seq)

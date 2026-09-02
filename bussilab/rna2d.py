@@ -43,6 +43,204 @@ _KB = 1.98717/1000
 # Shift from Celsius to Kelvin, as obtained from vienna source code
 _CELSIUS_TO_KELVIN = 273.15
 
+def _dotbracket_to_pairtable(structure):
+    """Convert one dot-bracket structure to a zero-based pair table."""
+    if not isinstance(structure, str):
+        raise ValueError("structures must be strings")
+    if len(structure) > np.iinfo(np.int16).max + 1:
+        raise ValueError("structure is too long for an int16 pair table")
+
+    table = np.full(len(structure), -1, dtype=np.int16)
+    stack = []
+    for i, character in enumerate(structure):
+        if character == "(":
+            stack.append(i)
+        elif character == ")":
+            if not stack:
+                raise ValueError("structure contains unmatched parentheses")
+            j = stack.pop()
+            table[i] = j
+            table[j] = i
+        elif character != ".":
+            raise ValueError(
+                "structures must use '.', '(', and ')' dot-bracket symbols"
+            )
+
+    if stack:
+        raise ValueError("structure contains unmatched parentheses")
+    return table
+
+def _structures_to_pairtables(structures):
+    """Convert equally sized dot-bracket structures to pair-table rows."""
+    tables = [_dotbracket_to_pairtable(structure) for structure in structures]
+    length = len(tables[0])
+    if any(len(table) != length for table in tables[1:]):
+        raise ValueError("all structures must have the same length")
+    return np.asarray(tables, dtype=np.int16)
+
+def _normalize_logweights(logweights):
+    """Return finite log weights normalized to unit exponential sum."""
+    logweights = np.asarray(logweights, dtype=float)
+    if not np.all(np.isfinite(logweights)):
+        raise ValueError("log weights must be finite")
+    normalization = np.logaddexp.reduce(logweights)
+    return logweights - normalization
+
+def sample_to_numpy(samples, *, deduplicate=True):
+    """
+    Convert sampled dot-bracket structures to NumPy arrays.
+
+    The input may be either a sequence of structure strings, as returned by
+    ``Molecule.sample(weights=False)``, or a sequence of ``(structure,
+    log_weight)`` pairs, as returned by ``Molecule.sample(weights=True)``.
+    Mixed inputs are rejected.
+
+    Structures are represented by zero-based pair tables: ``states[k, i]`` is
+    the index paired with nucleotide ``i`` in structure ``k``, or ``-1`` when
+    it is unpaired. This is a NumPy-oriented adaptation of ViennaRNA's pair
+    table format. A row ``table`` can be converted to ViennaRNA's convention
+    with ``np.concatenate(([len(table)], table + 1))``: ViennaRNA prepends the
+    sequence length, uses one-based partner indices, and uses zero for an
+    unpaired nucleotide.
+
+    Parameters
+    ----------
+    samples : sequence of str or sequence of (str, float)
+        Unweighted structures or structures with unnormalized log weights.
+
+    deduplicate : bool, default=True
+        If True, merge identical structures. Unweighted occurrences are
+        combined through their counts; supplied log weights are combined using
+        logarithmic addition. If False, retain every occurrence.
+
+    Returns
+    -------
+    states : ndarray of int16, shape (n_structures, sequence_length)
+        Zero-based pair tables, with ``-1`` denoting an unpaired nucleotide.
+
+    logweights : ndarray of float, shape (n_structures,)
+        Normalized log weights, satisfying ``sum(exp(logweights)) == 1`` up to
+        floating-point precision.
+    """
+    if not isinstance(deduplicate, (bool, np.bool_)):
+        raise ValueError("deduplicate must be a boolean")
+
+    samples = list(samples)
+    if not samples:
+        raise ValueError("samples cannot be empty")
+
+    unweighted = all(isinstance(item, str) for item in samples)
+    weighted = all(
+        not isinstance(item, str)
+        and hasattr(item, "__len__")
+        and len(item) == 2
+        and isinstance(item[0], str)
+        for item in samples
+    )
+    if not (unweighted or weighted):
+        raise ValueError(
+            "samples must contain either strings or (structure, log_weight) "
+            "pairs, without mixing the two forms"
+        )
+
+    if unweighted:
+        structures = samples
+        input_logweights = np.zeros(len(samples), dtype=float)
+    else:
+        structures = [item[0] for item in samples]
+        try:
+            input_logweights = np.asarray(
+                [item[1] for item in samples],
+                dtype=float,
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("log weights must be real numbers") from error
+        if input_logweights.ndim != 1:
+            raise ValueError("log weights must be scalar")
+        if not np.all(np.isfinite(input_logweights)):
+            raise ValueError("log weights must be finite")
+
+    if deduplicate:
+        unique_structures = []
+        unique_logweights = []
+        indices = {}
+        for structure, logweight in zip(structures, input_logweights):
+            if structure in indices:
+                index = indices[structure]
+                unique_logweights[index] = np.logaddexp(
+                    unique_logweights[index],
+                    logweight,
+                )
+            else:
+                indices[structure] = len(unique_structures)
+                unique_structures.append(structure)
+                unique_logweights.append(float(logweight))
+        structures = unique_structures
+        input_logweights = np.asarray(unique_logweights, dtype=float)
+
+    states = _structures_to_pairtables(structures)
+    return states, _normalize_logweights(input_logweights)
+
+def suboptimal_to_numpy(suboptimal, temperature):
+    """
+    Convert suboptimal dot-bracket structures and energies to NumPy arrays.
+
+    Structures use the same zero-based pair-table representation documented by
+    :func:`sample_to_numpy`. Energies are converted to Boltzmann log weights at
+    the explicitly supplied temperature.
+
+    Parameters
+    ----------
+    suboptimal : sequence of (str, float)
+        Structure and energy pairs, in kcal/mol, as returned by
+        ``Molecule.suboptimal_structures()``.
+
+    temperature : float
+        Temperature in kelvin.
+
+    Returns
+    -------
+    states : ndarray of int16, shape (n_structures, sequence_length)
+        Zero-based pair tables, with ``-1`` denoting an unpaired nucleotide.
+
+    logweights : ndarray of float, shape (n_structures,)
+        Normalized Boltzmann log weights, satisfying
+        ``sum(exp(logweights)) == 1`` up to floating-point precision.
+    """
+    suboptimal = list(suboptimal)
+    if not suboptimal:
+        raise ValueError("suboptimal cannot be empty")
+    if not all(
+        not isinstance(item, str)
+        and hasattr(item, "__len__")
+        and len(item) == 2
+        and isinstance(item[0], str)
+        for item in suboptimal
+    ):
+        raise ValueError(
+            "suboptimal must contain (structure, energy) pairs"
+        )
+
+    temperature = float(temperature)
+    if not np.isfinite(temperature) or temperature <= 0.0:
+        raise ValueError("temperature must be finite and positive")
+
+    structures = [item[0] for item in suboptimal]
+    try:
+        energies = np.asarray([item[1] for item in suboptimal], dtype=float)
+    except (TypeError, ValueError) as error:
+        raise ValueError("energies must be real numbers") from error
+    if energies.ndim != 1:
+        raise ValueError("energies must be scalar")
+    if not np.all(np.isfinite(energies)):
+        raise ValueError("energies must be finite")
+
+    states = _structures_to_pairtables(structures)
+    logweights = -energies / (_KB * temperature)
+    if not np.all(np.isfinite(logweights)):
+        raise ValueError("energies are too large to convert to log weights")
+    return states, _normalize_logweights(logweights)
+
 # params_load_RNA_* are not thread safe and require a global lock
 _THERMODYNAMIC_PARAMETERS_LOCK = threading.Lock()
 
