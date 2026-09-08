@@ -439,6 +439,33 @@ class TestRNA2D(unittest.TestCase):
                 places=6,
             )
 
+    def test_external_parameter_load_is_detected(self):
+        reference = Molecule(self.seq, parameters="turner2004")
+        reference_mfe = reference.mfe()
+        reference_free_energy = reference.total_free_energy()
+        reference_parameter_file = RNA.last_parameter_file()
+
+        # Change ViennaRNA's global state without going through this module.
+        RNA.params_load_RNA_Turner1999()
+        self.assertNotEqual(
+            RNA.last_parameter_file(),
+            reference_parameter_file,
+        )
+
+        # Construction must notice the external change and reload Turner 2004
+        # even though it is also the last parameter key requested above.
+        restored = Molecule(self.seq, parameters="turner2004")
+        self.assertEqual(restored.mfe()[0], reference_mfe[0])
+        self.assertAlmostEqual(restored.mfe()[1], reference_mfe[1])
+        self.assertAlmostEqual(
+            restored.total_free_energy(),
+            reference_free_energy,
+        )
+        self.assertEqual(
+            RNA.last_parameter_file(),
+            reference_parameter_file,
+        )
+
     def test_hard_constraints(self):
 
         paired = 0

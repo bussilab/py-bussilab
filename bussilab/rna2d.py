@@ -268,6 +268,12 @@ if RNA is not None:
 else:
     _THERMODYNAMIC_PARAMETERS = {}
 
+# Last parameter set loaded here and the marker subsequently reported by
+# ViennaRNA. The latter lets us notice parameter changes made directly through
+# RNA without depending on ViennaRNA's particular names for built-in sets.
+_LAST_THERMODYNAMIC_PARAMETERS = None
+_LAST_THERMODYNAMIC_PARAMETER_FILE = None
+
 _INITIAL_DEFAULT_PARAMETERS = {
     "temperature": 37 + _CELSIUS_TO_KELVIN,
     "no_lonely_pair": False,
@@ -366,6 +372,34 @@ def _workaround_vienna_272_params_cache():
     md = RNA.md()
     md.temperature += 0.001
     RNA.fold_compound("AAAA", md).pf()
+
+def _ensure_thermodynamic_parameters(parameters):
+    """Load a thermodynamic parameter set only when it is not active."""
+    global _LAST_THERMODYNAMIC_PARAMETERS
+    global _LAST_THERMODYNAMIC_PARAMETER_FILE
+
+    current_parameter_file = (
+        RNA.last_parameter_file()
+        if hasattr(RNA, "last_parameter_file")
+        else None
+    )
+    if (
+        parameters == _LAST_THERMODYNAMIC_PARAMETERS
+        and current_parameter_file == _LAST_THERMODYNAMIC_PARAMETER_FILE
+    ):
+        return
+
+    if not _THERMODYNAMIC_PARAMETERS[parameters]():
+        raise RuntimeError(
+            f"Could not load thermodynamic parameters {parameters!r}"
+        )
+    _workaround_vienna_272_params_cache()
+    _LAST_THERMODYNAMIC_PARAMETERS = parameters
+    _LAST_THERMODYNAMIC_PARAMETER_FILE = (
+        RNA.last_parameter_file()
+        if hasattr(RNA, "last_parameter_file")
+        else None
+    )
 
 def _test_native_continuous_support():
     """
@@ -483,6 +517,11 @@ def _apply_constraint(fc, sequence, lambdas, kT):
     energies and free energies.
     """
 
+    # This is by far the common case, and avoids the pairwise O(n**2) scan
+    # below for an unconstrained molecule.
+    if not np.any(lambdas):
+        return 0.0, 0, 0
+
     n = len(lambdas)
 
     # The dangerous factor is approximately
@@ -589,12 +628,7 @@ class _DPMolecule:
         Internal utility to create a fold compound.
         """
         with _THERMODYNAMIC_PARAMETERS_LOCK:
-            if not _THERMODYNAMIC_PARAMETERS[self._parameters]():
-                raise RuntimeError(
-                    f"Could not load thermodynamic parameters "
-                    f"{self._parameters!r}"
-                )
-            _workaround_vienna_272_params_cache()
+            _ensure_thermodynamic_parameters(self._parameters)
             return RNA.fold_compound(self._seq, self._make_md_params())
 
     def _ensure_fc_rounded(self):
