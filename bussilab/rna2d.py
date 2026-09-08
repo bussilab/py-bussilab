@@ -569,6 +569,9 @@ def _apply_constraint(fc, sequence, lambdas, kT):
         fc.sc_add_up(int(i) + 1, -value)
         shift += value
 
+    if not np.any(use_2d):
+        return shift, n_1d, 0
+
     # 2D representation. Add each pair constraint only once, combining
     # contributions from both endpoints.
     lambda_2d = np.where(use_2d, lambdas, 0.0)
@@ -620,25 +623,29 @@ class _DPMolecule:
     Internal dynamic-programming implementation of a single RNA ensemble.
     """
 
-    def _make_md_params(self):
+    def _make_md_params(self, *, compute_bpp=True):
         """
         Internal utility to generate an md params object.
         """
         md = RNA.md()
         md.uniq_ML = 1
+        md.compute_bpp = int(compute_bpp)
         md.noLP = int(self._no_lonely_pair)
         md.temperature = self._temperature - _CELSIUS_TO_KELVIN
         if self._salt is not None:
             md.salt = self._salt
         return md
 
-    def _make_fold_compound(self):
+    def _make_fold_compound(self, *, compute_bpp=True):
         """
         Internal utility to create a fold compound.
         """
         with _THERMODYNAMIC_PARAMETERS_LOCK:
             _ensure_thermodynamic_parameters(self._parameters)
-            return RNA.fold_compound(self._seq, self._make_md_params())
+            return RNA.fold_compound(
+                self._seq,
+                self._make_md_params(compute_bpp=compute_bpp),
+            )
 
     def _ensure_fc_rounded(self):
         """
@@ -652,13 +659,16 @@ class _DPMolecule:
              self._fc_rounded_n_2d_constraints) = _apply_constraint(self._fc_rounded, self._seq, self._lambdas1d_rounded, _KB * self._temperature)
             _apply_hard_constraint(self._fc_rounded, paired=self._force_paired, unpaired=self._force_unpaired)
 
-    def _ensure_fc(self):
+    def _ensure_fc(self, *, compute_bpp=True):
         """
         Internal utility to ensure that the fold compound using continuous lambdas
         has been initialized.
         """
         if self._fc is None:
-            self._fc = self._make_fold_compound()
+            self._fc = self._make_fold_compound(
+                compute_bpp=compute_bpp
+            )
+            self._fc_compute_bpp = compute_bpp
 
             if _SUPPORTS_NATIVE_CONTINUOUS:
                 use_lambdas = self._lambdas1d
@@ -680,13 +690,26 @@ class _DPMolecule:
 
             _apply_hard_constraint(self._fc, paired=self._force_paired, unpaired=self._force_unpaired)
 
-    def _ensure_pf(self):
+    def _ensure_pf(self, *, compute_bpp=True):
         """
-        Internal utility to ensure that the partition function (energy and bpp)
-        have been calculated.
+        Ensure that the partition-function energy and, optionally, BPPs exist.
         """
-        if self._base_pairing_probability is None:
-            self._ensure_fc()
+        if (
+            self._total_free_energy is None
+            or compute_bpp and self._base_pairing_probability is None
+        ):
+            # A fold compound built for a scalar free-energy request omits
+            # ViennaRNA's probability backtracking. Rebuild it if probabilities
+            # are requested later.
+            if (
+                compute_bpp
+                and self._fc is not None
+                and not self._fc_compute_bpp
+            ):
+                self._fc = None
+                self._pf_callback = None
+
+            self._ensure_fc(compute_bpp=compute_bpp)
 
             # ViennaRNA automatically estimates a PF scaling factor. Usually
             # this is sufficient and avoids a separate MFE calculation. If it
@@ -698,9 +721,10 @@ class _DPMolecule:
             # correction for using bp instead of up
             self._total_free_energy += self._fc_shift
 
-            bpp = np.array(self._fc.bpp())[1:,1:]
-            # matrix is made symmetric
-            self._base_pairing_probability = bpp + bpp.T
+            if compute_bpp:
+                bpp = np.array(self._fc.bpp())[1:,1:]
+                # matrix is made symmetric
+                self._base_pairing_probability = bpp + bpp.T
 
     def _ensure_rounded_pf(self):
         """
@@ -789,6 +813,7 @@ class _DPMolecule:
         self._fc_rounded_pf = False
         self._rounded_total_free_energy = None
         self._fc = None
+        self._fc_compute_bpp = None
         self._fc_shift = 0.0
 
         self._mfe_energy = None
@@ -833,7 +858,11 @@ class _DPMolecule:
             if subopt_range == 0:
                 self._mfe_structure , self._mfe_energy = self._fc_rounded.mfe()
                 # correction for rounding
-                self._mfe_energy += _correct_rounding_energy(self._mfe_structure,self._lambdas1d_residuals)
+                if self._lambdas1d_residuals_range != 0.0:
+                    self._mfe_energy += _correct_rounding_energy(
+                        self._mfe_structure,
+                        self._lambdas1d_residuals,
+                    )
             else:
                 subopt = self._fc_rounded.subopt(subopt_range)
                 energies=[
@@ -872,7 +901,7 @@ class _DPMolecule:
             Ensemble free energy (kcal/mol) corresponding to the exact continuous
             pairing penalties.
         """
-        self._ensure_pf()
+        self._ensure_pf(compute_bpp=False)
         return float(self._total_free_energy)
 
     def suboptimal_structures(self,delta):
@@ -904,7 +933,16 @@ class _DPMolecule:
 
         subopt = self._fc_rounded.subopt(int(delta / _ROUNDING_FACTOR +0.5) +subopt_range)
 
-        energies=[_correct_rounding_energy(s.structure, self._lambdas1d_residuals) + s.energy for s in subopt]
+        if self._lambdas1d_residuals_range == 0.0:
+            energies = [s.energy for s in subopt]
+        else:
+            energies = [
+                _correct_rounding_energy(
+                    s.structure,
+                    self._lambdas1d_residuals,
+                ) + s.energy
+                for s in subopt
+            ]
         index = np.argsort(energies)
         return [
             (subopt[i].structure , float(energies[i] + self._fc_rounded_shift))
@@ -919,6 +957,9 @@ class _DPMolecule:
         self._ensure_rounded_pf()
 
         structures = self._fc_rounded.pbacktrack(number)
+        if self._lambdas1d_residuals_range == 0.0:
+            return [(structure, 0.0) for structure in structures]
+
         inverse_kT = 1.0 / (_KB * self._temperature)
 
         return [
@@ -1028,7 +1069,7 @@ class _DPMolecule:
         one ensemble, but generally differs between components and is therefore
         required when their samples are combined.
         """
-        self._ensure_pf()
+        self._ensure_pf(compute_bpp=False)
         self._ensure_rounded_pf()
         inverse_kT = 1.0 / (_KB * self._temperature)
         return float(
@@ -1589,9 +1630,18 @@ class Molecule:
             Symmetric NxN matrix whose element (i,j) is the equilibrium
             probability that nucleotides i and j form a base pair.
         """
+        # Compute BPPs before mixture weights: a BPP calculation also produces
+        # the component free energy, while doing this in the opposite order
+        # would require rebuilding each PF without probability backtracking.
+        for molecule in self._dp_molecules:
+            molecule._ensure_pf(compute_bpp=True)
+
+        if len(self._dp_molecules) == 1:
+            return self._dp_molecules[0]._base_pairing_probability.copy()
+
         _, probabilities = self._component_probabilities()
         matrix = np.zeros_like(
-            self._dp_molecules[0].base_pairing_probability()
+            self._dp_molecules[0]._base_pairing_probability
         )
         for probability, molecule in zip(
             probabilities,
@@ -1600,7 +1650,7 @@ class Molecule:
             if probability == 0.0:
                 continue
             matrix += (
-                probability * molecule.base_pairing_probability()
+                probability * molecule._base_pairing_probability
             )
         return matrix
 
@@ -1657,29 +1707,37 @@ class Molecule:
                 "This molecule was not initialized with state biases"
             )
 
+        needs_pairing_probabilities = any(
+            position is not None
+            for position in self._implicit_state_positions
+        )
+        if needs_pairing_probabilities:
+            component_pairing_probabilities = [
+                np.sum(molecule.base_pairing_probability(), axis=1)
+                for molecule in self._dp_molecules
+            ]
+        else:
+            component_pairing_probabilities = [None] * len(
+                self._dp_molecules
+            )
+
         _, component_probabilities = self._component_probabilities()
         probability_sets = [
             np.zeros_like(biases)
             for biases in self._state_bias_sets
         ]
 
-        for state, component_probability, molecule in zip(
+        for (
+            state,
+            component_probability,
+            pairing_probabilities,
+        ) in zip(
             self._states,
             component_probabilities,
-            self._dp_molecules,
+            component_pairing_probabilities,
         ):
             if component_probability == 0.0:
                 continue
-            if any(
-                position is not None
-                for position in self._implicit_state_positions
-            ):
-                pairing_probabilities = np.sum(
-                    molecule.base_pairing_probability(),
-                    axis=1,
-                )
-            else:
-                pairing_probabilities = None
 
             for probabilities, state_slice, implicit_position in zip(
                 probability_sets,

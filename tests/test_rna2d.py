@@ -530,6 +530,28 @@ class TestRNA2D(unittest.TestCase):
     def test_partition_function_vanilla(self):
         self._run_in_vanilla_mode(self.test_partition_function)
 
+    def test_scalar_partition_function_omits_bpp_backtracking(self):
+        molecule = Molecule(self.seq)
+        dp_molecule = molecule._dp_molecules[0]
+
+        free_energy = molecule.total_free_energy()
+        scalar_fc = dp_molecule._fc
+        self.assertFalse(dp_molecule._fc_compute_bpp)
+        self.assertIsNone(dp_molecule._base_pairing_probability)
+
+        bpp = molecule.base_pairing_probability()
+        self.assertTrue(dp_molecule._fc_compute_bpp)
+        self.assertIsNot(dp_molecule._fc, scalar_fc)
+        self.assertEqual(bpp.shape, (len(self.seq), len(self.seq)))
+        self.assertEqual(molecule.total_free_energy(), free_energy)
+
+        molecule = Molecule(self.seq)
+        dp_molecule = molecule._dp_molecules[0]
+        molecule.base_pairing_probability()
+        probability_fc = dp_molecule._fc
+        molecule.total_free_energy()
+        self.assertIs(dp_molecule._fc, probability_fc)
+
     def test_partition_function_rescaling_fallback(self):
 
         class FakeFoldCompound:
@@ -1123,6 +1145,84 @@ class TestRNA2D(unittest.TestCase):
 
         for _, logw in samples:
             self.assertAlmostEqual(logw, 0.0)
+
+    def test_nonzero_rounding_residual_rescoring(self):
+        sequence = "GCGCGCGC"
+        lambdas = np.array([
+            0.004,
+            -0.006,
+            0.013,
+            -0.017,
+            0.021,
+            -0.009,
+            0.007,
+            -0.012,
+        ])
+        molecule = Molecule(sequence, lambdas1d=lambdas)
+        dp_molecule = molecule._dp_molecules[0]
+        self.assertGreater(dp_molecule._lambdas1d_residuals_range, 0.0)
+
+        base_fc = dp_molecule._make_fold_compound()
+        exact_energies = {
+            structure: float(
+                base_fc.eval_structure(structure)
+                + sum(
+                    penalty
+                    for penalty, symbol in zip(lambdas, structure)
+                    if symbol != "."
+                )
+            )
+            for structure in _enumerate_secondary_structures(sequence)
+        }
+
+        mfe_structure, mfe_energy = molecule.mfe()
+        self.assertAlmostEqual(
+            mfe_energy,
+            min(exact_energies.values()),
+            places=6,
+        )
+        self.assertAlmostEqual(
+            mfe_energy,
+            exact_energies[mfe_structure],
+            places=6,
+        )
+
+        delta = 1.0
+        cutoff = min(exact_energies.values()) + delta
+        expected_suboptimal = {
+            structure: energy
+            for structure, energy in exact_energies.items()
+            if energy <= cutoff
+        }
+        actual_suboptimal = dict(
+            molecule.suboptimal_structures(delta)
+        )
+        self.assertEqual(
+            set(actual_suboptimal),
+            set(expected_suboptimal),
+        )
+        for structure, energy in actual_suboptimal.items():
+            self.assertAlmostEqual(
+                energy,
+                expected_suboptimal[structure],
+                places=6,
+            )
+
+        np.random.seed(1977)
+        weighted_samples = molecule.sample(100, weights=True)
+        inverse_kT = 1.0 / (_KB * dp_molecule._temperature)
+        self.assertTrue(any(log_weight != 0.0
+                            for _, log_weight in weighted_samples))
+        for structure, log_weight in weighted_samples:
+            expected_log_weight = -sum(
+                residual
+                for residual, symbol in zip(
+                    dp_molecule._lambdas1d_residuals,
+                    structure,
+                )
+                if symbol != "."
+            ) * inverse_kT
+            self.assertAlmostEqual(log_weight, expected_log_weight)
 
     def test_internal_counters(self):
 
