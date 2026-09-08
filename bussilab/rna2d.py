@@ -606,6 +606,15 @@ def _correct_rounding_energy(structure, dlambdas):
             correction += d
     return float(correction)
 
+def _pf_with_mfe_rescaling_fallback(fc):
+    """Compute a PF, retrying with MFE-based scaling after numeric failure."""
+    free_energy = fc.pf()[1]
+    if not math.isfinite(free_energy) or free_energy >= RNA.INF / 100.0:
+        mfe = fc.mfe()[1]
+        fc.exp_params_rescale(mfe)
+        free_energy = fc.pf()[1]
+    return free_energy
+
 class _DPMolecule:
     """
     Internal dynamic-programming implementation of a single RNA ensemble.
@@ -679,14 +688,13 @@ class _DPMolecule:
         if self._base_pairing_probability is None:
             self._ensure_fc()
 
-            # here we use the native mfe for two reasons:
-            # - our self.mfe() is shifted due to constraints
-            # - its calculation might be slow because of the internal use of subopt
-            # in any case, an approximate mfe calculation is sufficient for this purpose
-            mfe = self._fc.mfe()[1]
-            self._fc.exp_params_rescale(mfe)
-
-            self._total_free_energy = self._fc.pf()[1]
+            # ViennaRNA automatically estimates a PF scaling factor. Usually
+            # this is sufficient and avoids a separate MFE calculation. If it
+            # reports numerical failure, retry with the more robust MFE-based
+            # scaling factor.
+            self._total_free_energy = _pf_with_mfe_rescaling_fallback(
+                self._fc
+            )
             # correction for using bp instead of up
             self._total_free_energy += self._fc_shift
 
@@ -702,9 +710,9 @@ class _DPMolecule:
         """
         if not self._fc_rounded_pf:
             self._ensure_fc_rounded()
-            native_mfe = self._fc_rounded.mfe()[1]
-            self._fc_rounded.exp_params_rescale(native_mfe)
-            self._rounded_total_free_energy = self._fc_rounded.pf()[1]
+            self._rounded_total_free_energy = (
+                _pf_with_mfe_rescaling_fallback(self._fc_rounded)
+            )
             self._rounded_total_free_energy += self._fc_rounded_shift
             self._fc_rounded_pf=True
 

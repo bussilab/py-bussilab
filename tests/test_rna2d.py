@@ -530,6 +530,56 @@ class TestRNA2D(unittest.TestCase):
     def test_partition_function_vanilla(self):
         self._run_in_vanilla_mode(self.test_partition_function)
 
+    def test_partition_function_rescaling_fallback(self):
+
+        class FakeFoldCompound:
+
+            def __init__(self, free_energies):
+                self.free_energies = iter(free_energies)
+                self.mfe_calls = 0
+                self.rescaled_with = []
+
+            def pf(self):
+                return None, next(self.free_energies)
+
+            def mfe(self):
+                self.mfe_calls += 1
+                return None, -3.5
+
+            def exp_params_rescale(self, energy):
+                self.rescaled_with.append(energy)
+
+        fast = FakeFoldCompound([-2.0])
+        self.assertEqual(
+            rna2d._pf_with_mfe_rescaling_fallback(fast),
+            -2.0,
+        )
+        self.assertEqual(fast.mfe_calls, 0)
+        self.assertEqual(fast.rescaled_with, [])
+
+        retry = FakeFoldCompound([RNA.INF / 100.0, -2.0])
+        self.assertEqual(
+            rna2d._pf_with_mfe_rescaling_fallback(retry),
+            -2.0,
+        )
+        self.assertEqual(retry.mfe_calls, 1)
+        self.assertEqual(retry.rescaled_with, [-3.5])
+
+    def test_partition_function_rescaling_fallback_integration(self):
+        sequence = "G" * 300 + "C" * 300
+
+        md = RNA.md()
+        md.uniq_ML = 1
+        unscaled_free_energy = RNA.fold_compound(sequence, md).pf()[1]
+        self.assertGreaterEqual(
+            unscaled_free_energy,
+            RNA.INF / 100.0,
+        )
+
+        free_energy = Molecule(sequence).total_free_energy()
+        self.assertTrue(np.isfinite(free_energy))
+        self.assertLess(free_energy, RNA.INF / 100.0)
+
     def test_free_energy_derivatives(self):
 
         lambdas = np.array(
