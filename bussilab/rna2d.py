@@ -34,6 +34,10 @@ _ROUNDING_FACTOR=0.01
 # next rejection-sampling batch.
 _MAX_ASSUMED_INFLATION = 1.1
 
+# Target maximum size of each byte/boolean matrix used to batch residual
+# corrections for sampled structures.
+_RESIDUAL_CORRECTION_BATCH_BYTES = 8 * 1024 * 1024
+
 # Canonical and wobble pairs, including both sequence orientations.
 _ALLOWED_PAIRS = frozenset(("AU", "UA", "CG", "GC", "GU", "UG"))
 
@@ -619,6 +623,30 @@ def _correct_rounding_energy(structure, dlambdas):
             correction += residual
     return float(correction)
 
+def _correct_rounding_energies(structures, dlambdas):
+    """Compute residual energy corrections for a batch of structures."""
+    number = len(structures)
+    if number == 0:
+        return np.empty(0, dtype=float)
+
+    length = len(dlambdas)
+    rows_per_batch = max(
+        1,
+        _RESIDUAL_CORRECTION_BATCH_BYTES // max(1, length),
+    )
+    corrections = np.empty(number, dtype=float)
+
+    for begin in range(0, number, rows_per_batch):
+        end = min(begin + rows_per_batch, number)
+        encoded = "".join(structures[begin:end]).encode("ascii")
+        paired = (
+            np.frombuffer(encoded, dtype=np.uint8).reshape(-1, length)
+            != ord(".")
+        )
+        corrections[begin:end] = paired @ dlambdas
+
+    return corrections
+
 def _pf_with_mfe_rescaling_fallback(fc):
     """Compute a PF, retrying with MFE-based scaling after numeric failure."""
     free_energy = fc.pf()[1]
@@ -982,18 +1010,17 @@ class _DPMolecule:
             return [(structure, 0.0) for structure in structures]
 
         inverse_kT = 1.0 / (_KB * self._temperature)
+        corrections = _correct_rounding_energies(
+            structures,
+            self._lambdas1d_residuals,
+        )
 
         return [
             (
                 structure,
-                -float(
-                    _correct_rounding_energy(
-                        structure,
-                        self._lambdas1d_residuals,
-                    ) * inverse_kT
-                ),
+                -float(correction * inverse_kT),
             )
-            for structure in structures
+            for structure, correction in zip(structures, corrections)
         ]
 
     def sample(self, number, weights=False):

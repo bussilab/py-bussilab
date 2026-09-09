@@ -1239,6 +1239,40 @@ class TestRNA2D(unittest.TestCase):
             ) * inverse_kT
             self.assertAlmostEqual(log_weight, expected_log_weight)
 
+    def test_batched_rounding_residual_corrections(self):
+        structures = list(_enumerate_secondary_structures("GCGCGCGC"))
+        residuals = np.array([
+            0.004,
+            0.004,
+            0.003,
+            0.003,
+            0.001,
+            0.001,
+            -0.003,
+            -0.002,
+        ])
+        expected = np.array([
+            rna2d._correct_rounding_energy(structure, residuals)
+            for structure in structures
+        ])
+
+        # Force several small chunks so the test covers batch boundaries.
+        original_batch_bytes = (
+            rna2d._RESIDUAL_CORRECTION_BATCH_BYTES
+        )
+        rna2d._RESIDUAL_CORRECTION_BATCH_BYTES = 2 * len(residuals)
+        try:
+            actual = rna2d._correct_rounding_energies(
+                structures,
+                residuals,
+            )
+        finally:
+            rna2d._RESIDUAL_CORRECTION_BATCH_BYTES = (
+                original_batch_bytes
+            )
+
+        np.testing.assert_allclose(actual, expected, atol=1e-15)
+
     def test_evaluate_mixture_with_rounding_residuals(self):
         sequence = "GCGCGCGC"
         lambdas = np.array([
