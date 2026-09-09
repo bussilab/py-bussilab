@@ -1,8 +1,25 @@
 """
-Module containing an RNA secondary-structure model with continuous pairing penalties.
+RNA secondary-structure ensembles built on ViennaRNA.
 
-See `bussilab.rna2d.Molecule()`.
+The module wraps ``RNA.fold_compound`` with a higher-level model that is
+useful when the energy depends on whether particular nucleotides are paired.
+Compared with using ViennaRNA directly, :class:`Molecule` provides continuous
+per-nucleotide pairing penalties without losing sub-centikcal precision,
+arbitrary coupled biases on selected paired/unpaired states, and transparent
+combination of the resulting conditioned ensembles. The same interface then
+provides MFE structures, structure evaluation, partition functions, base-pair
+probabilities, exact free-energy derivatives, Boltzmann sampling, suboptimal
+ensembles, and joint pairing probabilities.
 
+The wrapper also manages thermodynamic parameter sets, caches calculations,
+recovers from partition-function scaling failures, and defaults to disabling
+ViennaRNA's partition-function energy smoothing so that partition functions,
+sampling, MFE, evaluation, and suboptimal structures share one energy model.
+The :func:`sample_to_numpy` and :func:`suboptimal_to_numpy` helpers convert
+structure collections to NumPy pair tables and normalized log weights.
+
+ViennaRNA's Python package is an optional dependency of ``bussilab`` but is
+required when constructing a :class:`Molecule`.
 """
 
 import numpy as np
@@ -1144,23 +1161,32 @@ class _DPMolecule:
 
 class Molecule:
     """
-    RNA secondary-structure model with continuous pairing penalties.
+    Model an RNA secondary-structure ensemble with pairing-dependent energies.
 
-    The class wraps one or more ViennaRNA dynamic-programming ensembles and
-    supports continuous per-nucleotide pairing penalties. Multiple ensembles may
-    be used to assign arbitrary energy biases to the paired/unpaired states of
-    selected nucleotides.
+    ``Molecule`` retains ViennaRNA's nearest-neighbor secondary-structure
+    energy and augments it with continuous one-body pairing penalties and,
+    optionally, arbitrary many-body biases on selected paired/unpaired states.
+    For a structure ``s``, the modeled energy is
 
-    A penalty λᵢ is added whenever nucleotide *i* is paired. Internally, these
-    penalties are automatically represented as an equivalent hybrid combination of
-    unpaired and pair soft constraints. This representation avoids numerical
-    overflows in partition-function calculations while preserving the requested
-    thermodynamic model.
+    ``E(s) = E_ViennaRNA(s) + sum_i lambda_i paired_i(s) + state_bias(s)``,
 
-    Partition-function calculations use the exact continuous penalties. Minimum-
-    free-energy and suboptimal structure prediction use ViennaRNA's rounded soft
-    constraints to generate candidate structures, which are then rescored using the
-    exact continuous penalties.
+    where ``paired_i`` is one when nucleotide *i* is paired and zero otherwise.
+    Positive ``lambda_i`` values disfavor pairing and negative values favor it.
+    A state-bias tensor can express cooperative or non-additive interactions
+    between any chosen nucleotides; multiple tensors contribute additively.
+
+    Internally, pairing penalties are mapped to ViennaRNA soft constraints.
+    State biases are represented exactly as a mixture of dynamic-programming
+    ensembles hard-conditioned on selected nucleotides. Public results are
+    combined across those components, so callers use the same API for an
+    ordinary ensemble and for a biased state mixture.
+
+    Calculations are performed lazily and cached. The class supports MFE
+    prediction, evaluation of a supplied dot-bracket structure, ensemble free
+    energies, base-pair probabilities, derivatives with respect to penalties
+    and state biases, Boltzmann sampling, suboptimal enumeration and coverage,
+    and joint nucleotide-pairing probabilities. Structure energies and state
+    biases are expressed in kcal/mol; temperatures are supplied in kelvin.
 
     Parameters
     ----------
@@ -1224,17 +1250,30 @@ class Molecule:
 
     Notes
     -----
-    By default, a state set containing N positions uses 2**(N-1)
-    dynamic-programming ensembles. For multiple sets of sizes N_k, the number
-    is 2**(sum(N_k)-K). The final position of each set is represented within
-    each ensemble by an equivalent constant energy shift and 1D pairing
-    penalty. Set `reduce_state_space=False` to explicitly condition every
-    selected position.
+    A state set containing N positions normally requires ``2**N`` conditioned
+    dynamic-programming ensembles. By default, the final position of each set
+    is represented by an equivalent constant shift and one-body penalty,
+    reducing the total from ``2**sum(N_k)`` to ``2**(sum(N_k) - K)`` for K
+    non-empty state sets. Consequently, large numbers of state positions can
+    still be expensive even with ``reduce_state_space=True``.
 
-    Default ViennaRNA builds round soft constraints to the nearest 0.01 kcal/mol in
-    partition-function calculations. When continuous soft constraints are not
-    natively supported, this class automatically applies a lightweight Python
-    callback to recover the exact continuous model.
+    Standard ViennaRNA builds round soft-constraint energies to the nearest
+    0.01 kcal/mol. This class corrects that rounding: partition functions use a
+    residual callback, sampling uses rejection or importance reweighting, and
+    MFE and suboptimal candidates are widened and rescored. Therefore the
+    requested continuous penalties are retained even without a patched
+    ViennaRNA build that supports them natively.
+
+    With the default ``pf_smooth=False``, partition-function and discrete
+    structure calculations use compatible ViennaRNA energies. Setting
+    ``pf_smooth=True`` reproduces ViennaRNA's default smoothed Boltzmann
+    factors, but ViennaRNA's MFE, structure-evaluation, and suboptimal routines
+    remain unsmoothed. In that mode, ``suboptimal_coverage`` mixes the two
+    energy conventions and should be interpreted accordingly.
+
+    Hard constraints specify only whether a nucleotide is paired; they do not
+    specify its partner. Structures are pseudoknot-free, as in ViennaRNA's
+    standard single-strand folding grammar.
     """
 
     def __init__(
