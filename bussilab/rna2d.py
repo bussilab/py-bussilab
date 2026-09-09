@@ -281,6 +281,7 @@ _LAST_THERMODYNAMIC_PARAMETER_FILE = None
 _INITIAL_DEFAULT_PARAMETERS = {
     "temperature": 37 + _CELSIUS_TO_KELVIN,
     "no_lonely_pair": False,
+    "pf_smooth": False,
     "NaCl": None,
     "parameters": "turner2004",
 }
@@ -294,6 +295,7 @@ def set_default_parameters(
     *,
     temperature=None,
     no_lonely_pair=None,
+    pf_smooth=None,
     NaCl=None,
     parameters=None,
 ):
@@ -317,6 +319,11 @@ def set_default_parameters(
         if not isinstance(no_lonely_pair, (bool, np.bool_)):
             raise ValueError("no_lonely_pair must be a boolean")
         updates["no_lonely_pair"] = bool(no_lonely_pair)
+
+    if pf_smooth is not None:
+        if not isinstance(pf_smooth, (bool, np.bool_)):
+            raise ValueError("pf_smooth must be a boolean")
+        updates["pf_smooth"] = bool(pf_smooth)
 
     if NaCl is not None:
         if not NaCl >= 0.0:
@@ -345,6 +352,7 @@ def reset_default_parameters():
 def _resolve_default_parameters(
     temperature,
     no_lonely_pair,
+    pf_smooth,
     NaCl,
     parameters,
 ):
@@ -355,6 +363,7 @@ def _resolve_default_parameters(
         defaults["temperature"] if temperature is None else temperature,
         defaults["no_lonely_pair"]
         if no_lonely_pair is None else no_lonely_pair,
+        defaults["pf_smooth"] if pf_smooth is None else pf_smooth,
         defaults["NaCl"] if NaCl is None else NaCl,
         defaults["parameters"] if parameters is None else parameters,
     )
@@ -669,6 +678,7 @@ class _DPMolecule:
         md.uniq_ML = 1
         md.compute_bpp = int(compute_bpp)
         md.noLP = int(self._no_lonely_pair)
+        md.pf_smooth = int(self._pf_smooth)
         md.temperature = self._temperature - _CELSIUS_TO_KELVIN
         if self._salt is not None:
             md.salt = self._salt
@@ -787,6 +797,7 @@ class _DPMolecule:
         force_paired,
         force_unpaired,
         no_lonely_pair,
+        pf_smooth,
         NaCl,
         parameters,
     ):
@@ -808,6 +819,10 @@ class _DPMolecule:
         if not isinstance(no_lonely_pair, (bool, np.bool_)):
             raise ValueError("no_lonely_pair must be a boolean")
         self._no_lonely_pair = bool(no_lonely_pair)
+
+        if not isinstance(pf_smooth, (bool, np.bool_)):
+            raise ValueError("pf_smooth must be a boolean")
+        self._pf_smooth = bool(pf_smooth)
 
         self._temperature = temperature
 
@@ -1189,6 +1204,13 @@ class Molecule:
         ViennaRNA's `noLP` model option. If None, use the current module
         default.
 
+    pf_smooth : bool or None, default=None
+        Whether ViennaRNA should smooth energies in partition-function
+        Boltzmann factors. If None, use the current module default, which is
+        initially False. If True, partition functions and sampling use
+        ViennaRNA's smoothed model, while MFE, evaluation, and suboptimal
+        structures continue to use its unsmoothed energy model.
+
     temperature : float or None, default=None
         Temperature in kelvin. If None, use the current module default, which
         is initially 310.15 K.
@@ -1227,17 +1249,20 @@ class Molecule:
         state_biases=None,
         reduce_state_space=True,
         no_lonely_pair=None,
+        pf_smooth=None,
         NaCl=None,
         parameters=None,
     ):
         (
             temperature,
             no_lonely_pair,
+            pf_smooth,
             NaCl,
             parameters,
         ) = _resolve_default_parameters(
             temperature,
             no_lonely_pair,
+            pf_smooth,
             NaCl,
             parameters,
         )
@@ -1251,6 +1276,10 @@ class Molecule:
         if not isinstance(no_lonely_pair, (bool, np.bool_)):
             raise ValueError("no_lonely_pair must be a boolean")
         self._no_lonely_pair = bool(no_lonely_pair)
+
+        if not isinstance(pf_smooth, (bool, np.bool_)):
+            raise ValueError("pf_smooth must be a boolean")
+        self._pf_smooth = bool(pf_smooth)
 
         if state_positions is None and state_biases is not None:
             raise ValueError(
@@ -1521,6 +1550,7 @@ class Molecule:
                     force_paired=base_force_paired + state_paired,
                     force_unpaired=base_force_unpaired + state_unpaired,
                     no_lonely_pair=self._no_lonely_pair,
+                    pf_smooth=self._pf_smooth,
                     parameters=parameters,
                 )
             )
@@ -1532,6 +1562,7 @@ class Molecule:
         self._salt = first_molecule._salt
         self._parameters = first_molecule._parameters
         self._no_lonely_pair = first_molecule._no_lonely_pair
+        self._pf_smooth = first_molecule._pf_smooth
         self._force_paired = tuple(base_force_paired)
         self._force_unpaired = tuple(base_force_unpaired)
 
@@ -1583,6 +1614,7 @@ class Molecule:
             state_biases=state_biases,
             reduce_state_space=self._reduce_state_space,
             no_lonely_pair=self._no_lonely_pair,
+            pf_smooth=self._pf_smooth,
             NaCl=self._salt,
             parameters=self._parameters,
         )

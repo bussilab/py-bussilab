@@ -191,6 +191,9 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaises(ValueError):
             Molecule(self.seq, no_lonely_pair="yes")
 
+        with self.assertRaises(ValueError):
+            Molecule(self.seq, pf_smooth=1)
+
     def test_default_parameters(self):
 
         rna2d.reset_default_parameters()
@@ -200,6 +203,7 @@ class TestRNA2D(unittest.TestCase):
             rna2d.set_default_parameters(
                 temperature=298.15,
                 no_lonely_pair=True,
+                pf_smooth=True,
                 NaCl=2.0,
                 parameters="turner1999",
             )
@@ -207,6 +211,7 @@ class TestRNA2D(unittest.TestCase):
             inherited = Molecule(self.seq)
             self.assertEqual(inherited._temperature, 298.15)
             self.assertTrue(inherited._no_lonely_pair)
+            self.assertTrue(inherited._pf_smooth)
             self.assertEqual(inherited._salt, 2.0)
             self.assertEqual(inherited._parameters, "turner1999")
 
@@ -216,6 +221,7 @@ class TestRNA2D(unittest.TestCase):
                 37 + rna2d._CELSIUS_TO_KELVIN,
             )
             self.assertFalse(original._no_lonely_pair)
+            self.assertFalse(original._pf_smooth)
             self.assertIsNone(original._salt)
             self.assertEqual(original._parameters, "turner2004")
 
@@ -223,11 +229,13 @@ class TestRNA2D(unittest.TestCase):
                 self.seq,
                 temperature=305.0,
                 no_lonely_pair=False,
+                pf_smooth=False,
                 NaCl=0.5,
                 parameters="turner2004",
             )
             self.assertEqual(explicit._temperature, 305.0)
             self.assertFalse(explicit._no_lonely_pair)
+            self.assertFalse(explicit._pf_smooth)
             self.assertEqual(explicit._salt, 0.5)
             self.assertEqual(explicit._parameters, "turner2004")
 
@@ -237,6 +245,7 @@ class TestRNA2D(unittest.TestCase):
             rna2d.set_default_parameters(
                 temperature=None,
                 no_lonely_pair=None,
+                pf_smooth=None,
                 NaCl=None,
                 parameters=None,
             )
@@ -266,6 +275,7 @@ class TestRNA2D(unittest.TestCase):
             37 + rna2d._CELSIUS_TO_KELVIN,
         )
         self.assertFalse(reset._no_lonely_pair)
+        self.assertFalse(reset._pf_smooth)
         self.assertIsNone(reset._salt)
         self.assertEqual(reset._parameters, "turner2004")
 
@@ -291,6 +301,50 @@ class TestRNA2D(unittest.TestCase):
         self.assertTrue(conditioned._no_lonely_pair)
         self.assertTrue(all(
             component._make_md_params().noLP == 1
+            for component in conditioned._dp_molecules
+        ))
+
+    def test_pf_smooth(self):
+
+        sequence = "GGGAAACCC"
+        energies = []
+
+        for pf_smooth in (False, True):
+            molecule = Molecule(sequence, pf_smooth=pf_smooth)
+            energy = molecule.total_free_energy()
+
+            # Construct the independent reference after Molecule has selected
+            # its parameter set, since ViennaRNA parameter loads are global.
+            md = RNA.md()
+            md.uniq_ML = 1
+            md.pf_smooth = int(pf_smooth)
+            reference = RNA.fold_compound(sequence, md).pf()[1]
+
+            self.assertEqual(molecule._pf_smooth, pf_smooth)
+            self.assertTrue(all(
+                component._make_md_params().pf_smooth == int(pf_smooth)
+                for component in molecule._dp_molecules
+            ))
+            self.assertAlmostEqual(
+                energy,
+                reference,
+                places=6,
+            )
+            energies.append(reference)
+
+        # This sequence makes the test sensitive to the option rather than
+        # merely checking that it is forwarded to ViennaRNA.
+        self.assertNotAlmostEqual(energies[0], energies[1], places=5)
+
+        mixture = Molecule(
+            sequence,
+            state_positions=(0, 1),
+            pf_smooth=True,
+        )
+        conditioned = mixture._condition_unpaired(2)
+        self.assertTrue(conditioned._pf_smooth)
+        self.assertTrue(all(
+            component._make_md_params().pf_smooth == 1
             for component in conditioned._dp_molecules
         ))
 
@@ -414,7 +468,7 @@ class TestRNA2D(unittest.TestCase):
             code = (
                 "import RNA; "
                 f"RNA.{loader}(); "
-                "md=RNA.md(); md.uniq_ML=1; "
+                "md=RNA.md(); md.uniq_ML=1; md.pf_smooth=0; "
                 f"fc=RNA.fold_compound({self.seq!r}, md); "
                 "print(fc.mfe()[1], fc.pf()[1])"
             )
