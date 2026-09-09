@@ -603,10 +603,20 @@ def _correct_rounding_energy(structure, dlambdas):
     Compute the energy correction associated with residuals for
     a dot-bracket structure.
     """
+    # NumPy has a fixed setup cost but avoids a Python loop for longer RNAs,
+    # where evaluation otherwise becomes dominated by the correction rather
+    # than ViennaRNA's evaluator.
+    if len(structure) >= 32:
+        paired = (
+            np.frombuffer(structure.encode("ascii"), dtype=np.uint8)
+            != ord(".")
+        )
+        return float(np.dot(dlambdas, paired))
+
     correction = 0.0
-    for c, d in zip(structure, dlambdas):
-        if c != ".":
-            correction += d
+    for symbol, residual in zip(structure, dlambdas):
+        if symbol != ".":
+            correction += residual
     return float(correction)
 
 def _pf_with_mfe_rescaling_fallback(fc):
@@ -877,6 +887,17 @@ class _DPMolecule:
             self._mfe_energy += self._fc_rounded_shift
 
         return self._mfe_structure, float(self._mfe_energy)
+
+    def evaluate(self, structure):
+        """Return the exact free energy of a secondary structure."""
+        self._ensure_fc_rounded()
+        energy = self._fc_rounded.eval_structure(structure)
+        if self._lambdas1d_residuals_range != 0.0:
+            energy += _correct_rounding_energy(
+                structure,
+                self._lambdas1d_residuals,
+            )
+        return float(energy + self._fc_rounded_shift)
 
     def base_pairing_probability(self):
         """
@@ -1413,6 +1434,7 @@ class Molecule:
             for position_set in explicit_position_sets
             for position in position_set
         )
+        self._explicit_state_positions = explicit_state_positions
         component_shape = (2,) * len(explicit_state_positions)
 
         # Preserve the legacy singular attribute for one state set.
@@ -1619,6 +1641,47 @@ class Molecule:
         structures, energies = self._component_mfes()
         index = int(np.argmin(energies))
         return structures[index], float(energies[index])
+
+    def evaluate(self, structure):
+        """
+        Return the exact free energy of a secondary structure.
+
+        Parameters
+        ----------
+        structure : str
+            Dot-bracket representation of a secondary structure.
+
+        Returns
+        -------
+        float
+            Exact free energy (kcal/mol), including continuous pairing
+            penalties and state biases.
+        """
+        if not isinstance(structure, str):
+            raise ValueError("structure must be a string")
+        if len(structure) != len(self._seq):
+            raise ValueError(
+                "structure must contain one symbol per nucleotide"
+            )
+        if structure.strip(".()"):
+            raise ValueError(
+                "structure must use '.', '(', and ')' dot-bracket symbols"
+            )
+
+        # Components follow np.ndindex order, so the paired/unpaired state is
+        # also the component index interpreted as a binary integer. Avoid
+        # constructing a state tuple on this latency-sensitive path.
+        component_index = 0
+        for position in self._explicit_state_positions:
+            component_index = (
+                2 * component_index
+                + (structure[position] != ".")
+            )
+
+        energy = self._dp_molecules[component_index].evaluate(structure)
+        return float(
+            energy + self._component_biases.flat[component_index]
+        )
 
     def base_pairing_probability(self):
         """

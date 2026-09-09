@@ -508,6 +508,21 @@ class TestRNA2D(unittest.TestCase):
         self.assertIsInstance(structure, str)
         self.assertIsInstance(energy, float)
 
+    def test_evaluate(self):
+        molecule = Molecule(self.seq)
+        for structure, energy in molecule.suboptimal_structures(5.0):
+            self.assertAlmostEqual(
+                molecule.evaluate(structure),
+                energy,
+            )
+
+        with self.assertRaises(ValueError):
+            molecule.evaluate(None)
+        with self.assertRaises(ValueError):
+            molecule.evaluate("." * (len(self.seq) - 1))
+        with self.assertRaises(ValueError):
+            molecule.evaluate("x" * len(self.seq))
+
     def test_partition_function(self):
 
         mol = Molecule(self.seq)
@@ -1223,6 +1238,78 @@ class TestRNA2D(unittest.TestCase):
                 if symbol != "."
             ) * inverse_kT
             self.assertAlmostEqual(log_weight, expected_log_weight)
+
+    def test_evaluate_mixture_with_rounding_residuals(self):
+        sequence = "GCGCGCGC"
+        lambdas = np.array([
+            0.004,
+            -0.006,
+            0.013,
+            -0.017,
+            0.021,
+            -0.009,
+            0.007,
+            -0.012,
+        ])
+        positions = (0, 7)
+        biases = np.array([
+            [0.123, -0.234],
+            [0.345, 0.456],
+        ])
+        molecules = [
+            Molecule(
+                sequence,
+                lambdas1d=lambdas,
+                state_positions=positions,
+                state_biases=biases,
+                reduce_state_space=reduce_state_space,
+            )
+            for reduce_state_space in (True, False)
+        ]
+
+        base_fc = Molecule(
+            sequence
+        )._dp_molecules[0]._make_fold_compound()
+        exact_energies = {
+            structure: float(
+                base_fc.eval_structure(structure)
+                + sum(
+                    penalty
+                    for penalty, symbol in zip(lambdas, structure)
+                    if symbol != "."
+                )
+                + biases[
+                    int(structure[positions[0]] != "."),
+                    int(structure[positions[1]] != "."),
+                ]
+            )
+            for structure in _enumerate_secondary_structures(sequence)
+        }
+
+        delta = (
+            max(exact_energies.values())
+            - min(exact_energies.values())
+            + 0.01
+        )
+        for molecule in molecules:
+            for structure, expected_energy in exact_energies.items():
+                self.assertAlmostEqual(
+                    molecule.evaluate(structure),
+                    expected_energy,
+                    places=6,
+                )
+
+            suboptimal = molecule.suboptimal_structures(delta)
+            self.assertEqual(
+                {structure for structure, _ in suboptimal},
+                set(exact_energies),
+            )
+            for structure, energy in suboptimal:
+                self.assertAlmostEqual(
+                    molecule.evaluate(structure),
+                    energy,
+                    places=6,
+                )
 
     def test_internal_counters(self):
 
