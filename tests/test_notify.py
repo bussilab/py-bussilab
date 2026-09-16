@@ -31,6 +31,33 @@ class TestNotifyUnit(unittest.TestCase):
             "https://acme.slack.com/files/U123/F123"
         )
 
+    def test_file_upload_v2_reply_includes_initial_comment(self):
+        client = Mock()
+        client.files_upload_v2.return_value = {
+            "files": [{
+                "id": "F123",
+                "user": "U123",
+                "shares": {
+                    "public": {
+                        "C123": [{"ts": "1700000000.123457"}]
+                    }
+                }
+            }]
+        }
+        reply = "https://acme.slack.com/archives/C123/p1700000000123456"
+
+        with patch("bussilab.notify.WebClient", return_value=client):
+            notify("Description", file=__file__, token="token", reply=reply,
+                   title="Title", footer=False)
+
+        client.files_upload_v2.assert_called_once_with(
+            file=__file__,
+            channel="C123",
+            title=__file__,
+            thread_ts="1700000000.123456",
+            initial_comment="*Title*\nDescription\n"
+        )
+
 
 # only run tests if env vars are configured
 if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:

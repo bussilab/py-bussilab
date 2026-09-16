@@ -464,7 +464,8 @@ def notify(message: str = "",
                                                file=file,
                                                channel=reply_dict["channel"],
                                                title=file,
-                                               thread_ts=reply_dict["ts"])
+                                               thread_ts=reply_dict["ts"],
+                                               initial_comment=initial_comment)
             else:
                 response = _try_multiple_times(client.files_upload_v2,
                                                file=file,
@@ -511,7 +512,8 @@ def notify(message: str = "",
                                                file=file,
                                                channels=reply_dict["channel"],
                                                title=file,
-                                               thread_ts=reply_dict["ts"])
+                                               thread_ts=reply_dict["ts"],
+                                               initial_comment=initial_comment)
             else:
                 response = _try_multiple_times(client.files_upload,
                                                file=file,
