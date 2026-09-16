@@ -2,10 +2,66 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-from bussilab.notify import notify
+from bussilab.notify import _parse_url, notify
 
 
 class TestNotifyUnit(unittest.TestCase):
+    def test_parse_url_accepts_supported_slack_urls(self):
+        message = (
+            "https://acme.slack.com/archives/C123/p1700000000123456"
+            "?thread_ts=1700000000.123456&cid=C123"
+        )
+        self.assertEqual(_parse_url(message), {
+            "type": "message",
+            "ts": "1700000000.123456",
+            "channel": "C123",
+            "organization": "acme"
+        })
+        self.assertEqual(_parse_url(message + ":white_check_mark"), {
+            "type": "reaction",
+            "ts": "1700000000.123456",
+            "channel": "C123",
+            "organization": "acme",
+            "reaction": "white_check_mark"
+        })
+        self.assertEqual(
+            _parse_url("https://acme.slack.com/files/U123/F123/file.txt"),
+            {
+                "type": "file",
+                "id": "F123",
+                "user": "U123",
+                "organization": "acme"
+            }
+        )
+
+    def test_parse_url_rejects_malformed_message_urls(self):
+        malformed_urls = (
+            "https://acme.slack.com/archives/foo",
+            "https://acme.slack.com/archives/C123/not-a-timestamp",
+            "https://.slack.com/archives/C123/p1700000000123456",
+        )
+        for url in malformed_urls:
+            with self.subTest(url=url):
+                self.assertEqual(_parse_url(url), {})
+
+    def test_operations_require_the_correct_url_type(self):
+        message = "https://acme.slack.com/archives/C123/p1700000000123456"
+        file = "https://acme.slack.com/files/U123/F123"
+
+        invalid_operations = (
+            {"react": message},
+            {"react": "incorrect-url"},
+            {"update": message + ":heart"},
+            {"update": file},
+            {"reply": file},
+            {"reply": "incorrect-url"},
+            {"reply_broadcast": file},
+        )
+        for arguments in invalid_operations:
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(TypeError):
+                    notify(token="token", footer=False, **arguments)
+
     def test_file_upload_v2_with_immediate_share(self):
         client = Mock()
         client.files_upload_v2.return_value = {

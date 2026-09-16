@@ -86,6 +86,7 @@ import socket
 import time
 import warnings
 import random
+from urllib.parse import urlsplit
 
 try:
     # slack client 3
@@ -142,34 +143,70 @@ def _try_multiple_times(func,*args,**kwargs):
             else:
                 raise
 
-_match_message=r"https://[^/]*\.slack\.com/archives/.*"
-
 def _parse_url(url: str):
-    if re.match(r"^https://[^/]*\.slack\.com/archives/.*:.*",url):
-        organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
-        url=re.sub(r"^https://[^/]*\.slack\.com/archives/","",url)
-        url1=re.sub(r":.*","",url)
-        url1=url1[:-6]+"."+url1[-6:]
-        channel=re.sub("/p.*","",url1)
-        ts=re.sub(":.*$","",re.sub("^.*/p","",url1))
-        react=re.sub(r".*:","",url)
-        return { "type":"reaction", "ts":ts, "channel":channel, "organization":organization, "reaction": react}
-    if re.match(r"^https://[^/]*\.slack\.com/archives/.*",url):
-        organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/archives/.*","",url))
-        url=re.sub(r"^https://[^/]*\.slack\.com/archives/","",url)
-        url=re.sub(r"\?.*","",url)
-        url=url[:-6]+"."+url[-6:]
-        channel=re.sub("/p.*","",url)
-        ts=re.sub(".*/p","",url)
-        return { "type":"message", "ts":ts, "channel":channel, "organization":organization }
-    if re.match(r"^https://[^/]*\.slack\.com/files/.*",url):
-        organization = re.sub(r"^https://","", re.sub(r"\.slack\.com/files/.*","",url))
-        url=re.sub(r"^https://[^/]*\.slack\.com/files/","",url)
-        user=re.sub("/.*","",url)
-        id=re.sub("^"+user+"/","",url)
-        id=re.sub("/.*","",id)
-        return { "type":"file", "id":id, "user":user, "organization":organization }
+    if not isinstance(url, str):
+        return {}
+
+    reaction = None
+    reaction_match = re.match(r"^(.*):([A-Za-z0-9_+-]+)$", url)
+    if reaction_match:
+        url = reaction_match.group(1)
+        reaction = reaction_match.group(2)
+
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return {}
+
+    hostname = parsed.hostname
+    suffix = ".slack.com"
+    if (parsed.scheme != "https" or hostname is None or port is not None or
+            parsed.username is not None or parsed.password is not None or
+            not hostname.endswith(suffix)):
+        return {}
+
+    organization = hostname[:-len(suffix)]
+    organization_pattern = r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?"
+    if not re.fullmatch(organization_pattern, organization):
+        return {}
+
+    path = parsed.path.split("/")
+    if len(path) == 4 and path[0] == "" and path[1] == "archives":
+        channel = path[2]
+        timestamp_match = re.fullmatch(r"p(\d{7,})", path[3])
+        if not re.fullmatch(r"[A-Z0-9]+", channel) or not timestamp_match:
+            return {}
+        compact_timestamp = timestamp_match.group(1)
+        result = {
+            "type": "message",
+            "ts": compact_timestamp[:-6] + "." + compact_timestamp[-6:],
+            "channel": channel,
+            "organization": organization
+        }
+        if reaction is not None:
+            result["type"] = "reaction"
+            result["reaction"] = reaction
+        return result
+
+    if (reaction is None and len(path) >= 4 and path[0] == "" and
+            path[1] == "files" and
+            re.fullmatch(r"[A-Z0-9]+", path[2]) and
+            re.fullmatch(r"[A-Z0-9]+", path[3])):
+        return {
+            "type": "file",
+            "id": path[3],
+            "user": path[2],
+            "organization": organization
+        }
     return {}
+
+
+def _require_url(url: str, operation: str, *allowed_types: str):
+    parsed = _parse_url(url)
+    if parsed.get("type") not in allowed_types:
+        raise TypeError("cannot parse " + operation + " URL")
+    return parsed
 
 def notify(message: str = "",
            channel: str = None,
@@ -275,7 +312,7 @@ def notify(message: str = "",
         bool(reply),
         bool(reply_broadcast)
        ].count(True)>1:
-        raise TypeError("channel/update/delete/reply/reply_broadcast are mutually incompatible")
+        raise TypeError("channel/update/react/delete/reply/reply_broadcast are mutually incompatible")
 
     if len(file)>0 and (update or react or delete or reply_broadcast):
         raise TypeError("files cannot be updated")
@@ -294,9 +331,7 @@ def notify(message: str = "",
             for d in delete_multi:
                 notify(message,channel,delete=d,token=token)
             return ""
-        delete_dict=_parse_url(delete)
-        if not delete_dict:
-            raise TypeError("cannot parse delete URL")
+        delete_dict=_require_url(delete, "delete", "message", "file", "reaction")
         if delete_dict["type"]=="message":
             _try_multiple_times(client.chat_delete,
                                 channel=delete_dict["channel"],
@@ -315,7 +350,7 @@ def notify(message: str = "",
         return ""
 
     if react:
-        react_dict=_parse_url(react)
+        react_dict=_require_url(react, "reaction", "reaction")
         response = _try_multiple_times(client.reactions_add,
           name=react_dict["reaction"],
           timestamp=react_dict["ts"],
@@ -345,15 +380,13 @@ def notify(message: str = "",
         title=title[:2900] + " [truncated]"
 
     if update:
-        update_dict=_parse_url(update)
-        if not update_dict:
-           raise TypeError("")
+        update_dict=_require_url(update, "update", "message")
         organization=update_dict["organization"]
     elif reply:
-        reply_dict=_parse_url(reply)
+        reply_dict=_require_url(reply, "reply", "message")
         organization=reply_dict["organization"]
     elif reply_broadcast:
-        reply_dict=_parse_url(reply_broadcast)
+        reply_dict=_require_url(reply_broadcast, "reply_broadcast", "message")
         organization=reply_dict["organization"]
     else:
         if channel is None:
