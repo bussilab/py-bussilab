@@ -8,8 +8,8 @@ per-nucleotide pairing penalties without losing sub-centikcal precision,
 arbitrary coupled biases on selected paired/unpaired states, and transparent
 combination of the resulting conditioned ensembles. The same interface then
 provides MFE structures, structure evaluation, partition functions, base-pair
-probabilities, exact free-energy derivatives, Boltzmann sampling, suboptimal
-ensembles, and joint pairing probabilities.
+probabilities, ensemble diversity, exact free-energy derivatives, Boltzmann
+sampling, suboptimal ensembles, and joint pairing probabilities.
 
 The wrapper also manages thermodynamic parameter sets, caches calculations,
 recovers from partition-function scaling failures, and defaults to disabling
@@ -1183,10 +1183,11 @@ class Molecule:
 
     Calculations are performed lazily and cached. The class supports MFE
     prediction, evaluation of a supplied dot-bracket structure, ensemble free
-    energies, base-pair probabilities, derivatives with respect to penalties
-    and state biases, Boltzmann sampling, suboptimal enumeration and coverage,
-    and joint nucleotide-pairing probabilities. Structure energies and state
-    biases are expressed in kcal/mol; temperatures are supplied in kelvin.
+    energies, base-pair probabilities and diversity, derivatives with respect
+    to penalties and state biases, Boltzmann sampling, suboptimal enumeration
+    and coverage, and joint nucleotide-pairing probabilities. Structure
+    energies and state biases are expressed in kcal/mol; temperatures are
+    supplied in kelvin.
 
     Parameters
     ----------
@@ -1814,6 +1815,22 @@ class Molecule:
                 probability * molecule._base_pairing_probability
             )
         return matrix
+
+    def mean_bp_distance(self):
+        """
+        Return the mean base-pair distance between two ensemble structures.
+
+        The diversity is ``sum_ij p_ij * (1 - p_ij)``, using the symmetric
+        base-pairing probability matrix. For a state mixture, ``p_ij`` is the
+        probability in the combined ensemble.
+
+        Returns
+        -------
+        float
+            Expected base-pair distance between two independent structures.
+        """
+        probability = self.base_pairing_probability()
+        return float(np.sum(probability * (1.0 - probability)))
 
     def total_free_energy(self):
         """
