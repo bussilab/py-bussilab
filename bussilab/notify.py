@@ -472,12 +472,13 @@ def notify(message: str = "",
                                                channel=channel,
                                                initial_comment=initial_comment)
 
-            if len(list(response["files"][0]["shares"].keys()))>0:
-                k=list(response["files"][0]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
-                channel=list(response["files"][0]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
-                ts=response["files"][0]["shares"][k][channel][0]["ts"]
+            uploaded_file=response["files"][0]
+            if len(list(uploaded_file["shares"].keys()))>0:
+                k=list(uploaded_file["shares"].keys())[0] # empirically, pick the first one. There should be only one!
+                channel=list(uploaded_file["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
+                ts=uploaded_file["shares"][k][channel][0]["ts"]
             else:
-                file_id=response["files"][0]["id"]
+                file_id=uploaded_file["id"]
                 max_attempts=10
                 num_attempts=0
                 num_attempts_delay=3
@@ -487,6 +488,7 @@ def notify(message: str = "",
                     num_attempts+=1
                     response = _try_multiple_times(client.files_info, file=file_id)
                     if len(list(response["file"]["shares"].keys()))>0:
+                      uploaded_file=response["file"]
                       k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
                       channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
                       ts=response["file"]["shares"][k][channel][0]["ts"]
@@ -516,6 +518,7 @@ def notify(message: str = "",
                                                title=file,
                                                channels=channel,
                                                initial_comment=initial_comment)
+            uploaded_file=response["file"]
             k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
             channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
             ts=response["file"]["shares"][k][channel][0]["ts"]
@@ -550,6 +553,6 @@ def notify(message: str = "",
         url=base_url + "archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
     else:
         url=base_url + "archives/" + channel + "/p" + ts[:-7] + ts[-6:]
-        url+="," + base_url + "files/" + response["file"]["user"] + "/" + response["file"]["id"]
+        url+="," + base_url + "files/" + uploaded_file["user"] + "/" + uploaded_file["id"]
 
     return url

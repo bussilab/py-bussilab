@@ -1,7 +1,36 @@
 import os
 import unittest
+from unittest.mock import Mock, patch
 
 from bussilab.notify import notify
+
+
+class TestNotifyUnit(unittest.TestCase):
+    def test_file_upload_v2_with_immediate_share(self):
+        client = Mock()
+        client.files_upload_v2.return_value = {
+            "files": [{
+                "id": "F123",
+                "user": "U123",
+                "shares": {
+                    "public": {
+                        "C123": [{"ts": "1700000000.123456"}]
+                    }
+                }
+            }]
+        }
+        client.auth_test.return_value = {"url": "https://acme.slack.com/"}
+
+        with patch("bussilab.notify.WebClient", return_value=client):
+            url = notify(file=__file__, token="token", channel="C123",
+                         footer=False)
+
+        self.assertEqual(
+            url,
+            "https://acme.slack.com/archives/C123/p1700000000123456,"
+            "https://acme.slack.com/files/U123/F123"
+        )
+
 
 # only run tests if env vars are configured
 if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
