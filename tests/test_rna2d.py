@@ -596,6 +596,34 @@ class TestRNA2D(unittest.TestCase):
         self.assertTrue(np.allclose(bpp, bpp.T))
         self.assertAlmostEqual(np.trace(bpp), 0.0)
 
+    def test_mean_bp_distance(self):
+        molecule = Molecule(self.seq)
+        diversity = molecule.mean_bp_distance()
+        probability = molecule.base_pairing_probability()
+
+        self.assertAlmostEqual(
+            diversity,
+            np.sum(probability * (1.0 - probability)),
+        )
+        self.assertAlmostEqual(
+            diversity,
+            molecule._dp_molecules[0]._fc.mean_bp_distance(),
+        )
+
+        mixture = Molecule(
+            self.seq,
+            state_positions=(0, 4),
+            state_biases=np.array([
+                [0.0, 0.4],
+                [-0.3, 0.2],
+            ]),
+        )
+        probability = mixture.base_pairing_probability()
+        self.assertAlmostEqual(
+            mixture.mean_bp_distance(),
+            np.sum(probability * (1.0 - probability)),
+        )
+
     def test_partition_function_vanilla(self):
         self._run_in_vanilla_mode(self.test_partition_function)
 
