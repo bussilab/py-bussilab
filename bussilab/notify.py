@@ -86,6 +86,7 @@ import socket
 import time
 import warnings
 import random
+from urllib.error import URLError
 from urllib.parse import urlsplit
 
 try:
@@ -104,11 +105,13 @@ from . import coretools
 from typing import cast
 
 def _try_multiple_times(func,*args,**kwargs):
-     max_attempts=10
-     num_attempts=0
-     num_attempts_delay=3
-     jittering=0.2
-     while True:
+    max_attempts=5
+    max_wait=30.0
+    max_total_wait=300.0
+    jittering=0.2
+    num_attempts=0
+    total_wait=0.0
+    while True:
         try:
             num_attempts+=1
             return func(*args,**kwargs)
@@ -116,32 +119,56 @@ def _try_multiple_times(func,*args,**kwargs):
             if num_attempts>=max_attempts:
                 raise
 
-            if "error" in e.response and e.response["error"]=="ratelimited" and "Retry-After" in e.response.headers:
-                wait=float(e.response.headers["Retry-After"])
-                if num_attempts>num_attempts_delay:
-                  wait*=2**(num_attempts-num_attempts_delay)
-                wait*=random.uniform(1,1+jittering)
-                warnings.warn("Slack API, retry-after "
-                              +str(wait)
-                              +" seconds"+
-                              " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
-                              UserWarning)
-                time.sleep(wait)
-            elif not hasattr(e.response,"status_code") or e.response.status_code!=200:
-                wait=30
-                if num_attempts>num_attempts_delay:
-                  wait*=2**(num_attempts-num_attempts_delay)
-                wait*=random.uniform(1,1+jittering)
-                warnings.warn("Slack API, server-side problem: "
-                              +str(e.response)+"\n"+
-                              "retrying after "
-                              +str(wait)
-                              +" seconds"+
-                              " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
-                              UserWarning)
-                time.sleep(wait)
+            response = e.response
+            error = response.get("error") if hasattr(response, "get") else None
+            status_code = getattr(response, "status_code", None)
+            headers = getattr(response, "headers", {}) or {}
+            retry_after = next(
+                (value for key, value in headers.items()
+                 if str(key).lower() == "retry-after"),
+                None
+            )
+
+            if error == "ratelimited" or status_code == 429:
+                if retry_after is None:
+                    raise
+                try:
+                    wait = float(retry_after)
+                except (TypeError, ValueError):
+                    raise e from None
+                if wait < 0:
+                    raise
+                problem = "rate limited"
+            elif (isinstance(status_code, int) and
+                  500 <= status_code < 600):
+                wait = min(2.0 ** num_attempts, max_wait)
+                problem = "server-side problem"
             else:
                 raise
+
+            wait *= random.uniform(1,1+jittering)
+            if total_wait + wait > max_total_wait:
+                raise
+            warnings.warn("Slack API, " + problem + "; retrying after "
+                          +str(wait)
+                          +" seconds"+
+                          " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                          UserWarning)
+            time.sleep(wait)
+            total_wait += wait
+        except (URLError, TimeoutError, ConnectionError) as e:
+            if num_attempts>=max_attempts:
+                raise
+            wait = min(2.0 ** num_attempts, max_wait)
+            wait *= random.uniform(1,1+jittering)
+            if total_wait + wait > max_total_wait:
+                raise
+            warnings.warn("Slack API, transport problem: " + str(e) + "; "
+                          "retrying after " + str(wait) + " seconds"+
+                          " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                          UserWarning)
+            time.sleep(wait)
+            total_wait += wait
 
 def _parse_url(url: str):
     if not isinstance(url, str):

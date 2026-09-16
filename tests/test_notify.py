@@ -1,11 +1,100 @@
 import os
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
+from urllib.error import URLError
 
-from bussilab.notify import _parse_url, notify
+from bussilab.notify import _parse_url, _try_multiple_times, notify
+
+
+class _SlackResponse(dict):
+    def __init__(self, error, status_code, headers=None):
+        super().__init__(error=error)
+        self.status_code = status_code
+        self.headers = {} if headers is None else headers
+
+
+class _SlackApiError(Exception):
+    def __init__(self, response):
+        self.response = response
 
 
 class TestNotifyUnit(unittest.TestCase):
+    @patch("bussilab.notify.time.sleep")
+    @patch("bussilab.notify.SlackApiError", _SlackApiError)
+    def test_retry_does_not_retry_permanent_api_errors(self, sleep):
+        operation = Mock(side_effect=_SlackApiError(
+            _SlackResponse("invalid_auth", 400)
+        ))
+
+        with self.assertRaises(_SlackApiError):
+            _try_multiple_times(operation)
+
+        self.assertEqual(operation.call_count, 1)
+        sleep.assert_not_called()
+
+    @patch("bussilab.notify.random.uniform", return_value=1.0)
+    @patch("bussilab.notify.time.sleep")
+    @patch("bussilab.notify.SlackApiError", _SlackApiError)
+    def test_retry_uses_bounded_backoff_for_server_errors(self, sleep, uniform):
+        server_error = _SlackApiError(_SlackResponse("server_error", 503))
+        operation = Mock(side_effect=[server_error, server_error, "result"])
+
+        self.assertEqual(_try_multiple_times(operation), "result")
+        self.assertEqual(sleep.call_args_list, [call(2.0), call(4.0)])
+
+    @patch("bussilab.notify.random.uniform", return_value=1.0)
+    @patch("bussilab.notify.time.sleep")
+    @patch("bussilab.notify.SlackApiError", _SlackApiError)
+    def test_retry_honors_retry_after_without_exponential_growth(self, sleep,
+                                                                  uniform):
+        rate_limit = _SlackApiError(_SlackResponse(
+            "ratelimited", 429, {"retry-after": "10"}
+        ))
+        operation = Mock(side_effect=[rate_limit] * 4 + ["result"])
+
+        self.assertEqual(_try_multiple_times(operation), "result")
+        self.assertEqual(sleep.call_args_list, [call(10.0)] * 4)
+
+    @patch("bussilab.notify.random.uniform", return_value=1.0)
+    @patch("bussilab.notify.time.sleep")
+    def test_retry_retries_transport_errors(self, sleep, uniform):
+        operation = Mock(side_effect=[URLError("temporary"), "result"])
+
+        self.assertEqual(_try_multiple_times(operation), "result")
+        sleep.assert_called_once_with(2.0)
+
+    @patch("bussilab.notify.random.uniform", return_value=1.0)
+    @patch("bussilab.notify.time.sleep")
+    @patch("bussilab.notify.SlackApiError", _SlackApiError)
+    def test_retry_stops_after_five_attempts(self, sleep, uniform):
+        operation = Mock(side_effect=_SlackApiError(
+            _SlackResponse("server_error", 503)
+        ))
+
+        with self.assertRaises(_SlackApiError):
+            _try_multiple_times(operation)
+
+        self.assertEqual(operation.call_count, 5)
+        self.assertEqual(
+            sleep.call_args_list,
+            [call(2.0), call(4.0), call(8.0), call(16.0)]
+        )
+
+    @patch("bussilab.notify.random.uniform", return_value=1.0)
+    @patch("bussilab.notify.time.sleep")
+    @patch("bussilab.notify.SlackApiError", _SlackApiError)
+    def test_retry_stops_before_exceeding_total_wait_budget(self, sleep,
+                                                             uniform):
+        operation = Mock(side_effect=_SlackApiError(_SlackResponse(
+            "ratelimited", 429, {"Retry-After": "101"}
+        )))
+
+        with self.assertRaises(_SlackApiError):
+            _try_multiple_times(operation)
+
+        self.assertEqual(operation.call_count, 3)
+        self.assertEqual(sleep.call_args_list, [call(101.0), call(101.0)])
+
     def test_parse_url_accepts_supported_slack_urls(self):
         message = (
             "https://acme.slack.com/archives/C123/p1700000000123456"
