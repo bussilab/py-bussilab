@@ -28,6 +28,15 @@ Notice that the message is optional. Even with an empty message, the footer
 will allow you to reconstruct from which machine and directory the message was
 sent from. This might be sufficient for your goal.
 
+Link and media previews can be disabled using the `unfurl` option:
+```bash
+bussilab notify --message "https://example.com" --no-unfurl
+```
+or from python:
+```python
+notify("https://example.com", unfurl=False)
+```
+
 You can also indicate a specific channel for the notification using the
 `channel` option:
 ```bash
@@ -247,6 +256,7 @@ def notify(message: str = "",
            screenlog: str = "",
            screenlog_maxlines: int = 0,
            footer: bool = True,
+           unfurl: bool = True,
            type: str = "mrkdwn",
            file: str = "",
            token: str = None):
@@ -301,6 +311,12 @@ def notify(message: str = "",
 
            If True, a footer is added with current user, machine, and
            directory.
+
+       unfurl: bool
+
+           If False, link and media previews are disabled when posting a
+           message or a reply. The option does not affect file-upload
+           comments or message updates.
 
        type: str
 
@@ -494,6 +510,11 @@ def notify(message: str = "",
                                   }
                       })
 
+    unfurl_options = {}
+    if not unfurl:
+        unfurl_options["unfurl_links"] = False
+        unfurl_options["unfurl_media"] = False
+
     if update:
         response = _try_multiple_times(client.chat_update,
                    channel=update_dict["channel"],
@@ -590,19 +611,22 @@ def notify(message: str = "",
                    blocks=blocks,
                    text=text,
                    channel=reply_dict["channel"],
-                   thread_ts=reply_dict["ts"])
+                   thread_ts=reply_dict["ts"],
+                   **unfurl_options)
     elif reply_broadcast:
         response = _try_multiple_times(client.chat_postMessage,
                    blocks=blocks,
                    text=text,
                    channel=reply_dict["channel"],
                    thread_ts=reply_dict["ts"],
-                   reply_broadcast=True)
+                   reply_broadcast=True,
+                   **unfurl_options)
     else:
         response = _try_multiple_times(client.chat_postMessage,
                    blocks=blocks,
                    text=text,
-                   channel=channel)
+                   channel=channel,
+                   **unfurl_options)
 
     response = cast(SlackResponse, response)
 

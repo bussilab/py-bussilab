@@ -571,6 +571,7 @@ def _pip_upgrade_all(**kargs):
 @arg("-f","--file", help="path to a file to be uploaded (incompatible with -u and -d)")
 @arg("-t","--title", help="title of the message")
 @arg("--no-footer", help="ignore footer", action="store_true")
+@arg("--no-unfurl", help="disable link and media previews", action="store_true")
 @arg("--screenlog", help="screenlog file")
 @arg("--screenlog-maxlines", help="maximum number of lines in screenlog (0 means all)", default=0, type=int)
 @arg("--type", help="'plain_text' or 'mrkdwn'", default='mrkdwn')
@@ -587,6 +588,9 @@ def _notify(**kargs):
     if kargs["no_footer"]:
        kargs["footer"]=False
     del kargs["no_footer"]
+    if kargs["no_unfurl"]:
+       kargs["unfurl"]=False
+    del kargs["no_unfurl"]
     msg=notify.notify(**kargs)
     if not quiet:
       print(msg)

@@ -72,6 +72,40 @@ class TestNotifyUnit(unittest.TestCase):
             }]
         )
 
+    def test_disable_unfurls_for_messages_and_replies(self):
+        client = Mock()
+        client.chat_postMessage.side_effect = [
+            {"channel": "C123", "ts": "1700000000.123456"},
+            {"channel": "C123", "ts": "1700000000.123457"},
+            {"channel": "C123", "ts": "1700000000.123458"}
+        ]
+        client.auth_test.return_value = {"url": "https://acme.slack.com/"}
+        parent = "https://acme.slack.com/archives/C123/p1700000000123456"
+
+        with patch("bussilab.notify.WebClient", return_value=client):
+            notify("https://example.com", channel="C123", token="token",
+                   footer=False, unfurl=False)
+            notify("https://example.com", reply=parent, token="token",
+                   footer=False, unfurl=False)
+            notify("https://example.com", reply_broadcast=parent,
+                   token="token", footer=False, unfurl=False)
+
+        common = {
+            "text": "https://example.com\n",
+            "blocks": [{
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "https://example.com"}
+            }],
+            "unfurl_links": False,
+            "unfurl_media": False
+        }
+        self.assertEqual(client.chat_postMessage.call_args_list, [
+            call(channel="C123", **common),
+            call(channel="C123", thread_ts="1700000000.123456", **common),
+            call(channel="C123", thread_ts="1700000000.123456",
+                 reply_broadcast=True, **common)
+        ])
+
     def test_update_reply_and_broadcast_build_expected_calls(self):
         client = Mock()
         client.chat_update.return_value = {
@@ -203,13 +237,14 @@ class TestNotifyUnit(unittest.TestCase):
         with patch("bussilab.notify.notify", return_value="message-url") as send, \
              patch("sys.stdout", output):
             cli(["notify", "--message", "Hello", "--channel", "C123",
-                 "--no-footer", "--screenlog-maxlines", "3"],
+                 "--no-footer", "--no-unfurl", "--screenlog-maxlines", "3"],
                 prog="bussilab")
 
         send.assert_called_once_with(
             message="Hello",
             channel="C123",
             footer=False,
+            unfurl=False,
             screenlog_maxlines=3,
             type="mrkdwn"
         )
@@ -436,6 +471,10 @@ if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
             url=notify("unittest1", token=token, channel=channel)
             notify(react=url+":white_check_mark",token=token)
             notify(delete=url+":white_check_mark",token=token)
+
+            url=notify("https://example.com", token=token, channel=channel,
+                       unfurl=False)
+            notify(delete=url, token=token)
 
             url=notify("unittest2 *WRONG*", token=token, channel=channel)
             notify("unittest2", update=url, token=token)
