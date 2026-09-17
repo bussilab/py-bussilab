@@ -2,31 +2,56 @@
 # PYTHON_ARGCOMPLETE_OK
 """Command line script."""
 
+PYTHON_VERSIONS = "3.8 3.9 3.10 3.11 3.12 3.13 3.14"
+
+import os
+import subprocess
 import sys
+
+
+def _python_version(executable):
+    """Return the major.minor version of an executable, or an empty string."""
+    try:
+        process = subprocess.Popen(
+            [executable, "-c", "import sys; sys.stdout.write('%d.%d' % sys.version_info[:2])"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        stdout, _ = process.communicate()
+    except OSError:
+        return ""
+    if process.returncode != 0:
+        return ""
+    if not isinstance(stdout, str):
+        stdout = stdout.decode()
+    return stdout
+
 
 # First search for a python3 executable.
 # This is required since macports does not provide a python3 executable
 # but rather individual versions
 
-if (sys.version_info < (3, 6)):
-    import os
-    import subprocess
-    executable=["python3","python3.10","python3.9","python3.8","python3.7","python3.6"]
-    for exe in executable:
-        args=[exe,os.path.abspath(__file__)]
+if "%d.%d" % sys.version_info[:2] not in PYTHON_VERSIONS.split():
+    executables = ["python3"]
+    executables.extend("python" + version
+                       for version in reversed(PYTHON_VERSIONS.split()))
+    for exe in executables:
+        if _python_version(exe) not in PYTHON_VERSIONS.split():
+            continue
+        args=[exe, os.path.abspath(__file__)]
         args.extend(sys.argv[1:])
         try:
             sys.stderr.write(sys.argv[0]+": fallback to "+exe+"\n")
-            sys.exit(subprocess.call(args))
-        except OSError as e:
+            os.execvp(exe, args)
+        except OSError:
             pass
-    print("ERROR: could not find python executable >= 3.6")
+    sys.stderr.write("ERROR: could not find a supported python executable ("+
+                     PYTHON_VERSIONS+")\n")
     sys.exit(1)
 
 try:
     from bussilab.cli import _main_
 except ModuleNotFoundError:
-    import os
     directory=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.stderr.write(sys.argv[0]+": adding '" + directory + "' to path\n")
     sys.path.append(directory)
