@@ -361,6 +361,35 @@ class TestNotifyUnit(unittest.TestCase):
     @patch("bussilab.notify.warnings.warn")
     @patch("bussilab.notify.random.uniform", return_value=1.0)
     @patch("bussilab.notify.time.sleep")
+    @patch("bussilab.notify.SlackApiError", _SlackApiError)
+    def test_rate_limit_retries_are_not_limited_to_five_attempts(
+            self, sleep, uniform, warn):
+        rate_limit = _SlackApiError(_SlackResponse(
+            "ratelimited", 429, {"Retry-After": "1"}
+        ))
+        operation = Mock(side_effect=[rate_limit] * 6 + ["result"])
+
+        self.assertEqual(_try_multiple_times(operation), "result")
+        self.assertEqual(operation.call_count, 7)
+        self.assertEqual(sleep.call_args_list, [call(1.0)] * 6)
+        self.assertEqual(warn.call_count, 6)
+
+    @patch("bussilab.notify.warnings.warn")
+    @patch("bussilab.notify.random.uniform", return_value=1.0)
+    @patch("bussilab.notify.time.sleep")
+    @patch("bussilab.notify.SlackApiError", _SlackApiError)
+    def test_rate_limit_without_retry_after_uses_backoff(
+            self, sleep, uniform, warn):
+        rate_limit = _SlackApiError(_SlackResponse("ratelimited", 429))
+        operation = Mock(side_effect=[rate_limit, rate_limit, "result"])
+
+        self.assertEqual(_try_multiple_times(operation), "result")
+        self.assertEqual(sleep.call_args_list, [call(2.0), call(4.0)])
+        self.assertEqual(warn.call_count, 2)
+
+    @patch("bussilab.notify.warnings.warn")
+    @patch("bussilab.notify.random.uniform", return_value=1.0)
+    @patch("bussilab.notify.time.sleep")
     def test_retry_retries_transport_errors(self, sleep, uniform, warn):
         operation = Mock(side_effect=[URLError("temporary"), "result"])
 

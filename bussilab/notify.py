@@ -128,16 +128,13 @@ def _try_multiple_times(func,*args,**kwargs):
     max_wait=30.0
     max_total_wait=300.0
     jittering=0.2
-    num_attempts=0
+    transient_attempts=0
+    rate_limit_attempts=0
     total_wait=0.0
     while True:
         try:
-            num_attempts+=1
             return func(*args,**kwargs)
         except SlackApiError as e:
-            if num_attempts>=max_attempts:
-                raise
-
             response = e.response
             error = response.get("error") if hasattr(response, "get") else None
             status_code = getattr(response, "status_code", None)
@@ -149,18 +146,25 @@ def _try_multiple_times(func,*args,**kwargs):
             )
 
             if error == "ratelimited" or status_code == 429:
+                rate_limit_attempts += 1
                 if retry_after is None:
-                    raise
-                try:
-                    wait = float(retry_after)
-                except (TypeError, ValueError):
-                    raise e from None
-                if wait < 0:
-                    raise
+                    wait = min(2.0 ** rate_limit_attempts, max_wait)
+                else:
+                    try:
+                        wait = float(retry_after)
+                    except (TypeError, ValueError):
+                        raise e from None
+                    if wait < 0:
+                        raise
+                    # Avoid a busy retry loop if Slack returns zero.
+                    wait = max(wait, 1.0)
                 problem = "rate limited"
             elif (isinstance(status_code, int) and
                   500 <= status_code < 600):
-                wait = min(2.0 ** num_attempts, max_wait)
+                transient_attempts += 1
+                if transient_attempts >= max_attempts:
+                    raise
+                wait = min(2.0 ** transient_attempts, max_wait)
                 problem = "server-side problem"
             else:
                 raise
@@ -168,23 +172,31 @@ def _try_multiple_times(func,*args,**kwargs):
             wait *= random.uniform(1,1+jittering)
             if total_wait + wait > max_total_wait:
                 raise
+            if problem == "rate limited":
+                retry_progress = " [rate-limit retry " + \
+                                 str(rate_limit_attempts) + "]"
+            else:
+                retry_progress = " [" + str(transient_attempts) + "/" + \
+                                 str(max_attempts) + "]"
             warnings.warn("Slack API, " + problem + "; retrying after "
                           +str(wait)
                           +" seconds"+
-                          " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                          retry_progress,
                           UserWarning)
             time.sleep(wait)
             total_wait += wait
         except (URLError, TimeoutError, ConnectionError) as e:
-            if num_attempts>=max_attempts:
+            transient_attempts += 1
+            if transient_attempts >= max_attempts:
                 raise
-            wait = min(2.0 ** num_attempts, max_wait)
+            wait = min(2.0 ** transient_attempts, max_wait)
             wait *= random.uniform(1,1+jittering)
             if total_wait + wait > max_total_wait:
                 raise
             warnings.warn("Slack API, transport problem: " + str(e) + "; "
                           "retrying after " + str(wait) + " seconds"+
-                          " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                          " ["+str(transient_attempts)+"/"+
+                          str(max_attempts)+"]",
                           UserWarning)
             time.sleep(wait)
             total_wait += wait
