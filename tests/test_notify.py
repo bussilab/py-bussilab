@@ -1,7 +1,7 @@
 import os
 import unittest
 from io import StringIO
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call, mock_open, patch
 from urllib.error import URLError
 
 from bussilab.cli import cli
@@ -105,6 +105,56 @@ class TestNotifyUnit(unittest.TestCase):
             call(channel="C123", thread_ts="1700000000.123456",
                  reply_broadcast=True, **common)
         ])
+
+    def test_markdown_message_file_builds_native_markdown_block(self):
+        client = Mock()
+        client.chat_postMessage.return_value = {
+            "channel": "C123",
+            "ts": "1700000000.123456"
+        }
+        client.auth_test.return_value = {"url": "https://acme.slack.com/"}
+        markdown = "# Report\n\n| Result | Value |\n| --- | --- |\n| A | 1 |"
+
+        with patch("builtins.open", mock_open(read_data=markdown)) as opened, \
+             patch("bussilab.notify.WebClient", return_value=client):
+            notify(markdown_file="report.md", channel="C123", token="token")
+
+        opened.assert_called_once_with("report.md", encoding="utf-8")
+        client.chat_postMessage.assert_called_once_with(
+            channel="C123",
+            text=markdown + "\n",
+            blocks=[{"type": "markdown", "text": markdown}]
+        )
+
+    def test_markdown_rejects_automatic_formatting_and_file_uploads(self):
+        invalid_arguments = (
+            {"message": "# Report", "title": "Report"},
+            {"message": "# Report", "screenlog": "screen.log"},
+            {"message": "# Report", "file": "results.dat"},
+            {"message": "# Report", "markdown_file": "report.md"},
+        )
+        for arguments in invalid_arguments:
+            with self.subTest(arguments=arguments):
+                with self.assertRaises(TypeError):
+                    notify(type="markdown", token="token", **arguments)
+
+    def test_markdown_truncation_respects_block_limit(self):
+        client = Mock()
+        client.chat_postMessage.return_value = {
+            "channel": "C123",
+            "ts": "1700000000.123456"
+        }
+        client.auth_test.return_value = {"url": "https://acme.slack.com/"}
+
+        with patch("bussilab.notify.WebClient", return_value=client):
+            notify("x" * 12001, type="markdown", channel="C123",
+                   token="token")
+
+        arguments = client.chat_postMessage.call_args.kwargs
+        markdown = arguments["blocks"][0]["text"]
+        self.assertEqual(len(markdown), 12000)
+        self.assertTrue(markdown.endswith(" [truncated]"))
+        self.assertEqual(arguments["text"], markdown + "\n")
 
     def test_update_reply_and_broadcast_build_expected_calls(self):
         client = Mock()
@@ -247,6 +297,22 @@ class TestNotifyUnit(unittest.TestCase):
             unfurl=False,
             screenlog_maxlines=3,
             type="mrkdwn"
+        )
+        self.assertEqual(output.getvalue(), "message-url\n")
+
+    def test_markdown_cli_reads_message_from_file(self):
+        output = StringIO()
+        with patch("bussilab.notify.notify", return_value="message-url") as send, \
+             patch("sys.stdout", output):
+            cli(["notify", "--markdown-file", "report.md",
+                 "--channel", "C123"],
+                prog="bussilab")
+
+        send.assert_called_once_with(
+            markdown_file="report.md",
+            channel="C123",
+            screenlog_maxlines=0,
+            type="markdown"
         )
         self.assertEqual(output.getvalue(), "message-url\n")
 
@@ -474,6 +540,10 @@ if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
 
             url=notify("https://example.com", token=token, channel=channel,
                        unfurl=False)
+            notify(delete=url, token=token)
+
+            url=notify(markdown_file=os.path.realpath(__file__), token=token,
+                       channel=channel)
             notify(delete=url, token=token)
 
             url=notify("unittest2 *WRONG*", token=token, channel=channel)

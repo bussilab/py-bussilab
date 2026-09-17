@@ -37,6 +37,16 @@ or from python:
 notify("https://example.com", unfurl=False)
 ```
 
+A file written in standard Markdown can be sent without adding a title or
+footer:
+```bash
+bussilab notify --markdown-file report.md
+```
+or from python:
+```python
+notify(markdown_file="report.md")
+```
+
 You can also indicate a specific channel for the notification using the
 `channel` option:
 ```bash
@@ -247,6 +257,7 @@ def _require_url(url: str, operation: str, *allowed_types: str):
 def notify(message: str = "",
            channel: str = None,
            *,
+           markdown_file: str = "",
            react: str = None,
            update: str = None,
            delete: str = None,
@@ -273,6 +284,12 @@ def notify(message: str = "",
 
            The channel. By default, taken from your `~/.bussilabrc`
            configuration file.
+
+       markdown_file: str
+
+           Read a standard Markdown message from this UTF-8 text file. This
+           implies `type="markdown"` and cannot be combined with a non-empty
+           `message` argument.
 
        update: None or str
 
@@ -320,7 +337,9 @@ def notify(message: str = "",
 
        type: str
 
-           The type of message. Can be "mrkdwn" or "plain_text".
+           The type of message. Can be "mrkdwn", "plain_text", or
+           "markdown". Standard Markdown uses a native Markdown block;
+           `title`, `screenlog`, file uploads, and footers are not supported.
 
        token: None or str
 
@@ -347,6 +366,26 @@ def notify(message: str = "",
        ```
        See `bussilab.notify` for more examples.
     """
+
+    if type not in ("mrkdwn", "plain_text", "markdown"):
+        raise TypeError("type should be 'mrkdwn', 'plain_text', or 'markdown'")
+
+    if message and markdown_file:
+        raise TypeError("message and markdown_file are mutually incompatible")
+
+    if markdown_file:
+        if type == "plain_text":
+            raise TypeError("markdown_file is incompatible with plain_text")
+        type="markdown"
+
+    if type == "markdown":
+        if title:
+            raise TypeError("title is not supported with standard Markdown")
+        if screenlog:
+            raise TypeError("screenlog is not supported with standard Markdown")
+        if file:
+            raise TypeError("file uploads are not supported with standard Markdown")
+        footer=False
 
     if [bool(channel),
         bool(update),
@@ -400,6 +439,10 @@ def notify(message: str = "",
           channel=react_dict["channel"])
         return react
 
+    if markdown_file:
+        with open(markdown_file, encoding="utf-8") as handler:
+            message=handler.read()
+
     screenlog_message=""
     if len(screenlog)>0:
         # we manually removed "deleted" lines.
@@ -416,7 +459,10 @@ def notify(message: str = "",
     if len(screenlog_message)>2900:
         screenlog_message=screenlog_message[:2900] + " [truncated]"
         
-    if len(message)>2900:
+    if type == "markdown":
+        if len(message)>12000:
+            message=message[:11988] + " [truncated]"
+    elif len(message)>2900:
         message=message[:2900] + " [truncated]"
 
     if len(title)>2900:
@@ -458,15 +504,18 @@ def notify(message: str = "",
 
     if len(message) > 0:
         text+=message+"\n"
-        blocks.append(
-           {
-               "type": "section",
-               "text": {
-                         "type": type,
-                         "text": message
-                       },
-           }
-           )
+        if type == "markdown":
+            blocks.append({"type": "markdown", "text": message})
+        else:
+            blocks.append(
+               {
+                   "type": "section",
+                   "text": {
+                             "type": type,
+                             "text": message
+                           },
+               }
+               )
         
     if len(screenlog_message) > 0:
         text+=screenlog_message+"\n"
@@ -502,13 +551,16 @@ def notify(message: str = "",
                       })
     if len(blocks)==0:
         text+="(empty notification)"
-        blocks.append({
-                          "type": "section",
-                          "text": {
-                                     "type": type,
-                                     "text": "(empty notification)"
-                                  }
-                      })
+        if type == "markdown":
+            blocks.append({"type": "markdown", "text": "(empty notification)"})
+        else:
+            blocks.append({
+                              "type": "section",
+                              "text": {
+                                         "type": type,
+                                         "text": "(empty notification)"
+                                      }
+                          })
 
     unfurl_options = {}
     if not unfurl:

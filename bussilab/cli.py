@@ -560,6 +560,7 @@ def _pip_upgrade_all(**kargs):
 @command("notify", help="Send a notification to Slack",
          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 @arg("-m", "--message", help="message")
+@arg("--markdown-file", help="path to a standard Markdown message")
 @group(exclusive=True)
 @arg("-c","--channel", help="channel (check ~/.bussilabrc by default)")
 @arg("-u","--update", help="url of the message to be updated")
@@ -574,7 +575,7 @@ def _pip_upgrade_all(**kargs):
 @arg("--no-unfurl", help="disable link and media previews", action="store_true")
 @arg("--screenlog", help="screenlog file")
 @arg("--screenlog-maxlines", help="maximum number of lines in screenlog (0 means all)", default=0, type=int)
-@arg("--type", help="'plain_text' or 'mrkdwn'", default='mrkdwn')
+@arg("--type", help="'plain_text' or 'mrkdwn' (use --markdown-file for standard Markdown)", default='mrkdwn')
 @arg("--token", help="token (check ~/.bussilabrc by default)")
 @arg("-q","--quiet", help="quiet (do not write output)", action="store_true")
 def _notify(**kargs):
@@ -585,6 +586,8 @@ def _notify(**kargs):
     from . import notify
     quiet=kargs["quiet"]
     del kargs["quiet"]
+    if "markdown_file" in kargs:
+       kargs["type"]="markdown"
     if kargs["no_footer"]:
        kargs["footer"]=False
     del kargs["no_footer"]
