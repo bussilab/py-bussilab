@@ -564,7 +564,7 @@ class TestNotifyUnit(unittest.TestCase):
         )
         client.files_upload_v2.assert_called_once_with(
             file=__file__,
-            title=__file__,
+            title=os.path.basename(__file__),
             channel="C123",
             initial_comment=""
         )
@@ -592,13 +592,14 @@ class TestNotifyUnit(unittest.TestCase):
         client.auth_test.return_value = {"url": "https://acme.slack.com/"}
 
         with patch("bussilab.notify.WebClient", return_value=client):
-            url = notify("Results", file=["first.dat", "second.png"],
+            url = notify("Results", file=["/tmp/first.dat",
+                                          "relative/second.png"],
                          token="token", channel="C123", footer=False)
 
         client.files_upload_v2.assert_called_once_with(
             file_uploads=[
-                {"file": "first.dat", "title": "first.dat"},
-                {"file": "second.png", "title": "second.png"}
+                {"file": "/tmp/first.dat", "title": "first.dat"},
+                {"file": "relative/second.png", "title": "second.png"}
             ],
             channel="C123",
             initial_comment="Results\n"
@@ -632,7 +633,7 @@ class TestNotifyUnit(unittest.TestCase):
         client.files_upload_v2.assert_called_once_with(
             file=__file__,
             channel="C123",
-            title=__file__,
+            title="Title",
             thread_ts="1700000000.123456",
             initial_comment="*Title*\nDescription\n"
         )

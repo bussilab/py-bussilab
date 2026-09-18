@@ -638,10 +638,12 @@ def notify(message: str = "",
         else:
             upload_arguments["channel"] = channel
         if len(files) == 1:
-            upload_arguments.update(file=files[0], title=files[0])
+            upload_title = title or os.path.basename(files[0])
+            upload_arguments.update(file=files[0], title=upload_title)
         else:
             upload_arguments["file_uploads"] = [
-                {"file": path, "title": path} for path in files
+                {"file": path, "title": title or os.path.basename(path)}
+                for path in files
             ]
 
         response = _try_multiple_times(client.files_upload_v2,
