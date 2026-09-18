@@ -322,6 +322,18 @@ class TestNotifyUnit(unittest.TestCase):
         )
         self.assertEqual(output.getvalue(), "message-url\n")
 
+    def test_notify_cli_accepts_multiple_files(self):
+        with patch("bussilab.notify.notify", return_value="message-url") as send:
+            cli(["notify", "--file", "first.dat", "second.png",
+                 "--channel", "C123"], prog="bussilab")
+
+        send.assert_called_once_with(
+            file=["first.dat", "second.png"],
+            channel="C123",
+            screenlog_maxlines=0,
+            type="mrkdwn"
+        )
+
     def test_markdown_cli_reads_message_from_file(self):
         output = StringIO()
         with patch("bussilab.notify.notify", return_value="message-url") as send, \
@@ -550,6 +562,53 @@ class TestNotifyUnit(unittest.TestCase):
             "https://acme.slack.com/archives/C123/p1700000000123456,"
             "https://acme.slack.com/files/U123/F123"
         )
+        client.files_upload_v2.assert_called_once_with(
+            file=__file__,
+            title=__file__,
+            channel="C123",
+            initial_comment=""
+        )
+
+    def test_file_upload_v2_supports_multiple_files(self):
+        client = Mock()
+        client.files_upload_v2.return_value = {
+            "files": [
+                {
+                    "id": "F123",
+                    "user": "U123",
+                    "shares": {"public": {
+                        "C123": [{"ts": "1700000000.123456"}]
+                    }}
+                },
+                {
+                    "id": "F456",
+                    "user": "U456",
+                    "shares": {"public": {
+                        "C123": [{"ts": "1700000000.123456"}]
+                    }}
+                }
+            ]
+        }
+        client.auth_test.return_value = {"url": "https://acme.slack.com/"}
+
+        with patch("bussilab.notify.WebClient", return_value=client):
+            url = notify("Results", file=["first.dat", "second.png"],
+                         token="token", channel="C123", footer=False)
+
+        client.files_upload_v2.assert_called_once_with(
+            file_uploads=[
+                {"file": "first.dat", "title": "first.dat"},
+                {"file": "second.png", "title": "second.png"}
+            ],
+            channel="C123",
+            initial_comment="Results\n"
+        )
+        self.assertEqual(
+            url,
+            "https://acme.slack.com/archives/C123/p1700000000123456,"
+            "https://acme.slack.com/files/U123/F123,"
+            "https://acme.slack.com/files/U456/F456"
+        )
 
     def test_file_upload_v2_reply_includes_initial_comment(self):
         client = Mock()
@@ -628,7 +687,12 @@ if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
             notify(delete=url, token=token)
             notify(delete=url2, token=token)
             
-            url=notify("test upload",file=os.path.realpath(__file__), token=token, channel=channel)
+            url=notify("test multiple upload",
+                       file=[os.path.realpath(__file__),
+                             os.path.join(os.path.dirname(__file__),
+                                          "cron.yml")],
+                       token=token, channel=channel)
+            self.assertEqual(len(url.split(",")), 3)
             notify(delete=url, token=token)
 
 

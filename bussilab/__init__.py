@@ -268,7 +268,7 @@ _required_ = [
     'numba',
     'numpy',
     'scipy',
-    'slack-sdk',
+    'slack-sdk>=3.19.0',
     'pyyaml',
     'typing_extensions'
 ]

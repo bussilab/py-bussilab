@@ -569,7 +569,8 @@ def _pip_upgrade_all(**kargs):
 @arg("-R","--reply-broadcast", help="url of the message to be broadcast-replied")
 @arg("-X","--react", help="react to a message")
 @endgroup
-@arg("-f","--file", help="path to a file to be uploaded (incompatible with -u and -d)")
+@arg("-f","--file", nargs="+",
+     help="path(s) to files to be uploaded (incompatible with -u and -d)")
 @arg("-t","--title", help="title of the message")
 @arg("--no-footer", help="ignore footer", action="store_true")
 @arg("--no-unfurl", help="disable link and media previews", action="store_true")

@@ -59,14 +59,16 @@ notify("text here", channel="project-myproject")
 ```
 This will only work if the App has been added to the specified channel.
 
-The following syntax can be used to upload a file:
+The following syntax can be used to upload one or more files:
 ```bash
 bussilab notify --message "text here" --file /path/to/file
+bussilab notify --message "text here" --file first.dat second.dat
 ```
 or from python:
 ```python
 from bussilab.notify import notify
 notify("text here",file="/path/to/file")
+notify("text here",file=["first.dat", "second.dat"])
 ```
 
 The commands above will return the URL of the message. This URL can be used
@@ -121,7 +123,7 @@ except ModuleNotFoundError:
 
 from . import coretools
 
-from typing import cast
+from typing import cast, Sequence, Union
 
 _MARKDOWN_BLOCK_LIMIT = 12000
 _TRUNCATION_MARKER = " [truncated]"
@@ -272,6 +274,21 @@ def _require_url(url: str, operation: str, *allowed_types: str):
         raise TypeError("cannot parse " + operation + " URL")
     return parsed
 
+
+def _file_share(file_info):
+    """Return the channel and timestamp of the first share, if available."""
+    shares = file_info.get("shares", {})
+    if not shares:
+        return None
+    share_type = next(iter(shares.values()))
+    if not share_type:
+        return None
+    channel = next(iter(share_type))
+    channel_shares = share_type[channel]
+    if not channel_shares:
+        return None
+    return channel, channel_shares[0]["ts"]
+
 def notify(message: str = "",
            channel: str = None,
            *,
@@ -287,7 +304,7 @@ def notify(message: str = "",
            footer: bool = True,
            unfurl: bool = True,
            type: str = "mrkdwn",
-           file: str = "",
+           file: Union[str, Sequence[str]] = "",
            token: str = None):
     """Tool to send notifications to Slack.
 
@@ -317,9 +334,8 @@ def notify(message: str = "",
 
            The URL of a message to be deleted. By passing a URL
            concatenated with the string `":name_of_reaction"` you can
-           delete a reaction. Buy passing two comma-separated URLs
-           you can delete both a file and the message with which it was
-           shared.
+           delete a reaction. By passing comma-separated URLs you can delete
+           a message and all the files shared with it.
        
        reply: None or str
        
@@ -334,9 +350,9 @@ def notify(message: str = "",
            The URL of a message to which you want to add a reaction,
            followed by the string `:name_of_the_reaction`
            
-       file: None or str
+       file: str or sequence of str
        
-           The path of a file to be uploaded
+           The path of a file to be uploaded, or paths of multiple files.
 
        title: str
 
@@ -381,8 +397,8 @@ def notify(message: str = "",
                A string with the URL of the sent message.
                In case the `delete` keyword is used, it returns an empty
                string.
-               In case a file is uploaded, it returns two comma-separated
-               URLs corresponding to the message and to the file.
+               When files are uploaded, it returns comma-separated URLs for
+               the message followed by every file.
 
 
        Example
@@ -406,12 +422,15 @@ def notify(message: str = "",
             raise TypeError("markdown_file is incompatible with plain_text")
         type="markdown"
 
+    files = [file] if isinstance(file, str) else list(file)
+    files = [path for path in files if path]
+
     if type == "markdown":
         if title:
             raise TypeError("title is not supported with standard Markdown")
         if screenlog:
             raise TypeError("screenlog is not supported with standard Markdown")
-        if file:
+        if files:
             raise TypeError("file uploads are not supported with standard Markdown")
         footer=False
 
@@ -424,7 +443,7 @@ def notify(message: str = "",
        ].count(True)>1:
         raise TypeError("channel/update/react/delete/reply/reply_broadcast are mutually incompatible")
 
-    if len(file)>0 and (update or react or delete or reply_broadcast):
+    if files and (update or react or delete or reply_broadcast):
         raise TypeError("files cannot be updated")
 
     config = None
@@ -603,7 +622,7 @@ def notify(message: str = "",
                    text=text,
                    blocks=blocks,
                    ts=update_dict["ts"])
-    elif len(file)>0:
+    elif files:
         initial_comment = ""
         if len(title)>0:
             initial_comment += "*" + title + "*\n"
@@ -612,81 +631,51 @@ def notify(message: str = "",
         if footer:
             initial_comment += footer_text
 
-        # v2 will be the only supported way in Feb 2025
-        # https://api.slack.com/changelog/2024-04-a-better-way-to-upload-files-is-here-to-stay
-
-        try:
-            _=client.files_upload_v2
-            v2=True
-        except AttributeError:
-            v2=False
-
-        if v2:
-            if reply:
-                response = _try_multiple_times(client.files_upload_v2,
-                                               file=file,
-                                               channel=reply_dict["channel"],
-                                               title=file,
-                                               thread_ts=reply_dict["ts"],
-                                               initial_comment=initial_comment)
-            else:
-                response = _try_multiple_times(client.files_upload_v2,
-                                               file=file,
-                                               title=file,
-                                               channel=channel,
-                                               initial_comment=initial_comment)
-
-            uploaded_file=response["files"][0]
-            if len(list(uploaded_file["shares"].keys()))>0:
-                k=list(uploaded_file["shares"].keys())[0] # empirically, pick the first one. There should be only one!
-                channel=list(uploaded_file["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
-                ts=uploaded_file["shares"][k][channel][0]["ts"]
-            else:
-                file_id=uploaded_file["id"]
-                max_attempts=10
-                num_attempts=0
-                num_attempts_delay=3
-                jittering=0.2
-                time.sleep(2.0) # wait before first attempt
-                while True:
-                    num_attempts+=1
-                    response = _try_multiple_times(client.files_info, file=file_id)
-                    if len(list(response["file"]["shares"].keys()))>0:
-                      uploaded_file=response["file"]
-                      k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
-                      channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
-                      ts=response["file"]["shares"][k][channel][0]["ts"]
-                      break
-                    if num_attempts>=max_attempts:
-                      raise RuntimeError("Cannot obtain shares info for file ID "+str(file_id))
-                    wait=2.0
-                    if num_attempts>num_attempts_delay:
-                      wait*=2**(num_attempts-num_attempts_delay)
-                    wait*=random.uniform(1,1+jittering)
-                    warnings.warn("Slack API, missing shares for file ID " + file_id  +", retry after "
-                                  +str(wait)
-                                  +" seconds"+
-                                  " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
-                                  UserWarning)
-                    time.sleep(wait)
+        upload_arguments = {"initial_comment": initial_comment}
+        if reply:
+            upload_arguments.update(channel=reply_dict["channel"],
+                                    thread_ts=reply_dict["ts"])
         else:
-            if reply:
-                response = _try_multiple_times(client.files_upload,
-                                               file=file,
-                                               channels=reply_dict["channel"],
-                                               title=file,
-                                               thread_ts=reply_dict["ts"],
-                                               initial_comment=initial_comment)
-            else:
-                response = _try_multiple_times(client.files_upload,
-                                               file=file,
-                                               title=file,
-                                               channels=channel,
-                                               initial_comment=initial_comment)
-            uploaded_file=response["file"]
-            k=list(response["file"]["shares"].keys())[0] # empirically, pick the first one. There should be only one!
-            channel=list(response["file"]["shares"][k].keys())[0] # empirically, pick the first one. There should be only one!
-            ts=response["file"]["shares"][k][channel][0]["ts"]
+            upload_arguments["channel"] = channel
+        if len(files) == 1:
+            upload_arguments.update(file=files[0], title=files[0])
+        else:
+            upload_arguments["file_uploads"] = [
+                {"file": path, "title": path} for path in files
+            ]
+
+        response = _try_multiple_times(client.files_upload_v2,
+                                       **upload_arguments)
+        uploaded_files = list(response["files"])
+        uploaded_file=uploaded_files[0]
+        share = _file_share(uploaded_file)
+        if share is None:
+            file_id=uploaded_file["id"]
+            max_attempts=10
+            num_attempts=0
+            num_attempts_delay=3
+            jittering=0.2
+            time.sleep(2.0) # wait before first attempt
+            while True:
+                num_attempts+=1
+                response = _try_multiple_times(client.files_info, file=file_id)
+                share = _file_share(response["file"])
+                if share is not None:
+                    uploaded_files[0]=response["file"]
+                    break
+                if num_attempts>=max_attempts:
+                    raise RuntimeError("Cannot obtain shares info for file ID "+str(file_id))
+                wait=2.0
+                if num_attempts>num_attempts_delay:
+                    wait*=2**(num_attempts-num_attempts_delay)
+                wait*=random.uniform(1,1+jittering)
+                warnings.warn("Slack API, missing shares for file ID " + file_id  +", retry after "
+                              +str(wait)
+                              +" seconds"+
+                              " ["+str(num_attempts)+"/"+str(max_attempts)+"]",
+                              UserWarning)
+                time.sleep(wait)
+        channel, ts = share
 
     elif reply:
         response = _try_multiple_times(client.chat_postMessage,
@@ -717,10 +706,11 @@ def notify(message: str = "",
     else:
         base_url="https://" + organization + ".slack.com/"
 
-    if len(file)==0:
+    if not files:
         url=base_url + "archives/" + response["channel"] + "/p" + response["ts"][:-7] + response["ts"][-6:]
     else:
         url=base_url + "archives/" + channel + "/p" + ts[:-7] + ts[-6:]
-        url+="," + base_url + "files/" + uploaded_file["user"] + "/" + uploaded_file["id"]
+        for uploaded_file in uploaded_files:
+            url+="," + base_url + "files/" + uploaded_file["user"] + "/" + uploaded_file["id"]
 
     return url
