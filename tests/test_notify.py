@@ -156,6 +156,28 @@ class TestNotifyUnit(unittest.TestCase):
         self.assertTrue(markdown.endswith(" [truncated]"))
         self.assertEqual(arguments["text"], markdown + "\n")
 
+    def test_screenlog_uses_full_markdown_block_limit(self):
+        client = Mock()
+        client.chat_postMessage.return_value = {
+            "channel": "C123",
+            "ts": "1700000000.123456"
+        }
+        client.auth_test.return_value = {"url": "https://acme.slack.com/"}
+        screenlog = b"x" * 12001
+
+        with patch("builtins.open", mock_open(read_data=screenlog)), \
+             patch("bussilab.notify.WebClient", return_value=client):
+            notify(screenlog="screen.log", channel="C123", token="token",
+                   footer=False)
+
+        arguments = client.chat_postMessage.call_args.kwargs
+        block = arguments["blocks"][0]
+        self.assertEqual(block["type"], "markdown")
+        self.assertEqual(len(block["text"]), 12000)
+        self.assertTrue(block["text"].startswith("```\n"))
+        self.assertTrue(block["text"].endswith(" [truncated]\n```\n"))
+        self.assertEqual(arguments["text"], block["text"][4:-5] + "\n")
+
     def test_update_reply_and_broadcast_build_expected_calls(self):
         client = Mock()
         client.chat_update.return_value = {

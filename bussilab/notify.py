@@ -123,6 +123,12 @@ from . import coretools
 
 from typing import cast
 
+_MARKDOWN_BLOCK_LIMIT = 12000
+_TRUNCATION_MARKER = " [truncated]"
+_CODE_BLOCK_PREFIX = "```\n"
+_CODE_BLOCK_SUFFIX = "\n```\n"
+
+
 def _try_multiple_times(func,*args,**kwargs):
     max_attempts=5
     max_wait=30.0
@@ -336,6 +342,16 @@ def notify(message: str = "",
 
            The title of the notification.
 
+       screenlog: str
+
+           The path of a GNU Screen log file. Its contents are displayed in
+           a fenced native Markdown block.
+
+       screenlog_maxlines: int
+
+           If positive, include only this many lines from the end of the
+           Screen log.
+
        footer: bool
 
            If True, a footer is added with current user, machine, and
@@ -468,12 +484,18 @@ def notify(message: str = "",
                 screenlog_message_lines = screenlog_message_lines[-screenlog_maxlines:]
             screenlog_message="\n".join(screenlog_message_lines)
 
-    if len(screenlog_message)>2900:
-        screenlog_message=screenlog_message[:2900] + " [truncated]"
+    screenlog_limit = (_MARKDOWN_BLOCK_LIMIT - len(_CODE_BLOCK_PREFIX)
+                       - len(_CODE_BLOCK_SUFFIX))
+    if len(screenlog_message)>screenlog_limit:
+        screenlog_message = (screenlog_message[
+            :screenlog_limit-len(_TRUNCATION_MARKER)
+        ] + _TRUNCATION_MARKER)
         
     if type == "markdown":
-        if len(message)>12000:
-            message=message[:11988] + " [truncated]"
+        if len(message)>_MARKDOWN_BLOCK_LIMIT:
+            message = message[
+                :_MARKDOWN_BLOCK_LIMIT-len(_TRUNCATION_MARKER)
+            ] + _TRUNCATION_MARKER
     elif len(message)>2900:
         message=message[:2900] + " [truncated]"
 
@@ -531,15 +553,11 @@ def notify(message: str = "",
         
     if len(screenlog_message) > 0:
         text+=screenlog_message+"\n"
-        blocks.append(
-           {
-               "type": "section",
-               "text": {
-                         "type": "mrkdwn",
-                         "text": "```\n" + screenlog_message + "\n```\n"
-                       },
-           }
-           )
+        blocks.append({
+            "type": "markdown",
+            "text": (_CODE_BLOCK_PREFIX + screenlog_message
+                     + _CODE_BLOCK_SUFFIX)
+        })
 
     if footer:
         footer_text = ""
