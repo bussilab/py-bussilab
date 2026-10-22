@@ -564,11 +564,57 @@ class TestRNA2D(unittest.TestCase):
 
     def test_evaluate(self):
         molecule = Molecule(self.seq)
-        for structure, energy in molecule.suboptimal_structures(5.0):
+        suboptimal = molecule.suboptimal_structures(5.0)
+        for structure, energy in suboptimal:
             self.assertAlmostEqual(
                 molecule.evaluate(structure),
                 energy,
             )
+
+        np.testing.assert_allclose(
+            molecule.evaluate(suboptimal),
+            [energy for _, energy in suboptimal],
+        )
+
+        structures = [structure for structure, _ in suboptimal]
+        np.testing.assert_allclose(
+            molecule.evaluate(structures),
+            [molecule.evaluate(structure) for structure in structures],
+        )
+
+        structure_array = np.asarray(structures[:4])
+        evaluated_array = molecule.evaluate(structure_array)
+        self.assertEqual(evaluated_array.shape, structure_array.shape)
+        np.testing.assert_allclose(
+            evaluated_array,
+            molecule.evaluate(structures[:4]),
+        )
+
+        samples = molecule.sample(10)
+        np.testing.assert_allclose(
+            molecule.evaluate(samples),
+            [molecule.evaluate(structure) for structure in samples],
+        )
+        weighted_samples = molecule.sample(10, weights=True)
+        np.testing.assert_allclose(
+            molecule.evaluate(weighted_samples),
+            [
+                molecule.evaluate(structure)
+                for structure, _ in weighted_samples
+            ],
+        )
+
+        mixed = [structures[0], suboptimal[1], structures[2]]
+        np.testing.assert_allclose(
+            molecule.evaluate(mixed),
+            molecule.evaluate([structures[0], structures[1], structures[2]]),
+        )
+        np.testing.assert_allclose(
+            molecule.evaluate(item for item in mixed),
+            molecule.evaluate(mixed),
+        )
+
+        self.assertEqual(molecule.evaluate([]).shape, (0,))
 
         with self.assertRaises(ValueError):
             molecule.evaluate(None)
@@ -576,6 +622,12 @@ class TestRNA2D(unittest.TestCase):
             molecule.evaluate("." * (len(self.seq) - 1))
         with self.assertRaises(ValueError):
             molecule.evaluate("x" * len(self.seq))
+        with self.assertRaises(ValueError):
+            molecule.evaluate(["." * len(self.seq), None])
+        with self.assertRaises(ValueError):
+            molecule.evaluate(structure_array.reshape(2, 2))
+        with self.assertRaises(ValueError):
+            molecule.evaluate(np.asarray(suboptimal))
 
     def test_partition_function(self):
 
@@ -1426,6 +1478,21 @@ class TestRNA2D(unittest.TestCase):
                     energy,
                     places=6,
                 )
+            np.testing.assert_allclose(
+                molecule.evaluate(suboptimal),
+                [energy for _, energy in suboptimal],
+                atol=1e-6,
+            )
+
+            weighted_samples = molecule.sample(20, weights=True)
+            np.testing.assert_allclose(
+                molecule.evaluate(weighted_samples),
+                [
+                    exact_energies[structure]
+                    for structure, _ in weighted_samples
+                ],
+                atol=1e-6,
+            )
 
     def test_internal_counters(self):
 

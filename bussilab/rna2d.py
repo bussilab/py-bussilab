@@ -1743,21 +1743,54 @@ class Molecule:
 
     def evaluate(self, structure):
         """
-        Return the exact free energy of a secondary structure.
+        Return exact free energies for one or more secondary structures.
 
         Parameters
         ----------
-        structure : str
-            Dot-bracket representation of a secondary structure.
+        structure : str or iterable
+            A dot-bracket structure or an iterable whose elements are structure
+            strings or ``(structure, value)`` pairs. This directly accepts the
+            results of :meth:`suboptimal_structures`, ``sample()``, and
+            ``sample(weights=True)``. Values paired with structures are ignored.
+            NumPy arrays must be one-dimensional.
 
         Returns
         -------
-        float
-            Exact free energy (kcal/mol), including continuous pairing
-            penalties and state biases.
+        float or ndarray
+            Exact free energy in kcal/mol, including continuous pairing
+            penalties and state biases. Scalar input returns a float; batched
+            input returns an array with shape ``(n_structures,)``.
         """
         if not isinstance(structure, str):
-            raise ValueError("structure must be a string")
+            if isinstance(structure, np.ndarray) and structure.ndim != 1:
+                raise ValueError("structure arrays must be one-dimensional")
+            try:
+                items = list(structure)
+            except TypeError as error:
+                raise ValueError(
+                    "structure must be a string or an iterable of structures"
+                ) from error
+
+            structures = []
+            for item in items:
+                if isinstance(item, str):
+                    structures.append(item)
+                elif (
+                    hasattr(item, "__len__")
+                    and len(item) == 2
+                    and isinstance(item[0], str)
+                ):
+                    structures.append(item[0])
+                else:
+                    raise ValueError(
+                        "each item must be a structure string or a "
+                        "(structure, value) pair"
+                    )
+            return np.asarray([
+                self.evaluate(item)
+                for item in structures
+            ])
+
         if len(structure) != len(self._seq):
             raise ValueError(
                 "structure must contain one symbol per nucleotide"
@@ -1767,9 +1800,6 @@ class Molecule:
                 "structure must use '.', '(', and ')' dot-bracket symbols"
             )
 
-        # Components follow np.ndindex order, so the paired/unpaired state is
-        # also the component index interpreted as a binary integer. Avoid
-        # constructing a state tuple on this latency-sensitive path.
         component_index = 0
         for position in self._explicit_state_positions:
             component_index = (
