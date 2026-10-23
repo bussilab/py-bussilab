@@ -73,6 +73,7 @@ jobs:
         ( cd examples && ./render.sh )
         mkdir doc/examples
         cp examples/*html doc/examples/
+        sudo apt-get update
         ( sudo apt-get install tree && cd doc/examples && tree -H '.' -L 1 --noreport --charset utf-8 > index.html )
         ( sudo apt-get install pandoc texlive-xetex && pdoc3 -f --pdf bussilab > bussilab.md && pandoc --metadata=title:"Py-Bussilab Documentation" --from=markdown+abbreviations+tex_math_single_backslash --pdf-engine=xelatex --toc --toc-depth=4 --output=doc/bussilab.pdf bussilab.md )
     - name: Push doc to GitHub Pages
