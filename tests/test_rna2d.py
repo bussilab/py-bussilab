@@ -725,6 +725,8 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "No feasible MFE"):
             impossible.mfe()
         self.assertEqual(impossible.suboptimal_structures(1.0), [])
+        with self.assertRaisesRegex(RuntimeError, "No feasible suboptimal"):
+            impossible.suboptimal_coverage(1.0)
 
         # An impossible component must be skipped even when a residual forces
         # the suboptimal-candidate branch of the internal MFE calculation.

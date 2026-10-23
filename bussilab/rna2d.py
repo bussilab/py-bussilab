@@ -2718,8 +2718,15 @@ class Molecule:
             Fraction of the total partition function represented by the
             enumerated structures. The result lies between zero and one, apart
             from possible small numerical errors.
+
+        Raises
+        ------
+        RuntimeError
+            If no structure satisfies the hard constraints.
         """
         suboptimal = self.suboptimal_structures(delta)
+        if not suboptimal:
+            raise RuntimeError("No feasible suboptimal structure")
 
         reference_energy = suboptimal[0][1]
         inverse_kT = 1.0 / (_KB * self._temperature)
