@@ -9,6 +9,9 @@ jobs:
   python:
 
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -44,8 +47,13 @@ jobs:
         bussilab check --import
         pip install pytest pytest-cov
         pytest -v
-        NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab
-        bash <(curl -s https://codecov.io/bash)
+        NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab --cov-report=term --cov-report=xml:coverage.xml
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v7
+      with:
+        files: ./coverage.xml
+        use_oidc: true
+        fail_ci_if_error: false
     - name: Pyflakes
       run: |
         pip install --upgrade pyflakes
