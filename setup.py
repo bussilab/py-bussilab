@@ -37,10 +37,9 @@ setup(
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
         "Programming Language :: Python :: 3.14",
-        "Programming Language :: Python :: 3.15",
         "Topic :: Scientific/Engineering"
         ],
     install_requires=deps(),
-    python_requires='>=3.8',
+    python_requires='>=3.8,<3.15',
     scripts=['bin/bussilab']
 )

@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest, macos-latest]
 
     steps:
@@ -171,12 +171,6 @@ jobs:
         source activate base
         conda create -n py314 -c conda-forge -c local python=3.14 py-bussilab pytest
         source activate py314
-        pytest -v
-    - name: Test 3.15
-      run: |
-        source activate base
-        conda create -n py315 -c conda-forge -c local python=3.15 py-bussilab pytest
-        source activate py315
         pytest -v
     - name: Check anaconda and conda artifact
       if: ${{ matrix.os == 'ubuntu-latest' }}
