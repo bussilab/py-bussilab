@@ -19,9 +19,9 @@ jobs:
         os: [ubuntu-latest, macos-latest]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python-version }}
     - name: Pre-install
@@ -95,13 +95,13 @@ jobs:
         .ci/pushdoc
     - name: Upload doc to artifact
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: doc
         name: doc
     - name: Upload Flake8 report
       if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14' }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: flake8_report.txt
         name: flake8_report
@@ -124,7 +124,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v7
     - name: Install conda
       run: |
         curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci
