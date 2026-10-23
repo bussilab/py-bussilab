@@ -250,6 +250,25 @@ class TestRNA2D(unittest.TestCase):
                 temperature=0.0,
             )
 
+    def test_numpy_conversion_validation(self):
+        for weight, message in (("bad", "real numbers"),
+                                ([0.0], "scalar")):
+            with self.subTest(weight=weight):
+                with self.assertRaisesRegex(ValueError, message):
+                    rna2d.sample_to_numpy([("......", weight)])
+
+        for energy, message in (("bad", "real numbers"),
+                                ([0.0], "scalar"),
+                                (1.7e308, "too large")):
+            with self.subTest(energy=energy):
+                with np.errstate(over="ignore"):
+                    with self.assertRaisesRegex(ValueError, message):
+                        rna2d.suboptimal_to_numpy(
+                            [("......", energy)], temperature=310.15)
+
+        with self.assertRaisesRegex(ValueError, "too long"):
+            rna2d.sample_to_numpy(["." * 32769])
+
     def test_constructor(self):
 
         Molecule(self.seq)
@@ -312,6 +331,7 @@ class TestRNA2D(unittest.TestCase):
 
         invalid = [
             1,
+            ["bad"],
             [(0, 8)],
             [(0, 8, 1.0, 2.0)],
             [(False, 8, 1.0)],
@@ -501,6 +521,18 @@ class TestRNA2D(unittest.TestCase):
         self.assertIsNone(reset._salt)
         self.assertEqual(reset._parameters, "turner2004")
 
+    def test_default_parameter_validation(self):
+        rna2d.reset_default_parameters()
+        try:
+            for kwargs, message in (({"pf_smooth": "yes"}, "pf_smooth"),
+                                    ({"parameters": "unknown"}, "not known")):
+                with self.subTest(kwargs=kwargs):
+                    with self.assertRaisesRegex(ValueError, message):
+                        rna2d.set_default_parameters(**kwargs)
+            self.assertFalse(Molecule(self.seq)._pf_smooth)
+        finally:
+            rna2d.reset_default_parameters()
+
     def test_no_lonely_pair(self):
 
         default = Molecule(self.seq)
@@ -673,6 +705,67 @@ class TestRNA2D(unittest.TestCase):
                 state_positions=((0, 1), (7, 8)),
                 state_biases=(np.zeros((2, 2)), np.zeros(4)),
             )
+
+    def test_additional_input_validation(self):
+        invalid = (
+            ({"force_paired": 1}, "iterable"),
+            ({"state_positions": 1}, "sequence"),
+            ({"state_positions": ((0,), np.zeros((2, 2), dtype=int))},
+             "one-dimensional"),
+            ({"state_positions": ((0.5,),)}, "integers"),
+            ({"state_positions": (0,), "state_biases": ["bad"]}, "shape"),
+            ({"state_positions": ((0,), (8,)), "state_biases": 1},
+             "one tensor"),
+        )
+        for kwargs, message in invalid:
+            with self.subTest(kwargs=kwargs):
+                with self.assertRaisesRegex(ValueError, message):
+                    Molecule(self.seq, **kwargs)
+
+        molecule = Molecule(self.seq)
+        for action in (lambda: molecule.sample(0),
+                       lambda: molecule.sample(1, weights="yes"),
+                       lambda: molecule.suboptimal_structures(-1)):
+            with self.assertRaises(ValueError):
+                action()
+        mixture = Molecule(self.seq, state_positions=(0,),
+                           reduce_state_space=False)
+        with self.assertRaisesRegex(ValueError, "delta"):
+            mixture.suboptimal_structures(-1)
+
+    def test_infeasible_state_mixture(self):
+        molecule = Molecule(
+            "AAAAA", force_paired=(0,), state_positions=(1,),
+            reduce_state_space=False,
+        )
+        with self.assertRaisesRegex(RuntimeError, "No state has a feasible MFE"):
+            molecule.mfe()
+        with self.assertRaisesRegex(RuntimeError, "No state has a finite partition"):
+            molecule.total_free_energy()
+
+    def test_condition_unpaired_with_nested_states(self):
+        molecule = Molecule(
+            self.seq,
+            force_paired=(0,),
+            force_unpaired=(1,),
+            state_positions=((2,), (7,)),
+            state_biases=([0.0, 0.1], [0.0, 0.2]),
+            reduce_state_space=False,
+        )
+        self.assertIsNone(molecule._condition_unpaired(0))
+        self.assertIs(molecule._condition_unpaired(1), molecule)
+        conditioned = molecule._condition_unpaired(2)
+        self.assertIn(2, conditioned._force_unpaired)
+        self.assertEqual(conditioned._state_position_sets, ((), (7,)))
+        np.testing.assert_allclose(conditioned._state_bias_sets[1], [0.0, 0.2])
+
+    def test_unweighted_state_mixture_sampling(self):
+        molecule = Molecule(
+            self.seq, state_positions=(0,), reduce_state_space=False)
+        samples = molecule.sample(10)
+        self.assertEqual(len(samples), 10)
+        self.assertTrue(all(isinstance(sample, str) and
+                            len(sample) == len(self.seq) for sample in samples))
 
     def test_parameter_sets(self):
 
@@ -2028,6 +2121,21 @@ class TestRNA2D(unittest.TestCase):
         self.assertAlmostEqual(
             energies[0],
             mol.mfe()[1],
+        )
+
+    def test_single_state_energy_offset(self):
+        baseline = Molecule(self.seq).suboptimal_structures(0.5)
+        shifted = Molecule(
+            self.seq,
+            state_positions=(),
+            state_biases=0.5,
+            reduce_state_space=False,
+        ).suboptimal_structures(0.5)
+        self.assertEqual([structure for structure, _ in shifted],
+                         [structure for structure, _ in baseline])
+        np.testing.assert_allclose(
+            [energy for _, energy in shifted],
+            [energy + 0.5 for _, energy in baseline],
         )
 
     def test_suboptimal_vanilla(self):
