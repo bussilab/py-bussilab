@@ -47,6 +47,8 @@ required when constructing a :class:`Molecule`.
     partition-function result.
   - Changed `sample()` to return unweighted structure strings by default;
     `sample(weights=True)` retains structures with importance log weights.
+  - Added `set_random_seed()` for reproducible sampling without changing
+    NumPy's global random state.
   - Added `no_lonely_pair` and `pf_smooth` options and
     `set_default_parameters()` / `reset_default_parameters()` for new
     molecules. Partition-function smoothing now defaults to off so ensemble
@@ -92,6 +94,36 @@ def _require_viennarna():
             "The ViennaRNA Python package is required "
             "to use bussilab.rna2d."
         )
+
+
+# Keep the wrapper's mixture selection and rejection sampling independent of
+# NumPy's global RNG. RandomState has a stronger cross-version stream
+# compatibility guarantee than Generator for a fixed sequence of draws.
+_random_state = np.random.RandomState()
+
+
+def set_random_seed(seed):
+    """Seed ViennaRNA and the private NumPy RNG used by :meth:`Molecule.sample`.
+
+    The seed affects subsequent sampling by this module and direct ViennaRNA
+    sampling in the current process. It does not change NumPy's global random
+    state. ViennaRNA's RNG is process-global, so interleaved ViennaRNA calls
+    can affect reproducibility.
+
+    Parameters
+    ----------
+    seed : int
+        Unsigned 32-bit integer seed.
+    """
+    _require_viennarna()
+    if (
+        isinstance(seed, (bool, np.bool_))
+        or not isinstance(seed, (int, np.integer))
+        or not 0 <= seed <= np.iinfo(np.uint32).max
+    ):
+        raise ValueError("seed must be an unsigned 32-bit integer")
+    RNA.init_rand(int(seed))
+    _random_state.seed(int(seed))
 
 
 # Rounding factor in viennaRNA
@@ -1686,7 +1718,7 @@ class _DPMolecule:
                 acceptance_probability = math.exp(
                     log_weight - max_log_weight
                 )
-                if np.random.random() < acceptance_probability:
+                if _random_state.random() < acceptance_probability:
                     accepted.append(structure)
                     accepted_in_batch += 1
                     if len(accepted) == number:
@@ -2705,6 +2737,9 @@ class Molecule:
         By default, rejection sampling corrects ViennaRNA's rounded soft
         constraints and returns unweighted structures from the exact continuous
         model. Weighted samples from the rounded model can be requested instead.
+        Use :func:`set_random_seed` to reproduce samples within a fixed
+        software configuration; seeding NumPy's global RNG does not affect
+        this method.
 
         Parameters
         ----------
@@ -2751,7 +2786,7 @@ class Molecule:
             )
 
         _, probabilities = self._component_probabilities()
-        component_indices = np.random.choice(
+        component_indices = _random_state.choice(
             len(self._dp_molecules),
             size=number,
             p=probabilities,

@@ -2200,6 +2200,30 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaises(ValueError):
             mol.sample(1, weights="yes")
 
+    def test_set_random_seed(self):
+        for invalid in (-1, 2**32, 1.5, True, None, "123"):
+            with self.subTest(seed=invalid), self.assertRaises(ValueError):
+                rna2d.set_random_seed(invalid)
+
+        molecule = Molecule(
+            self.seq,
+            lambdas1d=np.full(len(self.seq), 0.003),
+            state_positions=(0, 8),
+            state_biases=[[0.0, 0.2], [-0.1, 0.3]],
+        )
+        global_state = np.random.get_state()
+        for weights in (False, True):
+            rna2d.set_random_seed(123)
+            first = molecule.sample(40, weights=weights)
+            rna2d.set_random_seed(123)
+            second = molecule.sample(40, weights=weights)
+            self.assertEqual(first, second)
+
+        after = np.random.get_state()
+        self.assertEqual(after[0], global_state[0])
+        np.testing.assert_array_equal(after[1], global_state[1])
+        self.assertEqual(after[2:], global_state[2:])
+
     def test_sampling_vanilla(self):
         self._run_in_vanilla_mode(self.test_sampling)
 
