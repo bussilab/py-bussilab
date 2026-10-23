@@ -1,4 +1,6 @@
 import unittest
+from contextlib import redirect_stderr
+from io import StringIO
 
 from bussilab.wham import wham
 from bussilab.coretools import TestCase
@@ -143,6 +145,50 @@ class TestWham(TestCase):
         self.assertLessEqual(w1.nfev,2)
         w2=wham(((0,10),(-4,11)),T=0.2,logZ=w0.logZ)
         self.assertLessEqual(w2.nfev,2)
+
+    def test_normalize_modes(self):
+        import numpy as np
+        bias = [[0.0], [1.0]]
+        unnormalized = np.array([0.0, 1.0])
+        normalized = unnormalized - np.logaddexp(0.0, 1.0)
+        for method in ("minimize", "substitute"):
+            with self.subTest(method=method):
+                np.testing.assert_allclose(
+                    wham(bias, method=method, normalize=False).logW, unnormalized)
+                np.testing.assert_allclose(
+                    wham(bias, method=method, normalize=True).logW, normalized)
+                np.testing.assert_allclose(
+                    wham(bias, method=method, normalize="log").logW, normalized)
+
+    def test_minimize_options(self):
+        import numpy as np
+        bias = [[1, 10, 7], [2, 9, 6], [3, 8, 5]]
+        expected = wham(bias).logW
+        for options in ({"jac": True}, {"method": "BFGS"}):
+            with self.subTest(options=options):
+                np.testing.assert_allclose(
+                    wham(bias, minimize_opt=options).logW, expected)
+        with self.assertRaisesRegex(ValueError, "minimize_opt.*jac"):
+            wham(bias, minimize_opt={"jac": False})
+
+    def test_invalid_options(self):
+        bias = [[0.0], [1.0]]
+        with self.assertRaisesRegex(ValueError, "method should be"):
+            wham(bias, method="unknown")
+        with self.assertRaisesRegex(ValueError, "normalize should be"):
+            wham(bias, normalize="unknown")
+
+    def test_verbose(self):
+        bias = [[0.0], [1.0]]
+        for method in ("minimize", "substitute"):
+            with self.subTest(method=method):
+                output = StringIO()
+                with redirect_stderr(output):
+                    wham(bias, method=method, verbose=True)
+                self.assertIn("WHAM: start", output.getvalue())
+                self.assertIn("WHAM: end", output.getvalue())
+                if method == "substitute":
+                    self.assertIn("WHAM: iteration", output.getvalue())
 
 if __name__ == "__main__":
     unittest.main()
