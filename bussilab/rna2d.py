@@ -99,7 +99,7 @@ def _require_viennarna():
 # Keep the wrapper's mixture selection and rejection sampling independent of
 # NumPy's global RNG. RandomState has a stronger cross-version stream
 # compatibility guarantee than Generator for a fixed sequence of draws.
-_random_state = np.random.RandomState()
+_random_state = np.random.RandomState()  # pylint: disable=no-member
 
 
 def set_random_seed(seed):
