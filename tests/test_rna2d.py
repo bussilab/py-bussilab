@@ -1542,6 +1542,58 @@ class TestRNA2D(unittest.TestCase):
         self.assertEqual(dp_mol._fc_n_2d_constraints, expected_pairs)
         self.assertLess(expected_pairs, n * (n - 1) // 2)
 
+    def test_sparse_2d_constraint_enumeration(self):
+        class FakeFoldCompound:
+            def __init__(self):
+                self.bp = []
+
+            def sc_add_up(self, i, energy):
+                raise AssertionError("no 1D constraint expected")
+
+            def sc_add_bp(self, i, j, energy):
+                self.bp.append((i, j, energy))
+
+        class CountingPairs:
+            def __init__(self, pairs):
+                self.pairs = pairs
+                self.lookups = 0
+
+            def __contains__(self, pair):
+                self.lookups += 1
+                return pair in self.pairs
+
+        sequence = "AUAUAUAUAGAGCAUAUAUAU"
+        position = len(sequence) // 2
+        lambdas = np.zeros(len(sequence))
+        lambdas[position] = 100.0
+        fc = FakeFoldCompound()
+
+        allowed_pairs = rna2d._ALLOWED_PAIRS
+        counting_pairs = CountingPairs(allowed_pairs)
+        rna2d._ALLOWED_PAIRS = counting_pairs
+        try:
+            shift, n_1d, n_2d = rna2d._apply_constraint(
+                fc,
+                sequence,
+                lambdas,
+                _KB * 300.0,
+            )
+        finally:
+            rna2d._ALLOWED_PAIRS = allowed_pairs
+
+        expected = [
+            (i + 1, j + 1, 100.0)
+            for i in range(len(sequence))
+            for j in range(i + 1, len(sequence))
+            if position in (i, j)
+            and sequence[i] + sequence[j] in allowed_pairs
+        ]
+        self.assertEqual(shift, 0.0)
+        self.assertEqual(n_1d, 0)
+        self.assertEqual(n_2d, len(expected))
+        self.assertEqual(fc.bp, expected)
+        self.assertEqual(counting_pairs.lookups, len(sequence) - 1)
+
     def test_importance_sampling(self):
 
         seq = "UGCGCCAACUUUGUAGACUCCGCAGAUUACGAACGCCAACGAACGAACAGACACCCUUCCUAGCCUCGCCACUACAUAUGUCUAACAGUCUCUUGUGCUG"

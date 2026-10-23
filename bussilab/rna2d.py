@@ -603,12 +603,25 @@ def _apply_constraint(fc, sequence, lambdas, kT):
         return shift, n_1d, 0
 
     # 2D representation. Add each pair constraint only once, combining
-    # contributions from both endpoints.
+    # contributions from both endpoints. Only pairs incident to a 2D
+    # nucleotide can have a non-zero contribution. Iterating over that union
+    # avoids an unconditional O(n**2) scan when only a few lambdas exceed the
+    # safe 1D budget, while retaining increasing (i, j) insertion order.
     lambda_2d = np.where(use_2d, lambdas, 0.0)
+    indices_2d = np.flatnonzero(use_2d)
 
     n_2d = 0
     for i in range(n):
-        for j in range(i + 1, n):
+        if use_2d[i]:
+            candidates = range(i + 1, n)
+        else:
+            first = np.searchsorted(indices_2d, i + 1)
+            # SWIG does not accept NumPy integer scalars for ViennaRNA's
+            # unsigned-int arguments, so convert this sparse NumPy slice
+            # lazily. The dense range above already yields Python integers.
+            candidates = map(int, indices_2d[first:])
+
+        for j in candidates:
             if sequence[i] + sequence[j] not in _ALLOWED_PAIRS:
                 continue
 
