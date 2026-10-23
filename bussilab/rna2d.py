@@ -40,6 +40,9 @@ required when constructing a :class:`Molecule`.
     free-energy derivatives with respect to one-body and state biases.
   - Exposed the resolved temperature and Boltzmann constant as read-only
     `Molecule.temperature` and `Molecule.boltzmann_constant` properties.
+  - Removed the `samples` and `suboptimal_delta` options from
+    `pairing_correlation_matrix()`; it now always returns the exact
+    partition-function result.
   - Changed `sample()` to return unweighted structure strings by default;
     `sample(weights=True)` retains structures with importance log weights.
   - Added `no_lonely_pair` and `pf_smooth` options and
