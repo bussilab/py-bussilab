@@ -94,7 +94,7 @@ _ROUNDING_FACTOR=0.01
 
 def _remove_floating_roundoff(residuals, values):
     """Ignore binary floating-point noise in centikcal energies."""
-    tolerance = 8 * np.finfo(float).eps * np.maximum(1.0, np.abs(values))
+    tolerance = 8 * sys.float_info.epsilon * np.maximum(1.0, np.abs(values))
     return np.where(np.abs(residuals) <= tolerance, 0.0, residuals)
 
 # Maximum assumed candidates-per-accepted-sample ratio used when choosing the
