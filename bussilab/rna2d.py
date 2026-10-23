@@ -21,6 +21,39 @@ structure collections to NumPy pair tables and normalized log weights.
 
 ViennaRNA's Python package is an optional dependency of ``bussilab`` but is
 required when constructing a :class:`Molecule`.
+
+## Changelog
+
+- **v0.0.52**
+  - Added `Molecule` hard constraints (`force_paired`, `force_unpaired`) and
+    coupled paired/unpaired-state biases (`state_positions`, `state_biases`),
+    including multiple state sets and the `reduce_state_space` option.
+  - Added sparse exact-pair `base_pair_biases` and
+    `d_free_energy_d_base_pair_biases()`; continuous biases retain their
+    sub-0.01 kcal/mol precision with unpatched ViennaRNA.
+  - Added `evaluate()` for one structure or a one-dimensional iterable of
+    structures or `(structure, value)` pairs, including output from `sample()`
+    and `suboptimal_structures()`. Structures can be rescored by another
+    `Molecule` with the same sequence.
+  - Added `sample_to_numpy()` and `suboptimal_to_numpy()` for zero-based pair
+    tables and normalized log weights, plus `mean_bp_distance()` and
+    free-energy derivatives with respect to one-body and state biases.
+  - Changed `sample()` to return unweighted structure strings by default;
+    `sample(weights=True)` retains structures with importance log weights.
+  - Added `no_lonely_pair` and `pf_smooth` options and
+    `set_default_parameters()` / `reset_default_parameters()` for new
+    molecules. Partition-function smoothing now defaults to off so ensemble
+    and structure energies use the same model.
+  - Fixed suboptimal enumeration with positive one-body penalties on
+    unpatched ViennaRNA and parameter-set loading with ViennaRNA 2.7.2.
+  - Fixed validation of temperature and salt settings: zero or non-finite
+    temperatures and non-finite salt concentrations are now rejected.
+- **v0.0.51**
+  - Introduced `Molecule` with continuous per-nucleotide pairing penalties,
+    MFE prediction, partition functions, base-pair probabilities, suboptimal
+    enumeration, sampling, and suboptimal coverage.
+  - Added `pairing_correlation_matrix()` for joint paired-state probabilities
+    from partition functions, samples, or suboptimal structures.
 """
 
 import numpy as np
