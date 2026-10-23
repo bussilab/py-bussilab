@@ -178,7 +178,6 @@ jobs:
         source activate base
     
         which anaconda
-        anaconda --version
     
         CONDA_BASE="$(conda info --base)"
         echo "Conda base: $CONDA_BASE"
