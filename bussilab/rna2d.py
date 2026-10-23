@@ -370,7 +370,9 @@ def sample_to_numpy(samples, *, deduplicate=True):
     deduplicate : bool, default=True
         If True, merge identical structures. Unweighted occurrences are
         combined through their counts; supplied log weights are combined using
-        logarithmic addition. If False, retain every occurrence.
+        logarithmic addition, then order structures by decreasing combined
+        weight. Equal-weight structures retain first-occurrence order. If
+        False, retain every occurrence in input order.
 
     Returns
     -------
@@ -436,6 +438,9 @@ def sample_to_numpy(samples, *, deduplicate=True):
                 unique_logweights.append(float(logweight))
         structures = unique_structures
         input_logweights = np.asarray(unique_logweights, dtype=float)
+        order = np.argsort(-input_logweights, kind="stable")
+        structures = [structures[index] for index in order]
+        input_logweights = input_logweights[order]
 
     states = _structures_to_pairtables(structures)
     return states, _normalize_logweights(input_logweights)

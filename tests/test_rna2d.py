@@ -107,6 +107,41 @@ class TestRNA2D(unittest.TestCase):
             [2.0 / 3.0, 1.0 / 3.0],
         )
 
+        # Sort after merging duplicates; ties retain first-occurrence order.
+        sorted_states, sorted_logweights = rna2d.sample_to_numpy([
+            "......", "(....)", "((..))", "(....)", "((..))",
+        ])
+        np.testing.assert_array_equal(sorted_states, np.array([
+            [5, -1, -1, -1, -1, 0],
+            [5, 4, -1, -1, 1, 0],
+            [-1, -1, -1, -1, -1, -1],
+        ], dtype=np.int16))
+        np.testing.assert_allclose(np.exp(sorted_logweights), [0.4, 0.4, 0.2])
+
+        original_states, original_logweights = rna2d.sample_to_numpy([
+            ("......", np.log(1.0)),
+            ("(....)", np.log(3.0)),
+            ("((..))", np.log(2.0)),
+        ], deduplicate=False)
+        np.testing.assert_array_equal(original_states, np.array([
+            [-1, -1, -1, -1, -1, -1],
+            [5, -1, -1, -1, -1, 0],
+            [5, 4, -1, -1, 1, 0],
+        ], dtype=np.int16))
+        np.testing.assert_allclose(
+            np.exp(original_logweights), [1.0 / 6.0, 0.5, 1.0 / 3.0]
+        )
+
+        weighted_states, weighted_logweights = rna2d.sample_to_numpy([
+            ("......", np.log(1.0)),
+            ("(....)", np.log(3.0)),
+            ("((..))", np.log(2.0)),
+        ])
+        np.testing.assert_array_equal(weighted_states, original_states[[1, 2, 0]])
+        np.testing.assert_allclose(
+            np.exp(weighted_logweights), [0.5, 1.0 / 3.0, 1.0 / 6.0]
+        )
+
         with self.assertRaises(ValueError):
             rna2d.sample_to_numpy([])
         with self.assertRaises(ValueError):
