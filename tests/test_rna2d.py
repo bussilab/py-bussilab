@@ -319,8 +319,6 @@ class TestRNA2D(unittest.TestCase):
             [(-1, 8, 1.0)],
             [(0, len(self.seq), 1.0)],
             [(0, 0, 1.0)],
-            [(0, 3, 1.0)],
-            [(0, 4, 1.0)],
             [(0, 8, np.nan)],
             [(0, 8, "bad")],
             [(0, 8, 1.0), (8, 0, 2.0)],
@@ -332,6 +330,74 @@ class TestRNA2D(unittest.TestCase):
                         self.seq,
                         base_pair_biases=base_pair_biases,
                     )
+
+    def test_impossible_base_pair_biases_are_no_ops(self):
+        sequence = "GCGCGCGC"
+        biases = [
+            (0, 1, -50.004),  # canonical, but too close
+            (0, 7, -0.015),  # feasible
+            (0, 4, -50.003),  # noncanonical
+        ]
+
+        def check():
+            molecule = Molecule(sequence, base_pair_biases=biases)
+            reference = Molecule(
+                sequence,
+                base_pair_biases=[biases[1]],
+            )
+            self.assertEqual(molecule._base_pair_biases, tuple(biases))
+            self.assertEqual(
+                molecule._prepared_base_pair_biases.sorted_indices,
+                (1,),
+            )
+            np.testing.assert_array_equal(
+                molecule._prepared_base_pair_biases.residuals[[0, 2]],
+                [0.0, 0.0],
+            )
+            self.assertEqual(molecule.mfe(), reference.mfe())
+            self.assertAlmostEqual(
+                molecule.total_free_energy(),
+                reference.total_free_energy(),
+            )
+            np.testing.assert_allclose(
+                molecule.base_pairing_probability(),
+                reference.base_pairing_probability(),
+            )
+            np.testing.assert_allclose(
+                molecule.d_free_energy_d_base_pair_biases(),
+                [0.0, reference.base_pairing_probability()[0, 7], 0.0],
+            )
+            self.assertEqual(
+                molecule.suboptimal_structures(1.0),
+                reference.suboptimal_structures(1.0),
+            )
+            self.assertEqual(
+                molecule.evaluate(molecule.mfe()[0]),
+                reference.evaluate(reference.mfe()[0]),
+            )
+
+        check()
+        self._run_in_vanilla_mode(check)
+
+        unpairable = Molecule(
+            "AAAAAA",
+            base_pair_biases=[(0, 5, -50.004)],
+        )
+        self.assertEqual(unpairable.mfe(), Molecule("AAAAAA").mfe())
+        self.assertEqual(
+            unpairable.d_free_energy_d_base_pair_biases().tolist(),
+            [0.0],
+        )
+
+        excluded = Molecule(
+            sequence,
+            force_unpaired=[0],
+            base_pair_biases=[(0, 7, -50.004)],
+        )
+        self.assertEqual(
+            excluded.d_free_energy_d_base_pair_biases().tolist(),
+            [0.0],
+        )
 
     def test_default_parameters(self):
 
@@ -829,10 +895,84 @@ class TestRNA2D(unittest.TestCase):
             self.assertNotIn("Segmentation fault", result.stderr)
 
         constrained = Molecule(self.seq, force_paired=(0,))
-        with self.assertRaisesRegex(ValueError, "hard constraints"):
-            constrained.evaluate("." * len(self.seq))
-        with self.assertRaisesRegex(ValueError, "hard constraints"):
-            constrained.evaluate(["." * len(self.seq)])
+        self.assertEqual(constrained.evaluate("." * len(self.seq)), np.inf)
+        valid_structure = constrained.mfe()[0]
+        np.testing.assert_array_equal(
+            constrained.evaluate(["." * len(self.seq), valid_structure]),
+            [np.inf, constrained.evaluate(valid_structure)],
+        )
+
+    def test_evaluate_pairs_outside_folding_grammar(self):
+        too_short = Molecule(
+            "GC",
+            lambdas1d=[0.013, -0.017],
+            base_pair_biases=[(0, 1, -0.015)],
+        )
+        self.assertEqual(too_short.evaluate("()"), np.inf)
+        energies = too_short.evaluate(["..", "()"])
+        self.assertAlmostEqual(energies[0], 0.0)
+        self.assertEqual(energies[1], np.inf)
+
+        sequence = "GAAAA"
+        structure = "(...)"
+        lambdas = [0.013, 0.0, 0.0, 0.0, -0.017]
+        bias = -0.015
+        self.assertTrue(np.isfinite(Molecule("GAAAC").evaluate(structure)))
+        self.assertEqual(Molecule(sequence).evaluate(structure), np.inf)
+
+        def check():
+            molecule = Molecule(
+                sequence,
+                lambdas1d=lambdas,
+                base_pair_biases=[(0, 4, bias)],
+            )
+            self.assertEqual(molecule.evaluate(structure), np.inf)
+            self.assertEqual(
+                molecule.evaluate([(structure, 123.0)])[0],
+                np.inf,
+            )
+            self.assertEqual(
+                molecule.d_free_energy_d_base_pair_biases().tolist(),
+                [0.0],
+            )
+
+        check()
+        self._run_in_vanilla_mode(check)
+
+        mixture = Molecule(
+            sequence,
+            lambdas1d=lambdas,
+            base_pair_biases=[(0, 4, bias)],
+            state_positions=[0],
+            state_biases=[0.0, 0.25],
+            reduce_state_space=False,
+        )
+        self.assertEqual(mixture.evaluate(structure), np.inf)
+
+        constrained = Molecule(sequence, force_unpaired=[0])
+        self.assertEqual(constrained.evaluate(structure), np.inf)
+
+    def test_dotbracket_validator(self):
+        for sequence, structure, forbidden in (
+            ("GCGCGCGC", "((....))", False),
+            ("GCGCGCGC", "(..)....", True),
+            ("AAAAAAAA", "(......)", True),
+        ):
+            with self.subTest(sequence=sequence, structure=structure):
+                self.assertEqual(
+                    rna2d._validate_dotbracket_structure(
+                        structure, sequence
+                    ),
+                    forbidden,
+                )
+
+        for structure in ("((......", "......))", "(..x...)", "é......."):
+            with self.subTest(structure=structure), self.assertRaises(
+                ValueError
+            ):
+                rna2d._validate_dotbracket_structure(
+                    structure, "GCGCGCGC"
+                )
 
     def test_partition_function(self):
 
@@ -2494,6 +2634,42 @@ class TestRNA2D(unittest.TestCase):
         mol = Molecule("GCGCGCGC")
 
         self.assertAlmostEqual(mol.suboptimal_coverage(5.0), 1.0, places=6)
+
+    def test_partition_function_matches_evaluated_structures_with_constraints(
+        self
+    ):
+        seq = "GCGCGCGC"
+        structures = list(_enumerate_secondary_structures(seq))
+        state_biases = np.array([[0.0, 0.2], [-0.1, 0.7]])
+        cases = (
+            {"force_paired": (0,), "force_unpaired": (1,)},
+            {"state_positions": (0, 1), "state_biases": state_biases},
+            {
+                "force_paired": (0,), "force_unpaired": (1,),
+                "state_positions": (2, 3), "state_biases": state_biases,
+            },
+        )
+        for options in cases:
+            for reduce_state_space in (False, True):
+                with self.subTest(
+                    options=options, reduce_state_space=reduce_state_space
+                ):
+                    mol = Molecule(
+                        seq, no_lonely_pair=False, pf_smooth=False,
+                        reduce_state_space=reduce_state_space, **options
+                    )
+                    energies = []
+                    for structure in structures:
+                        energies.append(mol.evaluate(structure))
+                    energies = np.asarray(energies)
+                    self.assertTrue(np.isfinite(energies).any())
+                    kT = _KB * mol.temperature
+                    expected = -kT * np.logaddexp.reduce(
+                        -energies / kT
+                    )
+                    self.assertAlmostEqual(
+                        mol.total_free_energy(), expected, delta=1e-6
+                    )
 
     def test_suboptimal_coverage_with_soft_constraints(self):
         lambdas = np.array(

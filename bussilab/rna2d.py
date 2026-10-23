@@ -30,11 +30,13 @@ required when constructing a :class:`Molecule`.
     including multiple state sets and the `reduce_state_space` option.
   - Added sparse exact-pair `base_pair_biases` and
     `d_free_energy_d_base_pair_biases()`; continuous biases retain their
-    sub-0.01 kcal/mol precision with unpatched ViennaRNA.
+    sub-0.01 kcal/mol precision with unpatched ViennaRNA. Impossible pairs may
+    remain in the bias list and have zero ensemble probability.
   - Added `evaluate()` for one structure or a one-dimensional iterable of
     structures or `(structure, value)` pairs, including output from `sample()`
     and `suboptimal_structures()`. Structures can be rescored by another
-    `Molecule` with the same sequence.
+    `Molecule` with the same sequence. Noncanonical or too-short pairs, and
+    structures violating hard constraints, return infinite energy.
   - Added `sample_to_numpy()` and `suboptimal_to_numpy()` for zero-based pair
     tables and normalized log weights, plus `mean_bp_distance()` and
     free-energy derivatives with respect to one-body and state biases.
@@ -110,8 +112,10 @@ _MAX_ASSUMED_INFLATION = 1.1
 # corrections for sampled structures.
 _RESIDUAL_CORRECTION_BATCH_BYTES = 8 * 1024 * 1024
 
-# Canonical and wobble pairs, including both sequence orientations.
+# These match the standard ViennaRNA folding model. Revisit both if a future
+# ViennaRNA model changes which pairs can form or its minimum hairpin size.
 _ALLOWED_PAIRS = frozenset(("AU", "UA", "CG", "GC", "GU", "UG"))
+_MIN_BASE_PAIR_SEPARATION = 4  # Three nucleotides inside the smallest loop.
 
 # Boltzmann constant, as obtained from vienna source code
 _KB = 1.98717/1000
@@ -150,6 +154,46 @@ def _encoded_dotbracket_to_pairtables(encoded):
 if _HAS_NUMBA:
     _encoded_dotbracket_to_pairtables = _numba_njit(
         _encoded_dotbracket_to_pairtables
+    )
+
+
+def _validate_encoded_dotbracket_structure(structure, sequence):
+    """Return 0 for valid, 1 for unmatched, 2 for invalid, 3 for forbidden."""
+    stack = np.empty(len(structure), dtype=np.int32)
+    stack_size = 0
+    forbidden = False
+    for j in range(len(structure)):
+        symbol = structure[j]
+        if symbol == 40:  # "("
+            stack[stack_size] = j
+            stack_size += 1
+        elif symbol == 41:  # ")"
+            if stack_size == 0:
+                return 1
+            stack_size -= 1
+            i = stack[stack_size]
+            left = sequence[i]
+            right = sequence[j]
+            # Keep this byte-level test in sync with _ALLOWED_PAIRS.
+            if j - i < _MIN_BASE_PAIR_SEPARATION or not (
+                (left == 65 and right == 85) or  # AU
+                (left == 85 and right == 65) or  # UA
+                (left == 67 and right == 71) or  # CG
+                (left == 71 and right == 67) or  # GC
+                (left == 71 and right == 85) or  # GU
+                (left == 85 and right == 71)     # UG
+            ):
+                forbidden = True
+        elif symbol != 46:  # "."
+            return 2
+    if stack_size:
+        return 1
+    return 3 if forbidden else 0
+
+
+if _HAS_NUMBA:
+    _validate_encoded_dotbracket_structure = _numba_njit(
+        _validate_encoded_dotbracket_structure
     )
 
 
@@ -235,19 +279,27 @@ def _structures_to_pairtables(structures):
 class _PreparedBasePairBiases:
     """Validated sparse exact-base-pair biases shared by DP components."""
 
-    def __init__(self, biases, length):
+    def __init__(self, biases, sequence):
         self.biases = tuple(biases)
         self.pairs = tuple((i, j) for i, j, _ in self.biases)
+        possible = tuple(
+            j - i >= _MIN_BASE_PAIR_SEPARATION
+            and sequence[i] + sequence[j] in _ALLOWED_PAIRS
+            for i, j in self.pairs
+        )
         self.values = np.asarray(
             [energy for _, _, energy in self.biases],
             dtype=float,
         )
+        # A pair excluded from folding remains in the public parameter vector,
+        # but contributes nothing to the folded ensemble.
+        effective_values = np.where(possible, self.values, 0.0)
         self.rounded = (
             _ROUNDING_FACTOR
-            * np.rint(self.values / _ROUNDING_FACTOR)
+            * np.rint(effective_values / _ROUNDING_FACTOR)
         )
         self.residuals = _remove_floating_roundoff(
-            self.values - self.rounded, self.values
+            effective_values - self.rounded, effective_values
         )
         self.values.flags.writeable = False
         self.rounded.flags.writeable = False
@@ -262,7 +314,7 @@ class _PreparedBasePairBiases:
             for pair, residual in zip(self.pairs, self.residuals)
             if residual != 0.0
         }
-        residual_rows = [None] * length
+        residual_rows = [None] * len(sequence)
         for (i, j), residual in self.residual_by_pair.items():
             if residual_rows[i] is None:
                 residual_rows[i] = {}
@@ -271,14 +323,17 @@ class _PreparedBasePairBiases:
 
         # ViennaRNA inserts into a sorted row container. Preserve public input
         # order above for derivatives, but prepare a sorted installation order.
-        order = sorted(range(len(self.pairs)), key=self.pairs.__getitem__)
+        order = sorted(
+            (index for index, allowed in enumerate(possible) if allowed),
+            key=self.pairs.__getitem__,
+        )
         self.sorted_indices = tuple(order)
 
 
 def _prepare_base_pair_biases(sequence, base_pair_biases):
     """Validate and normalize the public sparse base-pair-bias input."""
     if base_pair_biases is None:
-        return _PreparedBasePairBiases((), len(sequence))
+        return _PreparedBasePairBiases((), sequence)
 
     try:
         entries = list(base_pair_biases)
@@ -320,14 +375,6 @@ def _prepare_base_pair_biases(sequence, base_pair_biases):
             raise ValueError(
                 "base_pair_biases must contain valid nucleotide indices"
             )
-        if j - i <= 3:
-            raise ValueError(
-                "base-pair indices must be separated by at least four positions"
-            )
-        if sequence[i] + sequence[j] not in _ALLOWED_PAIRS:
-            raise ValueError(
-                f"nucleotides {i} and {j} cannot form a canonical or wobble pair"
-            )
         if (i, j) in seen:
             raise ValueError("base_pair_biases must not contain duplicate pairs")
         seen.add((i, j))
@@ -340,7 +387,7 @@ def _prepare_base_pair_biases(sequence, base_pair_biases):
             raise ValueError("base-pair bias energies must be finite")
         normalized.append((i, j, energy))
 
-    return _PreparedBasePairBiases(normalized, len(sequence))
+    return _PreparedBasePairBiases(normalized, sequence)
 
 def _normalize_logweights(logweights):
     """Return finite log weights normalized to unit exponential sum."""
@@ -953,22 +1000,52 @@ def _validate_hard_constraint_positions(positions, length, name):
         raise ValueError(f"{name} must not contain duplicates")
     return tuple(int(position) for position in positions)
 
-def _validate_dotbracket_structure(structure):
-    """Reject malformed structures before ViennaRNA's unsafe evaluator."""
-    depth = 0
-    for symbol in structure:
+def _validate_dotbracket_structure(structure, sequence):
+    """Validate syntax; return whether a pair is outside the folding grammar."""
+    if _HAS_NUMBA:
+        try:
+            encoded_structure = np.frombuffer(
+                structure.encode("ascii"), dtype=np.uint8
+            )
+        except UnicodeEncodeError as error:
+            raise ValueError(
+                "structure must use '.', '(', and ')' dot-bracket symbols"
+            ) from error
+        encoded_sequence = np.frombuffer(
+            sequence.encode("ascii"), dtype=np.uint8
+        )
+        status = _validate_encoded_dotbracket_structure(
+            encoded_structure, encoded_sequence
+        )
+        if status == 1:
+            raise ValueError("structure contains unmatched parentheses")
+        if status == 2:
+            raise ValueError(
+                "structure must use '.', '(', and ')' dot-bracket symbols"
+            )
+        return status == 3
+
+    stack = []
+    has_forbidden_pair = False
+    for j, symbol in enumerate(structure):
         if symbol == "(":
-            depth += 1
+            stack.append(j)
         elif symbol == ")":
-            depth -= 1
-            if depth < 0:
+            if not stack:
                 raise ValueError("structure contains unmatched parentheses")
+            i = stack.pop()
+            if (
+                j - i < _MIN_BASE_PAIR_SEPARATION
+                or sequence[i] + sequence[j] not in _ALLOWED_PAIRS
+            ):
+                has_forbidden_pair = True
         elif symbol != ".":
             raise ValueError(
                 "structure must use '.', '(', and ')' dot-bracket symbols"
             )
-    if depth:
+    if stack:
         raise ValueError("structure contains unmatched parentheses")
+    return has_forbidden_pair
 
 def _correct_rounding_energy(structure, dlambdas):
     """
@@ -1697,8 +1774,11 @@ class Molecule:
         zero-based nucleotide indices. A contribution is applied only when
         nucleotides ``i`` and ``j`` pair with each other. Positive energies
         disfavor the pair and negative energies favor it. Pair orientation is
-        normalized internally; duplicate, impossible, and non-finite entries
-        are rejected. The iterable order is retained for
+        normalized internally; duplicate and non-finite entries are rejected.
+        An impossible pair is allowed but has no effect on the ensemble, and
+        its free-energy derivative is zero. Evaluating a structure containing
+        an impossible pair returns infinite energy.
+        The iterable order is retained for
         :meth:`d_free_energy_d_base_pair_biases`.
 
     force_paired : array-like of int, optional
@@ -1729,9 +1809,10 @@ class Molecule:
         every state.
 
     no_lonely_pair : bool or None, default=None
-        If True, exclude structures containing isolated base pairs using
-        ViennaRNA's `noLP` model option. If None, use the current module
-        default.
+        If True, use ViennaRNA's `noLP` model option. MFE and suboptimal
+        enumeration exclude isolated base pairs, but ViennaRNA's partition
+        function and sampling can still include some structures containing
+        them. If None, use the current module default.
 
     pf_smooth : bool or None, default=None
         Whether ViennaRNA should smooth energies in partition-function
@@ -1767,15 +1848,19 @@ class Molecule:
     requested continuous one-body and exact-base-pair penalties are retained
     even without a patched ViennaRNA build that supports them natively.
 
-    With the default ``pf_smooth=False``, partition-function and discrete
-    structure calculations use compatible ViennaRNA energies. Setting
-    ``pf_smooth=True`` reproduces ViennaRNA's default smoothed Boltzmann
-    factors, but ViennaRNA's MFE, structure-evaluation, and suboptimal routines
-    remain unsmoothed. In that mode, ``suboptimal_coverage`` mixes the two
-    energy conventions and should be interpreted accordingly.
+    For comparing the partition function with a Boltzmann sum of evaluated
+    structures, set both ``no_lonely_pair=False`` and ``pf_smooth=False``
+    explicitly (module defaults can be changed). With
+    ``no_lonely_pair=True``, ViennaRNA's partition function and sampling may
+    retain lonely-pair structures that MFE and suboptimal enumeration exclude.
+    With ``pf_smooth=True``, the partition function and sampling use smoothed
+    Boltzmann factors, while MFE, evaluation, and suboptimal enumeration remain
+    unsmoothed. Either switch can make ``suboptimal_coverage`` inconsistent
+    with the partition-function energy convention.
 
     Hard constraints specify only whether a nucleotide is paired; they do not
-    specify its partner. ``evaluate`` rejects structures that violate them.
+    specify its partner. ``evaluate`` assigns infinite energy to structures
+    that violate them.
     If no valid structure exists, ``mfe`` raises ``RuntimeError``. Structures
     are pseudoknot-free, as in ViennaRNA's standard single-strand folding
     grammar.
@@ -2301,8 +2386,9 @@ class Molecule:
             Exact free energy in kcal/mol, including continuous pairing
             penalties, exact-base-pair biases, and state biases. Scalar input
             returns a float; batched input returns an array with shape
-            ``(n_structures,)``. Malformed structures or structures violating
-            hard constraints raise ``ValueError``.
+            ``(n_structures,)``. Noncanonical pairs and pairs shorter than the
+            minimum loop length, or structures violating hard constraints,
+            return infinity. Malformed structures raise ``ValueError``.
         """
         if not isinstance(structure, str):
             if isinstance(structure, np.ndarray) and structure.ndim != 1:
@@ -2338,7 +2424,9 @@ class Molecule:
             raise ValueError(
                 "structure must contain one symbol per nucleotide"
             )
-        _validate_dotbracket_structure(structure)
+        has_forbidden_pair = _validate_dotbracket_structure(
+            structure, self._seq
+        )
 
         component_index = 0
         for position in self._explicit_state_positions:
@@ -2349,7 +2437,9 @@ class Molecule:
 
         molecule = self._dp_molecules[component_index]
         if not molecule._satisfies_hard_constraints(structure):
-            raise ValueError("structure violates hard constraints")
+            return math.inf
+        if has_forbidden_pair:
+            return math.inf
         energy = molecule.evaluate(structure)
         return float(
             energy + self._component_biases.flat[component_index]
@@ -2440,7 +2530,8 @@ class Molecule:
         For an entry ``(i, j, energy)`` in ``base_pair_biases``, the
         corresponding derivative is the equilibrium probability that the
         exact base pair ``(i, j)`` is formed. Values are returned in the same
-        order as the constructor entries.
+        order as the constructor entries. An impossible pair has derivative
+        zero.
 
         Returns
         -------
