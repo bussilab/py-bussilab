@@ -38,6 +38,8 @@ required when constructing a :class:`Molecule`.
   - Added `sample_to_numpy()` and `suboptimal_to_numpy()` for zero-based pair
     tables and normalized log weights, plus `mean_bp_distance()` and
     free-energy derivatives with respect to one-body and state biases.
+  - Exposed the resolved temperature and Boltzmann constant as read-only
+    `Molecule.temperature` and `Molecule.boltzmann_constant` properties.
   - Changed `sample()` to return unweighted structure strings by default;
     `sample(weights=True)` retains structures with importance log weights.
   - Added `no_lonely_pair` and `pf_smooth` options and
@@ -1673,7 +1675,9 @@ class Molecule:
     to penalties and state biases, Boltzmann sampling, suboptimal enumeration
     and coverage, and joint nucleotide-pairing probabilities. Structure
     energies and state biases are expressed in kcal/mol; temperatures are
-    supplied in kelvin.
+    supplied in kelvin. The resolved temperature and Boltzmann constant are
+    available as read-only ``temperature`` (K) and ``boltzmann_constant``
+    (kcal/mol/K) properties.
 
     Parameters
     ----------
@@ -2120,6 +2124,16 @@ class Molecule:
         self._pf_smooth = first_molecule._pf_smooth
         self._force_paired = tuple(base_force_paired)
         self._force_unpaired = tuple(base_force_unpaired)
+
+    @property
+    def temperature(self):
+        """Temperature used by this molecule, in kelvin."""
+        return self._temperature
+
+    @property
+    def boltzmann_constant(self):
+        """Boltzmann constant used by this module, in kcal/(mol K)."""
+        return _KB
 
     def _condition_unpaired(self, position):
         """

@@ -286,6 +286,15 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaises(ValueError):
             Molecule(self.seq, pf_smooth=1)
 
+    def test_thermodynamic_properties(self):
+        molecule = Molecule(self.seq, temperature=300.0)
+        self.assertEqual(molecule.temperature, 300.0)
+        self.assertEqual(molecule.boltzmann_constant, _KB)
+        with self.assertRaises(AttributeError):
+            molecule.temperature = 310.15
+        with self.assertRaises(AttributeError):
+            molecule.boltzmann_constant = 1.0
+
     def test_base_pair_bias_validation(self):
         valid = Molecule(
             self.seq,
@@ -340,6 +349,7 @@ class TestRNA2D(unittest.TestCase):
 
             inherited = Molecule(self.seq)
             self.assertEqual(inherited._temperature, 298.15)
+            self.assertEqual(inherited.temperature, 298.15)
             self.assertTrue(inherited._no_lonely_pair)
             self.assertTrue(inherited._pf_smooth)
             self.assertEqual(inherited._salt, 2.0)
@@ -348,6 +358,10 @@ class TestRNA2D(unittest.TestCase):
             # Existing molecules retain the defaults captured at construction.
             self.assertEqual(
                 original._temperature,
+                37 + rna2d._CELSIUS_TO_KELVIN,
+            )
+            self.assertEqual(
+                original.temperature,
                 37 + rna2d._CELSIUS_TO_KELVIN,
             )
             self.assertFalse(original._no_lonely_pair)
