@@ -167,6 +167,18 @@ class TestRNA2D(unittest.TestCase):
 
         np.testing.assert_array_equal(results[0], results[1])
 
+    def test_numba_disabled_selects_python_parser(self):
+        command = [
+            sys.executable, "-c",
+            "import bussilab.rna2d as r; "
+            "assert not r._HAS_NUMBA; "
+            "assert r._dotbracket_to_pairtable('((..))')[0] == 5",
+        ]
+        import os
+        environment = os.environ.copy()
+        environment["NUMBA_DISABLE_JIT"] = "1"
+        subprocess.run(command, env=environment, check=True)
+
     def test_suboptimal_to_numpy(self):
 
         suboptimal = [
@@ -336,6 +348,18 @@ class TestRNA2D(unittest.TestCase):
                 rna2d._default_parameters,
                 defaults_before,
             )
+            for value in (0.0, np.inf, np.nan):
+                with self.subTest(temperature=value):
+                    with self.assertRaises(ValueError):
+                        rna2d.set_default_parameters(temperature=value)
+                    with self.assertRaises(ValueError):
+                        Molecule(self.seq, temperature=value)
+            for value in (np.inf, np.nan):
+                with self.subTest(NaCl=value):
+                    with self.assertRaises(ValueError):
+                        rna2d.set_default_parameters(NaCl=value)
+                    with self.assertRaises(ValueError):
+                        Molecule(self.seq, NaCl=value)
             self.assertEqual(Molecule(self.seq, NaCl=None)._salt, 2.0)
 
             # Validation is atomic: no valid values preceding an invalid one
@@ -635,6 +659,36 @@ class TestRNA2D(unittest.TestCase):
             for structure in mol.sample(100)
         ))
 
+    def test_hard_constraint_validation_and_infeasibility(self):
+        invalid = (
+            {"force_paired": (len(self.seq),)},
+            {"force_unpaired": (-1,)},
+            {"force_paired": (0.5,)},
+            {"force_paired": (True,)},
+            {"force_unpaired": (0, 0)},
+            {"force_paired": (0,), "force_unpaired": (0,)},
+        )
+        for kwargs in invalid:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                Molecule(self.seq, **kwargs)
+
+        impossible = Molecule("AAAAA", force_paired=(0,))
+        with self.assertRaisesRegex(RuntimeError, "No feasible MFE"):
+            impossible.mfe()
+        self.assertEqual(impossible.suboptimal_structures(1.0), [])
+
+        # An impossible component must be skipped even when a residual forces
+        # the suboptimal-candidate branch of the internal MFE calculation.
+        for reduced in (False, True):
+            molecule = Molecule(
+                "AAAAA",
+                state_positions=(0,),
+                reduce_state_space=reduced,
+                lambdas1d=np.full(5, 0.003),
+            )
+            self.assertEqual(molecule.mfe()[0], ".....")
+            self.assertEqual(molecule.suboptimal_structures(0.01)[0][0], ".....")
+
     def test_mfe(self):
 
         mol = Molecule(self.seq)
@@ -711,6 +765,23 @@ class TestRNA2D(unittest.TestCase):
             molecule.evaluate(structure_array.reshape(2, 2))
         with self.assertRaises(ValueError):
             molecule.evaluate(np.asarray(suboptimal))
+
+        for malformed in ("((.......", ".......))", ")......(."):
+            command = [
+                sys.executable, "-c",
+                "from bussilab.rna2d import Molecule; "
+                "Molecule('GGGAAACCC').evaluate(%r)" % malformed,
+            ]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ValueError", result.stderr)
+            self.assertNotIn("Segmentation fault", result.stderr)
+
+        constrained = Molecule(self.seq, force_paired=(0,))
+        with self.assertRaisesRegex(ValueError, "hard constraints"):
+            constrained.evaluate("." * len(self.seq))
+        with self.assertRaisesRegex(ValueError, "hard constraints"):
+            constrained.evaluate(["." * len(self.seq)])
 
     def test_partition_function(self):
 
@@ -1265,6 +1336,92 @@ class TestRNA2D(unittest.TestCase):
 
         self._run_in_vanilla_mode(check)
 
+    def test_combined_1d_base_pair_and_state_biases(self):
+        sequence = self.seq
+        lambdas = np.array([
+            0.003, -0.004, 0.002, 0.0, 0.0,
+            0.0, -0.003, 0.004, -0.002,
+        ])
+        pair_biases = [(0, 8, 0.013), (1, 7, -0.027)]
+        state_biases = np.array([[0.123, -0.234], [0.345, 0.456]])
+
+        def check():
+            molecule = Molecule(
+                sequence,
+                lambdas1d=lambdas,
+                base_pair_biases=pair_biases,
+                state_positions=(0, 8),
+                state_biases=state_biases,
+            )
+            fold_compound = molecule._dp_molecules[0]._make_fold_compound()
+            structures = list(_enumerate_secondary_structures(sequence))
+            energies = []
+            indicators = []
+            for structure in structures:
+                table = rna2d._dotbracket_to_pairtable(structure)
+                pair_indicators = [table[i] == j for i, j, _ in pair_biases]
+                indicators.append(pair_indicators)
+                energies.append(
+                    fold_compound.eval_structure(structure)
+                    + sum(
+                        value for value, symbol in zip(lambdas, structure)
+                        if symbol != "."
+                    )
+                    + sum(
+                        value for present, (_, _, value)
+                        in zip(pair_indicators, pair_biases) if present
+                    )
+                    + state_biases[
+                        int(structure[0] != "."),
+                        int(structure[8] != "."),
+                    ]
+                )
+            energies = np.asarray(energies)
+            reference = np.min(energies)
+            kT = _KB * molecule._temperature
+            weights = np.exp(-(energies - reference) / kT)
+            expected_free_energy = reference - kT * np.log(np.sum(weights))
+            np.testing.assert_allclose(
+                molecule.evaluate(structures), energies, atol=1e-6
+            )
+            self.assertAlmostEqual(molecule.mfe()[1], reference, places=6)
+            self.assertAlmostEqual(
+                molecule.total_free_energy(), expected_free_energy, places=6
+            )
+            np.testing.assert_allclose(
+                molecule.d_free_energy_d_base_pair_biases(),
+                weights @ np.asarray(indicators) / np.sum(weights),
+                atol=1e-7,
+            )
+
+        check()
+        self._run_in_vanilla_mode(check)
+
+    def test_centikcal_biases_have_no_rounding_residual(self):
+        molecule = Molecule(
+            self.seq,
+            lambdas1d=[0.35] + [0.0] * (len(self.seq) - 1),
+            base_pair_biases=[(0, 8, 0.35)],
+        )
+        component = molecule._dp_molecules[0]
+        self.assertEqual(component._rounding_residuals_range, 0.0)
+        self.assertEqual(component._base_pair_biases.residual_by_pair, {})
+        self.assertTrue(all(
+            log_weight == 0.0
+            for _, log_weight in molecule.sample(5, weights=True)
+        ))
+
+        mixture = Molecule(
+            self.seq,
+            state_positions=(0, 8),
+            state_biases=[[0.123, -0.234], [0.345, 0.456]],
+            reduce_state_space=True,
+        )
+        self.assertTrue(any(
+            abs(log_weight) > 1e-6
+            for _, log_weight in mixture.sample(20, weights=True)
+        ))
+
     def test_dense_base_pair_residual_corrections(self):
         sequence = "G" * 8 + "C" * 8
         biases = [
@@ -1714,7 +1871,7 @@ class TestRNA2D(unittest.TestCase):
 
         structures = [structure for structure, _ in subopt]
         self.assertEqual(len(structures), len(set(structures)))
-        #self.assertEqual(set(structures), set(expected))
+        self.assertEqual(set(structures), set(expected))
 
         for structure, energy in subopt:
             self.assertAlmostEqual(energy, expected[structure], places=3)

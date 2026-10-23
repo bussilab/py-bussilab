@@ -31,10 +31,12 @@ import sys
 
 try:
     from numba import njit as _numba_njit
+    from numba import config as _numba_config
 except ImportError:
     _numba_njit = None
+    _numba_config = None
 
-_HAS_NUMBA = _numba_njit is not None
+_HAS_NUMBA = _numba_njit is not None and not _numba_config.DISABLE_JIT
 
 try:
     import RNA
@@ -54,6 +56,11 @@ def _require_viennarna():
 # Might be increased to mimic more severe rounding.
 # However, it should be a multiple of the true internal rounding (0.01)
 _ROUNDING_FACTOR=0.01
+
+def _remove_floating_roundoff(residuals, values):
+    """Ignore binary floating-point noise in centikcal energies."""
+    tolerance = 8 * np.finfo(float).eps * np.maximum(1.0, np.abs(values))
+    return np.where(np.abs(residuals) <= tolerance, 0.0, residuals)
 
 # Maximum assumed candidates-per-accepted-sample ratio used when choosing the
 # next rejection-sampling batch.
@@ -199,7 +206,9 @@ class _PreparedBasePairBiases:
             _ROUNDING_FACTOR
             * np.rint(self.values / _ROUNDING_FACTOR)
         )
-        self.residuals = self.values - self.rounded
+        self.residuals = _remove_floating_roundoff(
+            self.values - self.rounded, self.values
+        )
         self.values.flags.writeable = False
         self.rounded.flags.writeable = False
         self.residuals.flags.writeable = False
@@ -520,7 +529,7 @@ def set_default_parameters(
     updates = {}
 
     if temperature is not None:
-        if not temperature >= 0.0:
+        if not np.isfinite(temperature) or temperature <= 0.0:
             raise ValueError(
                 f"Temperature {temperature} should be positive"
             )
@@ -537,7 +546,7 @@ def set_default_parameters(
         updates["pf_smooth"] = bool(pf_smooth)
 
     if NaCl is not None:
-        if not NaCl >= 0.0:
+        if not np.isfinite(NaCl) or NaCl < 0.0:
             raise ValueError(
                 f"Salt concentration {NaCl} should be positive"
             )
@@ -879,6 +888,43 @@ def _apply_hard_constraint(fc, paired, unpaired):
     for p in unpaired:
         fc.hc_add_up(int(p+1), RNA.CONSTRAINT_CONTEXT_ALL_LOOPS)
 
+def _validate_hard_constraint_positions(positions, length, name):
+    """Validate zero-based fixed-state positions before passing them to RNA."""
+    if positions is None:
+        return ()
+    try:
+        positions = tuple(positions)
+    except TypeError as error:
+        raise ValueError(f"{name} must be an iterable of indices") from error
+    if any(
+        isinstance(position, (bool, np.bool_))
+        or not isinstance(position, (int, np.integer))
+        or position < 0
+        or position >= length
+        for position in positions
+    ):
+        raise ValueError(f"{name} must contain valid nucleotide indices")
+    if len(set(positions)) != len(positions):
+        raise ValueError(f"{name} must not contain duplicates")
+    return tuple(int(position) for position in positions)
+
+def _validate_dotbracket_structure(structure):
+    """Reject malformed structures before ViennaRNA's unsafe evaluator."""
+    depth = 0
+    for symbol in structure:
+        if symbol == "(":
+            depth += 1
+        elif symbol == ")":
+            depth -= 1
+            if depth < 0:
+                raise ValueError("structure contains unmatched parentheses")
+        elif symbol != ".":
+            raise ValueError(
+                "structure must use '.', '(', and ')' dot-bracket symbols"
+            )
+    if depth:
+        raise ValueError("structure contains unmatched parentheses")
+
 def _correct_rounding_energy(structure, dlambdas):
     """
     Compute the energy correction associated with residuals for
@@ -994,6 +1040,10 @@ def _pf_with_mfe_rescaling_fallback(fc):
         fc.exp_params_rescale(mfe)
         free_energy = fc.pf()[1]
     return free_energy
+
+class _NoFeasibleStructureError(RuntimeError):
+    """Internal signal that a constrained DP component is empty."""
+
 
 class _DPMolecule:
     """
@@ -1179,19 +1229,24 @@ class _DPMolecule:
 
         self._temperature = temperature
 
-        if not self._temperature >= 0.0:
+        if not np.isfinite(self._temperature) or self._temperature <= 0.0:
             raise ValueError(f"Temperature {self._temperature} should be positive")
 
         self._salt = NaCl
 
-        if self._salt is not None and not self._salt >= 0.0:
+        if self._salt is not None and (
+            not np.isfinite(self._salt) or self._salt < 0.0
+        ):
             raise ValueError(f"Salt concentration {self._salt} should be positive")
 
         if lambdas1d is None:
             lambdas1d = np.zeros(len(seq))
         self._lambdas1d = np.asarray(lambdas1d, dtype=float).copy()
         self._lambdas1d_rounded = _ROUNDING_FACTOR*np.rint(self._lambdas1d/_ROUNDING_FACTOR)
-        self._lambdas1d_residuals = self._lambdas1d - self._lambdas1d_rounded
+        self._lambdas1d_residuals = _remove_floating_roundoff(
+            self._lambdas1d - self._lambdas1d_rounded,
+            self._lambdas1d,
+        )
 
         if self._lambdas1d.ndim != 1:
             raise ValueError("lambdas1d must be one-dimensional")
@@ -1314,6 +1369,8 @@ class _DPMolecule:
                     self._rounding_correction(s.structure) + s.energy
                     for s in subopt
                 ]
+                if not energies:
+                    raise _NoFeasibleStructureError("No feasible MFE structure")
                 index = np.argmin(energies)
                 self._mfe_structure , self._mfe_energy = subopt[index].structure , energies[index]
 
@@ -1321,6 +1378,13 @@ class _DPMolecule:
 
             # correction for using bp instead of up
             self._mfe_energy += self._fc_rounded_shift
+            if (
+                self._mfe_energy >= RNA.INF / 100
+                or not self._satisfies_hard_constraints(self._mfe_structure)
+            ):
+                self._mfe_structure = None
+                self._mfe_energy = None
+                raise _NoFeasibleStructureError("No feasible MFE structure")
 
         return self._mfe_structure, float(self._mfe_energy)
 
@@ -1398,7 +1462,15 @@ class _DPMolecule:
                 self._rounding_correction(s.structure) + s.energy
                 for s in subopt
             ]
-        index = np.argsort(energies)
+        index = [
+            i for i in np.argsort(energies)
+            if (
+                energies[i] < RNA.INF / 100
+                and self._satisfies_hard_constraints(subopt[i].structure)
+            )
+        ]
+        if not index:
+            return []
         return [
             (subopt[i].structure , float(energies[i] + self._fc_rounded_shift))
             for i in index
@@ -1656,8 +1728,10 @@ class Molecule:
     energy conventions and should be interpreted accordingly.
 
     Hard constraints specify only whether a nucleotide is paired; they do not
-    specify its partner. Structures are pseudoknot-free, as in ViennaRNA's
-    standard single-strand folding grammar.
+    specify its partner. ``evaluate`` rejects structures that violate them.
+    If no valid structure exists, ``mfe`` raises ``RuntimeError``. Structures
+    are pseudoknot-free, as in ViennaRNA's standard single-strand folding
+    grammar.
     """
 
     def __init__(
@@ -1720,12 +1794,16 @@ class Molecule:
                 "state_biases cannot be provided without state_positions"
             )
 
-        base_force_paired = (
-            [] if force_paired is None else list(force_paired)
-        )
-        base_force_unpaired = (
-            [] if force_unpaired is None else list(force_unpaired)
-        )
+        base_force_paired = list(_validate_hard_constraint_positions(
+            force_paired, len(sequence), "force_paired"
+        ))
+        base_force_unpaired = list(_validate_hard_constraint_positions(
+            force_unpaired, len(sequence), "force_unpaired"
+        ))
+        if set(base_force_paired).intersection(base_force_unpaired):
+            raise ValueError(
+                "force_paired and force_unpaired must not overlap"
+            )
 
         if state_positions is None:
             self._state_sets_were_nested = False
@@ -2097,7 +2175,12 @@ class Molecule:
             self._dp_molecules,
             self._component_biases.ravel(),
         ):
-            structure, energy = molecule.mfe()
+            try:
+                structure, energy = molecule.mfe()
+            except _NoFeasibleStructureError:
+                structures.append(None)
+                energies.append(math.inf)
+                continue
             structures.append(structure)
             if molecule._satisfies_hard_constraints(structure):
                 energies.append(energy + bias)
@@ -2159,8 +2242,10 @@ class Molecule:
         -------
         float or ndarray
             Exact free energy in kcal/mol, including continuous pairing
-            penalties and state biases. Scalar input returns a float; batched
-            input returns an array with shape ``(n_structures,)``.
+            penalties, exact-base-pair biases, and state biases. Scalar input
+            returns a float; batched input returns an array with shape
+            ``(n_structures,)``. Malformed structures or structures violating
+            hard constraints raise ``ValueError``.
         """
         if not isinstance(structure, str):
             if isinstance(structure, np.ndarray) and structure.ndim != 1:
@@ -2196,10 +2281,7 @@ class Molecule:
             raise ValueError(
                 "structure must contain one symbol per nucleotide"
             )
-        if structure.strip(".()"):
-            raise ValueError(
-                "structure must use '.', '(', and ')' dot-bracket symbols"
-            )
+        _validate_dotbracket_structure(structure)
 
         component_index = 0
         for position in self._explicit_state_positions:
@@ -2208,7 +2290,10 @@ class Molecule:
                 + (structure[position] != ".")
             )
 
-        energy = self._dp_molecules[component_index].evaluate(structure)
+        molecule = self._dp_molecules[component_index]
+        if not molecule._satisfies_hard_constraints(structure):
+            raise ValueError("structure violates hard constraints")
+        energy = molecule.evaluate(structure)
         return float(
             energy + self._component_biases.flat[component_index]
         )
@@ -2495,11 +2580,14 @@ class Molecule:
 
             For state mixtures, the log-weight also includes the
             component-specific exact/rounded normalization correction. This
-            correction is caused only by one-body and base-pair-bias rounding,
-            not by the state bias.
+            correction is caused by rounding effective one-body and base-pair
+            biases; state biases can contribute to an effective one-body bias
+            when ``reduce_state_space=True``.
 
-            When all one-body and base-pair biases are multiples of 0.01
-            kcal/mol, every returned log-weight is zero.
+            When all effective component one-body and base-pair biases are
+            multiples of 0.01 kcal/mol, every returned log-weight is zero.
+            With ``reduce_state_space=True``, differences between state biases
+            become component one-body biases and may require rounding.
         """
         number = int(number)
         if number <= 0:
