@@ -4,12 +4,13 @@ RNA secondary-structure ensembles built on ViennaRNA.
 The module wraps ``RNA.fold_compound`` with a higher-level model that is
 useful when the energy depends on whether particular nucleotides are paired.
 Compared with using ViennaRNA directly, :class:`Molecule` provides continuous
-per-nucleotide pairing penalties without losing sub-centikcal precision,
-arbitrary coupled biases on selected paired/unpaired states, and transparent
-combination of the resulting conditioned ensembles. The same interface then
-provides MFE structures, structure evaluation, partition functions, base-pair
-probabilities, ensemble diversity, exact free-energy derivatives, Boltzmann
-sampling, suboptimal ensembles, and joint pairing probabilities.
+per-nucleotide and sparse exact-base-pair penalties without losing
+sub-centikcal precision, arbitrary coupled biases on selected paired/unpaired
+states, and transparent combination of the resulting conditioned ensembles.
+The same interface then provides MFE structures, structure evaluation,
+partition functions, base-pair probabilities, ensemble diversity, exact
+free-energy derivatives, Boltzmann sampling, suboptimal ensembles, and joint
+pairing probabilities.
 
 The wrapper also manages thermodynamic parameter sets, caches calculations,
 recovers from partition-function scaling failures, and defaults to disabling
@@ -27,6 +28,13 @@ import threading
 import math
 import warnings
 import sys
+
+try:
+    from numba import njit as _numba_njit
+except ImportError:
+    _numba_njit = None
+
+_HAS_NUMBA = _numba_njit is not None
 
 try:
     import RNA
@@ -64,13 +72,42 @@ _KB = 1.98717/1000
 # Shift from Celsius to Kelvin, as obtained from vienna source code
 _CELSIUS_TO_KELVIN = 273.15
 
-def _dotbracket_to_pairtable(structure):
-    """Convert one dot-bracket structure to a zero-based pair table."""
-    if not isinstance(structure, str):
-        raise ValueError("structures must be strings")
-    if len(structure) > np.iinfo(np.int16).max + 1:
-        raise ValueError("structure is too long for an int16 pair table")
+def _encoded_dotbracket_to_pairtables(encoded):
+    """Parse an ASCII dot-bracket matrix; return tables and an error code."""
+    number, length = encoded.shape
+    tables = np.full((number, length), -1, dtype=np.int16)
+    stack = np.empty(length, dtype=np.int32)
 
+    for row in range(number):
+        stack_size = 0
+        for i in range(length):
+            character = encoded[row, i]
+            if character == 40:  # "("
+                stack[stack_size] = i
+                stack_size += 1
+            elif character == 41:  # ")"
+                if stack_size == 0:
+                    return tables, 1
+                stack_size -= 1
+                j = stack[stack_size]
+                tables[row, i] = j
+                tables[row, j] = i
+            elif character != 46:  # "."
+                return tables, 2
+        if stack_size:
+            return tables, 1
+
+    return tables, 0
+
+
+if _HAS_NUMBA:
+    _encoded_dotbracket_to_pairtables = _numba_njit(
+        _encoded_dotbracket_to_pairtables
+    )
+
+
+def _dotbracket_to_pairtable_python(structure):
+    """Python fallback for one dot-bracket structure."""
     table = np.full(len(structure), -1, dtype=np.int16)
     stack = []
     for i, character in enumerate(structure):
@@ -91,13 +128,170 @@ def _dotbracket_to_pairtable(structure):
         raise ValueError("structure contains unmatched parentheses")
     return table
 
+
+def _validate_dotbracket_structures(structures):
+    """Validate types and dimensions shared by both parser paths."""
+    if not structures:
+        raise ValueError("structures cannot be empty")
+    if not all(isinstance(structure, str) for structure in structures):
+        raise ValueError("structures must be strings")
+
+    length = len(structures[0])
+    if any(len(structure) != length for structure in structures[1:]):
+        raise ValueError("all structures must have the same length")
+    if length > np.iinfo(np.int16).max + 1:
+        raise ValueError("structure is too long for an int16 pair table")
+    return length
+
+
+def _dotbracket_to_pairtable(structure):
+    """Convert one dot-bracket structure to a zero-based pair table."""
+    if not isinstance(structure, str):
+        raise ValueError("structures must be strings")
+    if len(structure) > np.iinfo(np.int16).max + 1:
+        raise ValueError("structure is too long for an int16 pair table")
+    if not _HAS_NUMBA:
+        return _dotbracket_to_pairtable_python(structure)
+    return _structures_to_pairtables((structure,))[0]
+
+
 def _structures_to_pairtables(structures):
     """Convert equally sized dot-bracket structures to pair-table rows."""
-    tables = [_dotbracket_to_pairtable(structure) for structure in structures]
-    length = len(tables[0])
-    if any(len(table) != length for table in tables[1:]):
-        raise ValueError("all structures must have the same length")
-    return np.asarray(tables, dtype=np.int16)
+    structures = list(structures)
+    length = _validate_dotbracket_structures(structures)
+    if not _HAS_NUMBA:
+        return np.asarray([
+            _dotbracket_to_pairtable_python(structure)
+            for structure in structures
+        ], dtype=np.int16)
+
+    try:
+        encoded = np.frombuffer(
+            "".join(structures).encode("ascii"),
+            dtype=np.uint8,
+        ).reshape(len(structures), length)
+    except UnicodeEncodeError as error:
+        raise ValueError(
+            "structures must use '.', '(', and ')' dot-bracket symbols"
+        ) from error
+
+    tables, error = _encoded_dotbracket_to_pairtables(encoded)
+    if error == 1:
+        raise ValueError("structure contains unmatched parentheses")
+    if error == 2:
+        raise ValueError(
+            "structures must use '.', '(', and ')' dot-bracket symbols"
+        )
+    return tables
+
+
+class _PreparedBasePairBiases:
+    """Validated sparse exact-base-pair biases shared by DP components."""
+
+    def __init__(self, biases, length):
+        self.biases = tuple(biases)
+        self.pairs = tuple((i, j) for i, j, _ in self.biases)
+        self.values = np.asarray(
+            [energy for _, _, energy in self.biases],
+            dtype=float,
+        )
+        self.rounded = (
+            _ROUNDING_FACTOR
+            * np.rint(self.values / _ROUNDING_FACTOR)
+        )
+        self.residuals = self.values - self.rounded
+        self.values.flags.writeable = False
+        self.rounded.flags.writeable = False
+        self.residuals.flags.writeable = False
+        self.residual_range = float(np.sum(np.abs(self.residuals)))
+        self.minimum_residual = float(np.sum(np.minimum(
+            self.residuals,
+            0.0,
+        )))
+        self.residual_by_pair = {
+            pair: float(residual)
+            for pair, residual in zip(self.pairs, self.residuals)
+            if residual != 0.0
+        }
+        residual_rows = [None] * length
+        for (i, j), residual in self.residual_by_pair.items():
+            if residual_rows[i] is None:
+                residual_rows[i] = {}
+            residual_rows[i][j] = residual
+        self.residual_rows = tuple(residual_rows)
+
+        # ViennaRNA inserts into a sorted row container. Preserve public input
+        # order above for derivatives, but prepare a sorted installation order.
+        order = sorted(range(len(self.pairs)), key=self.pairs.__getitem__)
+        self.sorted_indices = tuple(order)
+
+
+def _prepare_base_pair_biases(sequence, base_pair_biases):
+    """Validate and normalize the public sparse base-pair-bias input."""
+    if base_pair_biases is None:
+        return _PreparedBasePairBiases((), len(sequence))
+
+    try:
+        entries = list(base_pair_biases)
+    except TypeError as error:
+        raise ValueError(
+            "base_pair_biases must be an iterable of (i, j, energy) triples"
+        ) from error
+
+    normalized = []
+    seen = set()
+    for entry in entries:
+        if isinstance(entry, str):
+            raise ValueError(
+                "each base_pair_biases entry must be an (i, j, energy) triple"
+            )
+        try:
+            if len(entry) != 3:
+                raise ValueError
+            raw_i, raw_j, raw_energy = entry
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "each base_pair_biases entry must be an (i, j, energy) triple"
+            ) from error
+
+        if (
+            isinstance(raw_i, (bool, np.bool_))
+            or isinstance(raw_j, (bool, np.bool_))
+            or not isinstance(raw_i, (int, np.integer))
+            or not isinstance(raw_j, (int, np.integer))
+        ):
+            raise ValueError("base-pair indices must be integers")
+        i = int(raw_i)
+        j = int(raw_j)
+        if i > j:
+            i, j = j, i
+        if i == j:
+            raise ValueError("a nucleotide cannot form a base pair with itself")
+        if i < 0 or j >= len(sequence):
+            raise ValueError(
+                "base_pair_biases must contain valid nucleotide indices"
+            )
+        if j - i <= 3:
+            raise ValueError(
+                "base-pair indices must be separated by at least four positions"
+            )
+        if sequence[i] + sequence[j] not in _ALLOWED_PAIRS:
+            raise ValueError(
+                f"nucleotides {i} and {j} cannot form a canonical or wobble pair"
+            )
+        if (i, j) in seen:
+            raise ValueError("base_pair_biases must not contain duplicate pairs")
+        seen.add((i, j))
+
+        try:
+            energy = float(raw_energy)
+        except (TypeError, ValueError) as error:
+            raise ValueError("base-pair bias energies must be real numbers") from error
+        if not np.isfinite(energy):
+            raise ValueError("base-pair bias energies must be finite")
+        normalized.append((i, j, energy))
+
+    return _PreparedBasePairBiases(normalized, len(sequence))
 
 def _normalize_logweights(logweights):
     """Return finite log weights normalized to unit exponential sum."""
@@ -516,7 +710,12 @@ if RNA is not None:
 else:
     _PAIR_DECOMPOSITIONS = set()
 
-def _apply_residual_callback(fc, residuals, kT):
+def _apply_residual_callback(
+    fc,
+    residuals,
+    base_pair_biases,
+    kT,
+):
     """
     Add continuous exact-minus-rounded pairing penalties to PF recursions.
 
@@ -525,17 +724,43 @@ def _apply_residual_callback(fc, residuals, kT):
     residuals = np.asarray(residuals, dtype=float)
 
     # do not add callback if all residuals are negligible
-    if np.max(np.abs(residuals)) <= 10 * sys.float_info.epsilon:
+    max_1d = np.max(np.abs(residuals)) if residuals.size else 0.0
+    max_2d = (
+        np.max(np.abs(base_pair_biases.residuals))
+        if base_pair_biases.residuals.size
+        else 0.0
+    )
+    if max(max_1d, max_2d) <= 10 * sys.float_info.epsilon:
         return None
 
-    def callback(i, j, k, l, decomposition, data):
-        del k, l, data
+    if base_pair_biases.residual_by_pair:
+        residual_rows = base_pair_biases.residual_rows
 
-        if decomposition not in _PAIR_DECOMPOSITIONS:
-            return 1.0
+        def callback(i, j, k, l, decomposition, data):
+            del k, l, data
 
-        delta_energy = residuals[i - 1] + residuals[j - 1]
-        return math.exp(-delta_energy / kT)
+            if decomposition not in _PAIR_DECOMPOSITIONS:
+                return 1.0
+
+            left = i - 1
+            right = j - 1
+            delta_energy = residuals[left] + residuals[right]
+            row = residual_rows[left]
+            if row is not None:
+                delta_energy += row.get(right, 0.0)
+            return math.exp(-delta_energy / kT)
+    else:
+        # Keep the original one-body-only callback free of an additional
+        # dictionary lookup. This is important because ViennaRNA calls it from
+        # the innermost dynamic-programming recursions.
+        def callback(i, j, k, l, decomposition, data):
+            del k, l, data
+
+            if decomposition not in _PAIR_DECOMPOSITIONS:
+                return 1.0
+
+            delta_energy = residuals[i - 1] + residuals[j - 1]
+            return math.exp(-delta_energy / kT)
 
     fc.sc_add_exp_f(callback)
     return callback
@@ -633,6 +858,19 @@ def _apply_constraint(fc, sequence, lambdas, kT):
 
     return shift, n_1d, n_2d
 
+
+def _apply_base_pair_biases(fc, prepared, values):
+    """Install non-zero sparse exact-base-pair biases in ViennaRNA."""
+    number = 0
+    for index in prepared.sorted_indices:
+        value = float(values[index])
+        if value == 0.0:
+            continue
+        i, j = prepared.pairs[index]
+        fc.sc_add_bp(i + 1, j + 1, value)
+        number += 1
+    return number
+
 def _apply_hard_constraint(fc, paired, unpaired):
 
     for p in paired:
@@ -686,6 +924,68 @@ def _correct_rounding_energies(structures, dlambdas):
 
     return corrections
 
+
+def _correct_base_pair_rounding_energy(structure, prepared):
+    """Return the exact-minus-rounded correction from biased base pairs."""
+    if prepared.residual_range == 0.0:
+        return 0.0
+
+    table = _dotbracket_to_pairtable(structure)
+    number = len(prepared.residual_by_pair)
+    if number <= len(table):
+        return float(math.fsum(
+            residual
+            for (i, j), residual in prepared.residual_by_pair.items()
+            if table[i] == j
+        ))
+
+    # For a comparatively dense bias list, inspect the O(n) formed pairs and
+    # look them up in the sparse residual dictionary instead.
+    return float(math.fsum(
+        prepared.residual_by_pair.get((i, int(j)), 0.0)
+        for i, j in enumerate(table)
+        if j > i
+    ))
+
+
+def _correct_base_pair_rounding_energies(structures, prepared):
+    """Return base-pair residual corrections for a structure batch."""
+    number = len(structures)
+    if number == 0:
+        return np.empty(0, dtype=float)
+    if prepared.residual_range == 0.0:
+        return np.zeros(number, dtype=float)
+
+    tables = _structures_to_pairtables(structures)
+    pairs = tuple(prepared.residual_by_pair)
+    residuals = np.asarray([
+        prepared.residual_by_pair[pair]
+        for pair in pairs
+    ])
+
+    if len(pairs) <= tables.shape[1]:
+        left = np.asarray([pair[0] for pair in pairs], dtype=int)
+        right = np.asarray([pair[1] for pair in pairs], dtype=int)
+        rows_per_batch = max(
+            1,
+            _RESIDUAL_CORRECTION_BATCH_BYTES // max(1, len(pairs)),
+        )
+        corrections = np.empty(number, dtype=float)
+        for begin in range(0, number, rows_per_batch):
+            end = min(begin + rows_per_batch, number)
+            present = tables[begin:end, left] == right
+            corrections[begin:end] = present @ residuals
+        return corrections
+
+    corrections = np.zeros(number, dtype=float)
+    for row, table in enumerate(tables):
+        corrections[row] = math.fsum(
+            prepared.residual_by_pair.get((i, int(j)), 0.0)
+            for i, j in enumerate(table)
+            if j > i
+        )
+    return corrections
+
 def _pf_with_mfe_rescaling_fallback(fc):
     """Compute a PF, retrying with MFE-based scaling after numeric failure."""
     free_energy = fc.pf()[1]
@@ -735,6 +1035,13 @@ class _DPMolecule:
             (self._fc_rounded_shift,
              self._fc_rounded_n_1d_constraints,
              self._fc_rounded_n_2d_constraints) = _apply_constraint(self._fc_rounded, self._seq, self._lambdas1d_rounded, _KB * self._temperature)
+            self._fc_rounded_n_base_pair_biases = (
+                _apply_base_pair_biases(
+                    self._fc_rounded,
+                    self._base_pair_biases,
+                    self._base_pair_biases.rounded,
+                )
+            )
             _apply_hard_constraint(self._fc_rounded, paired=self._force_paired, unpaired=self._force_unpaired)
 
     def _ensure_fc(self, *, compute_bpp=True):
@@ -761,10 +1068,25 @@ class _DPMolecule:
             self._fc_n_2d_constraints) = _apply_constraint(self._fc, self._seq, use_lambdas, _KB * self._temperature)
 
             if _SUPPORTS_NATIVE_CONTINUOUS:
+                base_pair_values = self._base_pair_biases.values
+            else:
+                base_pair_values = self._base_pair_biases.rounded
+            self._fc_n_base_pair_biases = _apply_base_pair_biases(
+                self._fc,
+                self._base_pair_biases,
+                base_pair_values,
+            )
+
+            if _SUPPORTS_NATIVE_CONTINUOUS:
                 self._pf_callback = None
             else:
                 # note that the callback only applies the residuals
-                self._pf_callback = _apply_residual_callback(self._fc, self._lambdas1d_residuals, _KB * self._temperature)
+                self._pf_callback = _apply_residual_callback(
+                    self._fc,
+                    self._lambdas1d_residuals,
+                    self._base_pair_biases,
+                    _KB * self._temperature,
+                )
 
             _apply_hard_constraint(self._fc, paired=self._force_paired, unpaired=self._force_unpaired)
 
@@ -823,6 +1145,7 @@ class _DPMolecule:
         seq: str,
         *,
         lambdas1d,
+        base_pair_biases,
         temperature,
         force_paired,
         force_unpaired,
@@ -883,6 +1206,12 @@ class _DPMolecule:
 
         self._lambdas1d_residuals_range=np.sum(np.abs(self._lambdas1d_residuals))
 
+        self._base_pair_biases = base_pair_biases
+        self._rounding_residuals_range = float(
+            self._lambdas1d_residuals_range
+            + self._base_pair_biases.residual_range
+        )
+
         if force_paired is None:
            force_paired = []
         self._force_paired = force_paired
@@ -906,6 +1235,36 @@ class _DPMolecule:
         self._total_free_energy = None
 
         self._pf_callback = None
+
+    def _rounding_correction(self, structure):
+        """Return the exact-minus-rounded soft-constraint energy."""
+        correction = 0.0
+        if self._lambdas1d_residuals_range != 0.0:
+            correction += _correct_rounding_energy(
+                structure,
+                self._lambdas1d_residuals,
+            )
+        if self._base_pair_biases.residual_range != 0.0:
+            correction += _correct_base_pair_rounding_energy(
+                structure,
+                self._base_pair_biases,
+            )
+        return float(correction)
+
+    def _rounding_corrections(self, structures):
+        """Return exact-minus-rounded corrections for a structure batch."""
+        corrections = np.zeros(len(structures), dtype=float)
+        if self._lambdas1d_residuals_range != 0.0:
+            corrections += _correct_rounding_energies(
+                structures,
+                self._lambdas1d_residuals,
+            )
+        if self._base_pair_biases.residual_range != 0.0:
+            corrections += _correct_base_pair_rounding_energies(
+                structures,
+                self._base_pair_biases,
+            )
+        return corrections
 
     def _satisfies_hard_constraints(self, structure):
         """
@@ -936,20 +1295,24 @@ class _DPMolecule:
         if self._mfe_energy is None:
             self._ensure_fc_rounded()
 
-            subopt_range = int(2*self._lambdas1d_residuals_range / _ROUNDING_FACTOR  + 0.5 ) + _DEBUG_WIDEN_SEARCH
+            subopt_range = int(
+                2 * self._rounding_residuals_range
+                / _ROUNDING_FACTOR
+                + 0.5
+            ) + _DEBUG_WIDEN_SEARCH
 
             if subopt_range == 0:
                 self._mfe_structure , self._mfe_energy = self._fc_rounded.mfe()
                 # correction for rounding
-                if self._lambdas1d_residuals_range != 0.0:
-                    self._mfe_energy += _correct_rounding_energy(
-                        self._mfe_structure,
-                        self._lambdas1d_residuals,
+                if self._rounding_residuals_range != 0.0:
+                    self._mfe_energy += self._rounding_correction(
+                        self._mfe_structure
                     )
             else:
                 subopt = self._fc_rounded.subopt(subopt_range)
                 energies=[
-                    _correct_rounding_energy(s.structure, self._lambdas1d_residuals) + s.energy for s in subopt
+                    self._rounding_correction(s.structure) + s.energy
+                    for s in subopt
                 ]
                 index = np.argmin(energies)
                 self._mfe_structure , self._mfe_energy = subopt[index].structure , energies[index]
@@ -965,11 +1328,8 @@ class _DPMolecule:
         """Return the exact free energy of a secondary structure."""
         self._ensure_fc_rounded()
         energy = self._fc_rounded.eval_structure(structure)
-        if self._lambdas1d_residuals_range != 0.0:
-            energy += _correct_rounding_energy(
-                structure,
-                self._lambdas1d_residuals,
-            )
+        if self._rounding_residuals_range != 0.0:
+            energy += self._rounding_correction(structure)
         return float(energy + self._fc_rounded_shift)
 
     def base_pairing_probability(self):
@@ -1023,18 +1383,19 @@ class _DPMolecule:
 
         self._ensure_fc_rounded()
 
-        subopt_range = int(2*self._lambdas1d_residuals_range / _ROUNDING_FACTOR + 0.5) + _DEBUG_WIDEN_SEARCH
+        subopt_range = int(
+            2 * self._rounding_residuals_range
+            / _ROUNDING_FACTOR
+            + 0.5
+        ) + _DEBUG_WIDEN_SEARCH
 
         subopt = self._fc_rounded.subopt(int(delta / _ROUNDING_FACTOR +0.5) +subopt_range)
 
-        if self._lambdas1d_residuals_range == 0.0:
+        if self._rounding_residuals_range == 0.0:
             energies = [s.energy for s in subopt]
         else:
             energies = [
-                _correct_rounding_energy(
-                    s.structure,
-                    self._lambdas1d_residuals,
-                ) + s.energy
+                self._rounding_correction(s.structure) + s.energy
                 for s in subopt
             ]
         index = np.argsort(energies)
@@ -1051,14 +1412,11 @@ class _DPMolecule:
         self._ensure_rounded_pf()
 
         structures = self._fc_rounded.pbacktrack(number)
-        if self._lambdas1d_residuals_range == 0.0:
+        if self._rounding_residuals_range == 0.0:
             return [(structure, 0.0) for structure in structures]
 
         inverse_kT = 1.0 / (_KB * self._temperature)
-        corrections = _correct_rounding_energies(
-            structures,
-            self._lambdas1d_residuals,
-        )
+        corrections = self._rounding_corrections(structures)
 
         return [
             (
@@ -1095,8 +1453,8 @@ class _DPMolecule:
 
                 log(w) = -(E_exact - E_rounded) / (k_B T).
 
-            When all lambdas are multiples of 0.01 kcal/mol, every returned
-            log-weight is zero.
+            When all one-body and base-pair biases are multiples of 0.01
+            kcal/mol, every returned log-weight is zero.
         """
 
         number = int(number)
@@ -1111,12 +1469,12 @@ class _DPMolecule:
         inverse_kT = 1.0 / (_KB * self._temperature)
         max_log_weight = -float(np.sum(
             np.minimum(self._lambdas1d_residuals, 0.0)
-        )) * inverse_kT
+        ) + self._base_pair_biases.minimum_residual) * inverse_kT
 
         # Initialize the assumed candidates-per-accepted-sample ratio from the
         # worst-case log-weight range.
         log_weight_span = (
-            self._lambdas1d_residuals_range * inverse_kT
+            self._rounding_residuals_range * inverse_kT
         )
         if log_weight_span < math.log(_MAX_ASSUMED_INFLATION):
             assumed_inflation = math.exp(log_weight_span)
@@ -1181,10 +1539,13 @@ class Molecule:
     optionally, arbitrary many-body biases on selected paired/unpaired states.
     For a structure ``s``, the modeled energy is
 
-    ``E(s) = E_ViennaRNA(s) + sum_i lambda_i paired_i(s) + state_bias(s)``,
+    ``E(s) = E_ViennaRNA(s) + sum_i lambda_i paired_i(s)``
+    ``+ sum_ij b_ij pair_ij(s) + state_bias(s)``,
 
     where ``paired_i`` is one when nucleotide *i* is paired and zero otherwise.
     Positive ``lambda_i`` values disfavor pairing and negative values favor it.
+    ``pair_ij`` is one only when nucleotides *i* and *j* form the exact base
+    pair, and ``b_ij`` is its sparse base-pair bias.
     A state-bias tensor can express cooperative or non-additive interactions
     between any chosen nucleotides; multiple tensors contribute additively.
 
@@ -1211,6 +1572,15 @@ class Molecule:
         Per-nucleotide pairing penalties (kcal/mol). Positive values penalize
         pairing, whereas negative values favor pairing. If omitted, all penalties
         are zero.
+
+    base_pair_biases : iterable of (int, int, float), optional
+        Sparse exact-base-pair biases ``(i, j, energy)`` in kcal/mol, using
+        zero-based nucleotide indices. A contribution is applied only when
+        nucleotides ``i`` and ``j`` pair with each other. Positive energies
+        disfavor the pair and negative energies favor it. Pair orientation is
+        normalized internally; duplicate, impossible, and non-finite entries
+        are rejected. The iterable order is retained for
+        :meth:`d_free_energy_d_base_pair_biases`.
 
     force_paired : array-like of int, optional
         Zero-based indices of nucleotides that are required to be paired, without
@@ -1275,8 +1645,8 @@ class Molecule:
     0.01 kcal/mol. This class corrects that rounding: partition functions use a
     residual callback, sampling uses rejection or importance reweighting, and
     MFE and suboptimal candidates are widened and rescored. Therefore the
-    requested continuous penalties are retained even without a patched
-    ViennaRNA build that supports them natively.
+    requested continuous one-body and exact-base-pair penalties are retained
+    even without a patched ViennaRNA build that supports them natively.
 
     With the default ``pf_smooth=False``, partition-function and discrete
     structure calculations use compatible ViennaRNA energies. Setting
@@ -1295,6 +1665,7 @@ class Molecule:
         seq: str,
         *,
         lambdas1d=None,
+        base_pair_biases=None,
         temperature=None,
         force_paired = None,
         force_unpaired = None,
@@ -1318,6 +1689,16 @@ class Molecule:
             pf_smooth,
             NaCl,
             parameters,
+        )
+
+        sequence = str(seq).upper()
+        if not sequence:
+            raise ValueError("seq cannot be empty")
+        if any(base not in "ACGU" for base in sequence):
+            raise ValueError("seq must contain only A, C, G, and U")
+        prepared_base_pair_biases = _prepare_base_pair_biases(
+            sequence,
+            base_pair_biases,
         )
 
         self._has_state_biases = state_positions is not None
@@ -1388,7 +1769,7 @@ class Molecule:
                         "state_positions sets must not contain duplicates"
                     )
                 if any(
-                    i < 0 or i >= len(str(seq))
+                    i < 0 or i >= len(sequence)
                     for i in position_set
                 ):
                     raise ValueError(
@@ -1496,7 +1877,7 @@ class Molecule:
             self._state_biases = self._state_bias_sets[0]
 
         if lambdas1d is None:
-            base_lambdas1d = np.zeros(len(str(seq)))
+            base_lambdas1d = np.zeros(len(sequence))
         else:
             base_lambdas1d = np.asarray(
                 lambdas1d,
@@ -1504,7 +1885,7 @@ class Molecule:
             ).copy()
         if base_lambdas1d.ndim != 1:
             raise ValueError("lambdas1d must be one-dimensional")
-        if len(base_lambdas1d) != len(str(seq)):
+        if len(base_lambdas1d) != len(sequence):
             raise ValueError(
                 "lambdas1d must contain one value per nucleotide"
             )
@@ -1596,8 +1977,9 @@ class Molecule:
             self._component_biases[state] = component_bias
             self._dp_molecules.append(
                 _DPMolecule(
-                    seq,
+                    sequence,
                     lambdas1d=component_lambdas1d,
+                    base_pair_biases=prepared_base_pair_biases,
                     temperature=temperature,
                     NaCl=NaCl,
                     force_paired=base_force_paired + state_paired,
@@ -1611,6 +1993,8 @@ class Molecule:
         first_molecule = self._dp_molecules[0]
         self._seq = first_molecule._seq
         self._lambdas1d = base_lambdas1d
+        self._base_pair_biases = prepared_base_pair_biases.biases
+        self._prepared_base_pair_biases = prepared_base_pair_biases
         self._temperature = first_molecule._temperature
         self._salt = first_molecule._salt
         self._parameters = first_molecule._parameters
@@ -1660,6 +2044,7 @@ class Molecule:
         return Molecule(
             self._seq,
             lambdas1d=self._lambdas1d,
+            base_pair_biases=self._base_pair_biases,
             temperature=self._temperature,
             force_paired=self._force_paired,
             force_unpaired=force_unpaired,
@@ -1765,7 +2150,10 @@ class Molecule:
             strings or ``(structure, value)`` pairs. This directly accepts the
             results of :meth:`suboptimal_structures`, ``sample()``, and
             ``sample(weights=True)``. Values paired with structures are ignored.
-            NumPy arrays must be one-dimensional.
+            Consequently, suboptimal structures generated by one ``Molecule``
+            may be passed directly to another ``Molecule`` with the same
+            sequence to rescore them under different one-body, base-pair, or
+            state biases. NumPy arrays must be one-dimensional.
 
         Returns
         -------
@@ -1904,6 +2292,28 @@ class Molecule:
         """
         return np.sum(self.base_pairing_probability(), axis=1)
 
+    def d_free_energy_d_base_pair_biases(self):
+        """Return free-energy derivatives for the requested base-pair biases.
+
+        For an entry ``(i, j, energy)`` in ``base_pair_biases``, the
+        corresponding derivative is the equilibrium probability that the
+        exact base pair ``(i, j)`` is formed. Values are returned in the same
+        order as the constructor entries.
+
+        Returns
+        -------
+        ndarray
+            One-dimensional array containing one exact-base-pair probability
+            per ``base_pair_biases`` entry.
+        """
+        if not self._base_pair_biases:
+            return np.empty(0, dtype=float)
+        probability = self.base_pairing_probability()
+        return np.asarray([
+            probability[i, j]
+            for i, j, _ in self._base_pair_biases
+        ])
+
     def d_free_energy_d_state_biases(self):
         """
         Return the derivatives of the free energy with respect to state biases.
@@ -2007,6 +2417,9 @@ class Molecule:
         -------
         list of (str, float)
             List of (structure, energy) pairs sorted by increasing exact energy.
+            The list can be passed directly to :meth:`evaluate`, including on
+            another ``Molecule`` with the same sequence, to rescore the
+            structures under a different set of biases.
         """
         # A single DP component needs no mixture-level enumeration.
         if len(self._dp_molecules) == 1:
@@ -2082,10 +2495,11 @@ class Molecule:
 
             For state mixtures, the log-weight also includes the
             component-specific exact/rounded normalization correction. This
-            correction is caused only by lambda rounding, not by the state bias.
+            correction is caused only by one-body and base-pair-bias rounding,
+            not by the state bias.
 
-            When all lambdas are multiples of 0.01 kcal/mol, every returned
-            log-weight is zero.
+            When all one-body and base-pair biases are multiples of 0.01
+            kcal/mol, every returned log-weight is zero.
         """
         number = int(number)
         if number <= 0:

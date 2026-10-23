@@ -118,9 +118,54 @@ class TestRNA2D(unittest.TestCase):
         with self.assertRaises(ValueError):
             rna2d.sample_to_numpy(["((...)"])
         with self.assertRaises(ValueError):
+            rna2d.sample_to_numpy([")....."])
+        with self.assertRaises(ValueError):
             rna2d.sample_to_numpy(["[....]"])
         with self.assertRaises(ValueError):
             rna2d.sample_to_numpy(["......"], deduplicate="yes")
+
+    def test_pairtable_parser_paths(self):
+        structures = [
+            "((..))",
+            "......",
+            "(....)",
+        ]
+        expected = np.array([
+            [5, 4, -1, -1, 1, 0],
+            [-1, -1, -1, -1, -1, -1],
+            [5, -1, -1, -1, -1, 0],
+        ], dtype=np.int16)
+
+        original_has_numba = rna2d._HAS_NUMBA
+        results = []
+        try:
+            # Force both the original Python parser and the encoded batch
+            # parser. Without Numba, the latter executes as ordinary Python;
+            # a Numba-enabled test run additionally compiles the same function.
+            for use_numba_path in (False, True):
+                with self.subTest(use_numba_path=use_numba_path):
+                    rna2d._HAS_NUMBA = use_numba_path
+                    tables = rna2d._structures_to_pairtables(structures)
+                    results.append(tables)
+                    np.testing.assert_array_equal(tables, expected)
+                    np.testing.assert_array_equal(
+                        rna2d._dotbracket_to_pairtable(structures[0]),
+                        expected[0],
+                    )
+
+                    for invalid in ("((...)", ").....", "[....]", "à....."):
+                        with self.subTest(invalid=invalid):
+                            with self.assertRaises(ValueError):
+                                rna2d._dotbracket_to_pairtable(invalid)
+
+                    with self.assertRaises(ValueError):
+                        rna2d._structures_to_pairtables([".....", "......"])
+                    with self.assertRaises(ValueError):
+                        rna2d._structures_to_pairtables(["......", None])
+        finally:
+            rna2d._HAS_NUMBA = original_has_numba
+
+        np.testing.assert_array_equal(results[0], results[1])
 
     def test_suboptimal_to_numpy(self):
 
@@ -193,6 +238,44 @@ class TestRNA2D(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             Molecule(self.seq, pf_smooth=1)
+
+    def test_base_pair_bias_validation(self):
+        valid = Molecule(
+            self.seq,
+            base_pair_biases=[(8, 0, 0.0)],
+        )
+        self.assertEqual(valid._base_pair_biases, ((0, 8, 0.0),))
+        self.assertEqual(
+            valid.d_free_energy_d_base_pair_biases().shape,
+            (1,),
+        )
+        self.assertEqual(
+            Molecule(self.seq).d_free_energy_d_base_pair_biases().shape,
+            (0,),
+        )
+
+        invalid = [
+            1,
+            [(0, 8)],
+            [(0, 8, 1.0, 2.0)],
+            [(False, 8, 1.0)],
+            [(0.0, 8, 1.0)],
+            [(-1, 8, 1.0)],
+            [(0, len(self.seq), 1.0)],
+            [(0, 0, 1.0)],
+            [(0, 3, 1.0)],
+            [(0, 4, 1.0)],
+            [(0, 8, np.nan)],
+            [(0, 8, "bad")],
+            [(0, 8, 1.0), (8, 0, 2.0)],
+        ]
+        for base_pair_biases in invalid:
+            with self.subTest(base_pair_biases=base_pair_biases):
+                with self.assertRaises(ValueError):
+                    Molecule(
+                        self.seq,
+                        base_pair_biases=base_pair_biases,
+                    )
 
     def test_default_parameters(self):
 
@@ -827,6 +910,388 @@ class TestRNA2D(unittest.TestCase):
             finite_difference,
             delta=2e-4,
         )
+
+    def test_base_pair_biases(self):
+        sequence = "GGGAAACCC"
+        base_pair_biases = [
+            (8, 0, 0.013),
+            (1, 7, -0.027),
+            (2, 6, 0.0),
+        ]
+        molecule = Molecule(
+            sequence,
+            base_pair_biases=base_pair_biases,
+        )
+        self.assertEqual(
+            molecule._base_pair_biases,
+            (
+                (0, 8, 0.013),
+                (1, 7, -0.027),
+                (2, 6, 0.0),
+            ),
+        )
+        conditioned = molecule._condition_unpaired(4)
+        self.assertEqual(
+            conditioned._base_pair_biases,
+            molecule._base_pair_biases,
+        )
+
+        dp_molecule = molecule._dp_molecules[0]
+        base_fc = dp_molecule._make_fold_compound()
+        exact_energies = {}
+        for structure in _enumerate_secondary_structures(sequence):
+            table = rna2d._dotbracket_to_pairtable(structure)
+            exact_energies[structure] = float(
+                base_fc.eval_structure(structure)
+                + sum(
+                    energy
+                    for i, j, energy in molecule._base_pair_biases
+                    if table[i] == j
+                )
+            )
+
+        structures = list(exact_energies)
+        np.testing.assert_allclose(
+            molecule.evaluate(structures),
+            [exact_energies[structure] for structure in structures],
+            atol=1e-6,
+        )
+
+        mfe_structure, mfe_energy = molecule.mfe()
+        self.assertAlmostEqual(
+            mfe_energy,
+            min(exact_energies.values()),
+            places=6,
+        )
+        self.assertAlmostEqual(
+            mfe_energy,
+            exact_energies[mfe_structure],
+            places=6,
+        )
+
+        delta = 1.0
+        cutoff = min(exact_energies.values()) + delta
+        expected_suboptimal = {
+            structure: energy
+            for structure, energy in exact_energies.items()
+            if energy <= cutoff
+        }
+        actual_suboptimal = dict(
+            molecule.suboptimal_structures(delta)
+        )
+        self.assertEqual(set(actual_suboptimal), set(expected_suboptimal))
+        for structure, energy in actual_suboptimal.items():
+            self.assertAlmostEqual(
+                energy,
+                expected_suboptimal[structure],
+                places=6,
+            )
+
+        energies = np.asarray(list(exact_energies.values()))
+        reference = np.min(energies)
+        kT = _KB * molecule._temperature
+        expected_free_energy = reference - kT * np.log(np.sum(
+            np.exp(-(energies - reference) / kT)
+        ))
+        self.assertAlmostEqual(
+            molecule.total_free_energy(),
+            expected_free_energy,
+            places=6,
+        )
+
+        base_pairing_probability = molecule.base_pairing_probability()
+        derivatives = molecule.d_free_energy_d_base_pair_biases()
+        np.testing.assert_allclose(
+            derivatives,
+            [
+                base_pairing_probability[i, j]
+                for i, j, _ in molecule._base_pair_biases
+            ],
+            atol=1e-14,
+        )
+
+        epsilon = 1e-3
+        plus = list(base_pair_biases)
+        minus = list(base_pair_biases)
+        plus[0] = plus[0][:2] + (plus[0][2] + epsilon,)
+        minus[0] = minus[0][:2] + (minus[0][2] - epsilon,)
+        finite_difference = (
+            Molecule(
+                sequence,
+                base_pair_biases=plus,
+            ).total_free_energy()
+            - Molecule(
+                sequence,
+                base_pair_biases=minus,
+            ).total_free_energy()
+        ) / (2.0 * epsilon)
+        self.assertAlmostEqual(
+            derivatives[0],
+            finite_difference,
+            delta=2e-4,
+        )
+
+        np.random.seed(1977)
+        inverse_kT = 1.0 / kT
+        for structure, log_weight in molecule.sample(50, weights=True):
+            table = rna2d._dotbracket_to_pairtable(structure)
+            expected_correction = sum(
+                residual
+                for (i, j), residual in zip(
+                    dp_molecule._base_pair_biases.pairs,
+                    dp_molecule._base_pair_biases.residuals,
+                )
+                if table[i] == j
+            )
+            self.assertAlmostEqual(
+                log_weight,
+                -expected_correction * inverse_kT,
+            )
+
+        mixture = Molecule(
+            sequence,
+            base_pair_biases=base_pair_biases,
+            state_positions=(3, 4),
+            state_biases=np.zeros((2, 2)),
+        )
+        self.assertTrue(all(
+            component._base_pair_biases
+            is mixture._prepared_base_pair_biases
+            for component in mixture._dp_molecules
+        ))
+        np.testing.assert_allclose(
+            mixture.evaluate(structures),
+            molecule.evaluate(structures),
+            atol=1e-6,
+        )
+        np.testing.assert_allclose(
+            mixture.base_pairing_probability(),
+            molecule.base_pairing_probability(),
+            atol=1e-10,
+        )
+
+    def test_base_pair_biases_vanilla(self):
+        self._run_in_vanilla_mode(self.test_base_pair_biases)
+
+    def test_rescore_base_pair_biased_suboptimals(self):
+        sequence = "GGGAAACCC"
+        base_pair_biases = [(0, 8, -2.0), (1, 7, 0.5)]
+        source = Molecule(
+            sequence,
+            base_pair_biases=base_pair_biases,
+        )
+        suboptimal = source.suboptimal_structures(5.0)
+
+        unbiased = Molecule(sequence)
+        rescored = unbiased.evaluate(suboptimal)
+        np.testing.assert_allclose(
+            rescored,
+            [unbiased.evaluate(structure) for structure, _ in suboptimal],
+        )
+        self.assertTrue(any(
+            abs(new_energy - old_energy) > 1e-8
+            for new_energy, (_, old_energy) in zip(rescored, suboptimal)
+        ))
+
+        state_positions = (0, 4)
+        state_biases = np.array([
+            [0.2, -0.3],
+            [0.4, -0.1],
+        ])
+        state_source = Molecule(
+            sequence,
+            base_pair_biases=base_pair_biases,
+            state_positions=state_positions,
+            state_biases=state_biases,
+        )
+        state_suboptimal = state_source.suboptimal_structures(5.0)
+
+        # Rescore with the state model retained but the base-pair biases
+        # removed, and also with every bias removed.
+        state_target = Molecule(
+            sequence,
+            state_positions=state_positions,
+            state_biases=state_biases,
+        )
+        np.testing.assert_allclose(
+            state_target.evaluate(state_suboptimal),
+            [
+                state_target.evaluate(structure)
+                for structure, _ in state_suboptimal
+            ],
+        )
+        np.testing.assert_allclose(
+            unbiased.evaluate(state_suboptimal),
+            [
+                unbiased.evaluate(structure)
+                for structure, _ in state_suboptimal
+            ],
+        )
+
+    def test_base_pair_residual_callback_selection(self):
+        class FoldCompound:
+            callback = None
+
+            def sc_add_exp_f(self, callback):
+                self.callback = callback
+
+        sequence = "GGGAAACCC"
+        kT = _KB * (37.0 + 273.15)
+        pair_decomposition = next(iter(rna2d._PAIR_DECOMPOSITIONS))
+
+        # Exactly representable 2D biases must not add a pair lookup to the
+        # existing 1D-only callback.
+        exact = rna2d._prepare_base_pair_biases(
+            sequence,
+            [(0, 8, 0.02)],
+        )
+        exact.residual_rows = None
+        residuals = np.zeros(len(sequence))
+        residuals[[0, 8]] = (0.003, -0.001)
+        fc = FoldCompound()
+        callback = rna2d._apply_residual_callback(
+            fc,
+            residuals,
+            exact,
+            kT,
+        )
+        self.assertIs(callback, fc.callback)
+        self.assertAlmostEqual(
+            callback(1, 9, 0, 0, pair_decomposition, None),
+            np.exp(-0.002 / kT),
+        )
+
+        # With no 1D or 2D residual, no callback is installed at all.
+        fc = FoldCompound()
+        self.assertIsNone(rna2d._apply_residual_callback(
+            fc,
+            np.zeros(len(sequence)),
+            exact,
+            kT,
+        ))
+        self.assertIsNone(fc.callback)
+
+        # When a 2D residual is present, it is added only for its exact pair.
+        inexact = rna2d._prepare_base_pair_biases(
+            sequence,
+            [(0, 8, 0.023)],
+        )
+        fc = FoldCompound()
+        callback = rna2d._apply_residual_callback(
+            fc,
+            residuals,
+            inexact,
+            kT,
+        )
+        self.assertAlmostEqual(
+            callback(1, 9, 0, 0, pair_decomposition, None),
+            np.exp(-0.005 / kT),
+        )
+        self.assertAlmostEqual(
+            callback(2, 8, 0, 0, pair_decomposition, None),
+            1.0,
+        )
+        self.assertEqual(
+            callback(1, 9, 0, 0, object(), None),
+            1.0,
+        )
+
+    def test_combined_1d_and_base_pair_residuals_vanilla(self):
+        sequence = "GGGAAACCC"
+        lambdas = np.array([
+            0.003, -0.004, 0.002, 0.0, 0.0,
+            0.0, -0.003, 0.004, -0.002,
+        ])
+        base_pair_biases = [
+            (0, 8, 0.013),
+            (1, 7, -0.027),
+        ]
+
+        def check():
+            molecule = Molecule(
+                sequence,
+                lambdas1d=lambdas,
+                base_pair_biases=base_pair_biases,
+            )
+            dp_molecule = molecule._dp_molecules[0]
+            base_fc = dp_molecule._make_fold_compound()
+            structures = list(_enumerate_secondary_structures(sequence))
+            energies = []
+            pair_indicators = []
+            for structure in structures:
+                table = rna2d._dotbracket_to_pairtable(structure)
+                indicators = np.asarray([
+                    table[i] == j
+                    for i, j, _ in base_pair_biases
+                ])
+                pair_indicators.append(indicators)
+                energies.append(
+                    base_fc.eval_structure(structure)
+                    + sum(
+                        value
+                        for value, symbol in zip(lambdas, structure)
+                        if symbol != "."
+                    )
+                    + sum(
+                        value
+                        for indicator, (_, _, value) in zip(
+                            indicators,
+                            base_pair_biases,
+                        )
+                        if indicator
+                    )
+                )
+
+            energies = np.asarray(energies)
+            reference = np.min(energies)
+            kT = _KB * molecule._temperature
+            weights = np.exp(-(energies - reference) / kT)
+            expected_free_energy = reference - kT * np.log(np.sum(weights))
+            expected_derivatives = (
+                weights @ np.asarray(pair_indicators)
+                / np.sum(weights)
+            )
+
+            self.assertAlmostEqual(
+                molecule.total_free_energy(),
+                expected_free_energy,
+                places=6,
+            )
+            np.testing.assert_allclose(
+                molecule.d_free_energy_d_base_pair_biases(),
+                expected_derivatives,
+                atol=1e-7,
+            )
+
+        self._run_in_vanilla_mode(check)
+
+    def test_dense_base_pair_residual_corrections(self):
+        sequence = "G" * 8 + "C" * 8
+        biases = [
+            (i, j, 0.003 * (1 if (i + j) % 2 else -1))
+            for i in range(8)
+            for j in range(8, 16)
+            if j - i > 3
+        ]
+        prepared = rna2d._prepare_base_pair_biases(sequence, biases)
+        self.assertGreater(
+            len(prepared.residual_by_pair),
+            len(sequence),
+        )
+
+        structures = list(_enumerate_secondary_structures(sequence))[:50]
+        expected = np.asarray([
+            rna2d._correct_base_pair_rounding_energy(
+                structure,
+                prepared,
+            )
+            for structure in structures
+        ])
+        actual = rna2d._correct_base_pair_rounding_energies(
+            structures,
+            prepared,
+        )
+        np.testing.assert_allclose(actual, expected, atol=1e-15)
 
     def test_zero_bias_state_mixture(self):
 
