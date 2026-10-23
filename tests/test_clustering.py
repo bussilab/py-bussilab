@@ -75,6 +75,12 @@ class TestClustering(TestCase):
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
+    def test_maxclique_zero_weights(self):
+        from bussilab.clustering import max_clique
+        cl=max_clique(np.eye(2,dtype=bool),weights=[0,0])
+        self.assertEqual([set(cluster) for cluster in cl.clusters],[{0},{1}])
+        self.assertEqual(cl.weights,[0,0])
+
     def test_daura(self):
         from bussilab.clustering import daura
         data=(np.array(range(50))**2).reshape(-1,1)
@@ -123,6 +129,86 @@ class TestClustering(TestCase):
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
+    def test_daura_many_small_clusters(self):
+        from bussilab.clustering import daura
+        adj=np.eye(120,dtype=bool)
+        weights=np.arange(1,121,dtype=np.int8)
+        cl=daura(adj,weights)
+        self.assertEqual([cluster.tolist() for cluster in cl.clusters],
+                         [[i] for i in range(119,-1,-1)])
+        self.assertEqual(cl.weights,list(range(120,0,-1)))
+        self.assertTrue(np.array_equal(adj,np.eye(120,dtype=bool)))
+        self.assertTrue(np.array_equal(weights,np.arange(1,121,dtype=np.int8)))
+
+    def test_daura_large_cluster(self):
+        from bussilab.clustering import daura
+        adj=np.eye(302,dtype=bool)
+        adj[:300,:300]=True
+        cl=daura(adj,np.ones(302,dtype=np.int8))
+        self.assertEqual(cl.weights,[300,1,1])
+        self.assertEqual([cluster.tolist() for cluster in cl.clusters],
+                         [list(range(300)),[300],[301]])
+
+    def test_daura_without_self_edges(self):
+        from bussilab.clustering import daura
+        cl=daura(np.zeros((2,2),dtype=bool))
+        self.assertEqual([cluster.tolist() for cluster in cl.clusters],[[0],[1]])
+        self.assertEqual(cl.weights,[1,1])
+        cl=daura(np.zeros((2,2),dtype=bool),weights=np.array([3.0,2.0]))
+        self.assertEqual([cluster.tolist() for cluster in cl.clusters],[[0],[1]])
+        self.assertEqual(cl.weights,[3.0,2.0])
+        cl=daura(np.array([[0,1],[1,0]],dtype=bool))
+        self.assertEqual([cluster.tolist() for cluster in cl.clusters],[[0,1]])
+        self.assertEqual(cl.weights,[2])
+
+    def test_daura_large_weight_does_not_hide_remaining_cluster(self):
+        from bussilab.clustering import daura
+        adj=np.eye(5,dtype=bool)
+        for i,j in ((0,1),(0,2),(2,3)):
+            adj[i,j]=adj[j,i]=True
+        cl=daura(adj,np.array([1e16,1,100,100,0.5]),max_clusters=2)
+        self.assertEqual([set(cluster) for cluster in cl.clusters],
+                         [{0,2,3},{1}])
+        self.assertEqual(cl.weights,[1e16+200,1])
+
+    def test_zero_max_clusters(self):
+        from bussilab.clustering import daura, max_clique, qt
+        for result in (max_clique(np.eye(1,dtype=bool),max_clusters=0),
+                       daura(np.eye(1,dtype=bool),max_clusters=0),
+                       qt(np.zeros((1,1)),1,max_clusters=0)):
+            self.assertEqual(result.clusters,[])
+            self.assertEqual(result.weights,[])
+
+    def test_empty_clustering_input(self):
+        from bussilab.clustering import daura, max_clique, qt
+        for result in (max_clique(np.empty((0,0),dtype=bool)),
+                       daura(np.empty((0,0),dtype=bool)),
+                       qt(np.empty((0,0)),1)):
+            self.assertEqual(result.clusters,[])
+            self.assertEqual(result.weights,[])
+
+    def test_invalid_clustering_inputs(self):
+        from bussilab.clustering import daura, max_clique, qt
+        for method, matrix in ((max_clique,np.eye(2,dtype=bool)),
+                               (daura,np.eye(2,dtype=bool)),
+                               (lambda matrix,**kwargs: qt(matrix,1,**kwargs),np.zeros((2,2)))):
+            with self.assertRaises(ValueError):
+                method(matrix,weights=[1])
+            with self.assertRaises(ValueError):
+                method(matrix,weights=[1,np.nan])
+            with self.assertRaises(ValueError):
+                method(matrix,weights=[1,np.inf])
+            with self.assertRaises(ValueError):
+                method(matrix,weights=[1,-1])
+            with self.assertRaises(ValueError):
+                method(matrix,max_clusters=-1)
+        with self.assertRaises(ValueError):
+            daura(np.ones((2,3)))
+        with self.assertRaises(ValueError):
+            qt(np.ones((2,3)),1)
+        with self.assertRaises(ValueError):
+            qt(np.zeros((2,2)),np.nan)
+
     def test_qt(self):
         from bussilab.clustering import qt
         data=(np.array(range(50))**2).reshape(-1,1)
@@ -141,6 +227,45 @@ class TestClustering(TestCase):
         ref=[range(38,50), range(0,32), range(32,38)]
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
+
+    def test_qt_large_cluster_read_only_distances(self):
+        from bussilab.clustering import qt
+        dist=np.full((262,262),10.0,dtype=np.float32)
+        dist[:260,:260]=0.1
+        np.fill_diagonal(dist,50.0)
+        dist.flags.writeable=False
+        cl=qt(dist,0.5,np.ones(262,dtype=np.int8),max_clusters=2)
+        self.assertEqual(cl.weights,[260,1])
+        self.assertEqual(set(cl.clusters[0]),set(range(260)))
+        self.assertEqual(set(cl.clusters[1]),{260})
+        self.assertEqual(dist[0,0],50.0)
+
+    def test_qt_large_weight_does_not_hide_remaining_cluster(self):
+        from bussilab.clustering import qt
+        dist=np.array([[0,0.5,0.5,2],
+                       [0.5,0,2,2],
+                       [0.5,2,0,2],
+                       [2,2,2,0]])
+        weights=np.array([1e16,1,2,0.5])
+        cl=qt(dist,1,weights,max_clusters=2)
+        self.assertEqual([set(cluster) for cluster in cl.clusters],
+                         [{0,2},{1}])
+        self.assertEqual(cl.weights,[1e16+2,1])
+
+    def test_qt_zero_weights(self):
+        from bussilab.clustering import qt
+        cl=qt(np.zeros((2,2)),1,weights=np.zeros(2))
+        self.assertEqual([set(cluster) for cluster in cl.clusters],[{0,1}])
+        self.assertEqual(cl.weights,[0])
+
+    def test_qt_cutoff_is_inclusive(self):
+        from bussilab.clustering import qt
+        dist=np.array([[0.0,1.0],[1.0,0.0]])
+        cl=qt(dist,1.0)
+        self.assertEqual([set(cluster) for cluster in cl.clusters],[{0,1}])
+        self.assertEqual(cl.weights,[2])
+        cl=qt(np.zeros((2,2)),0.0)
+        self.assertEqual([set(cluster) for cluster in cl.clusters],[{0,1}])
 
     def test_max_clique2(self):
         from bussilab.clustering import max_clique
