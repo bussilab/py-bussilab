@@ -3,6 +3,33 @@ Module containing a WHAM implementation.
 
 See `bussilab.wham.wham()`.
 
+## Changelog
+
+- **v0.0.45**
+  - Improved numerical stability for large bias energies.
+- **v0.0.44**
+  - `T` accepts one temperature per trajectory, as well as a scalar.
+  - `normalize="log"` became the default, avoiding overflow or underflow
+    when normalizing frame weights; boolean values remain supported.
+- **v0.0.43**
+  - Fixed `method="minimize"` with non-default `traj_weight` and
+    `frame_weight`.
+- **v0.0.42**
+  - Temporarily used `method="substitute"` when `traj_weight` was supplied,
+    avoiding incorrect results from the minimization method.
+- **v0.0.41**
+  - Changed the default solver to `method="minimize"` and the default
+    convergence threshold to `1e-20`.
+- **v0.0.28**
+  - Added `method="minimize"`, `minimize_opt`, and `WhamResult.nfev`;
+    substitution remained the default solver.
+- **v0.0.27**
+  - Added `normalize=False` and improved stability for large biases and
+    initial `logW`/`logZ` estimates.
+- **v0.0.2**
+  - Introduced binless `wham()` with frame and trajectory weights,
+    restart estimates, and `WhamResult`.
+
 """
 import sys
 from typing import Optional, Union, cast
