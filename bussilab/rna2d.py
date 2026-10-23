@@ -69,7 +69,9 @@ except ImportError:
     _numba_njit = None
     _numba_config = None
 
-_HAS_NUMBA = _numba_njit is not None and not _numba_config.DISABLE_JIT
+_HAS_NUMBA = _numba_njit is not None and not getattr(
+    _numba_config, "DISABLE_JIT", False
+)
 
 try:
     import RNA
