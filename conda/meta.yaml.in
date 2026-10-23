@@ -12,12 +12,12 @@ build:
 
 requirements:
   host:
-    - python >=3.8,<3.15
+    - python >=3.8,<3.16
     - setuptools
     - pip
   run:
     __REQUIRED__
-    - python >=3.8,<3.15
+    - python >=3.8,<3.16
 
 test:
   imports:
