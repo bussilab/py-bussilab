@@ -190,6 +190,12 @@ class TestClustering(TestCase):
 
     def test_daura_sparse_edge_cases(self):
         from bussilab.clustering import daura
+        star=np.zeros((4,4),dtype=bool)
+        star[1,[0,2,3]]=True
+        star[[0,2,3],1]=True
+        self.assertEqual(daura(sparse.csr_matrix(star),max_clusters=1)
+                         .clusters[0].tolist(),[0,1,2,3])
+
         adj=np.eye(5,dtype=bool)
         for i,j in ((0,1),(0,2),(2,3)):
             adj[i,j]=adj[j,i]=True

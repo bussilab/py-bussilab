@@ -103,6 +103,9 @@ def _daura_sparse(adj,weights,min_size,max_clusters):
     adj.setdiag(True)
     adj.sum_duplicates()
     adj.eliminate_zeros()
+    # Some SciPy versions append new diagonal entries without clearing this
+    # flag. Force the sort so neighbor order matches the dense implementation.
+    adj.has_sorted_indices=False
     adj.sort_indices()
     n=len(adj.indptr)-1
     indptr=adj.indptr
@@ -130,7 +133,7 @@ def _daura_sparse(adj,weights,min_size,max_clusters):
         if degrees[center]<min_size:
             break
         neighbors=indices[indptr[center]:indptr[center+1]]
-        cluster=neighbors[active[neighbors]]
+        cluster=np.sort(neighbors[active[neighbors]])
         clusters.append(cluster)
         cluster_weights.append(degrees[center])
         if max_clusters is not None and len(clusters)>=max_clusters:
