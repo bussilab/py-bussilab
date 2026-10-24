@@ -1,4 +1,4 @@
-"""Cluster frames from a full adjacency or distance matrix.
+"""Cluster frames from an adjacency or distance matrix.
 
 `max_clique()` and `daura()` use a Boolean adjacency matrix. The former
 repeatedly extracts a maximum-weight clique; the latter repeatedly selects
@@ -7,12 +7,16 @@ a distance matrix and builds clusters whose pairwise distances do not exceed
 a cutoff. All three methods can use nonnegative frame weights and return a
 `ClusteringResult` with cluster members and their total weights.
 
-The input matrix requires memory proportional to the square of the number of
-frames. `max_clique()` can also take exponential time on difficult graphs.
+Dense input matrices require memory proportional to the square of the number
+of frames. `daura()` also accepts sparse adjacency matrices, whose storage
+scales with the number of neighboring frame pairs. `max_clique()` can take
+exponential time on difficult graphs.
 
 ## Changelog
 
 - **v0.0.52**
+  - Added sparse adjacency and neighbor-index iterable input to `daura()`;
+    both use CSR neighbor rows and a priority queue as frames are removed.
   - Made `daura()` and `qt()` reuse the full input matrix instead of repeatedly
     copying smaller matrices; updated cluster degrees incrementally and
     reduced temporary arrays. The input matrices are left unchanged.
@@ -33,10 +37,13 @@ frames. `max_clique()` can also take exponential time on difficult graphs.
 
 """
 
+import heapq
+import operator
 from typing import Optional
 
 import networkx
 import numpy as np
+from scipy import sparse
 
 from .coretools import Result
 from .coretools import import_numba_jit
@@ -65,6 +72,95 @@ def _validate_weights(weights,size):
     if not np.all(np.isfinite(weights)) or np.any(weights<0):
         raise ValueError("weights must be finite and nonnegative")
     return weights
+
+def _neighbors_to_csr(rows):
+    """Convert one iterable of neighbor indexes per frame to CSR."""
+    indices=[]
+    indptr=[0]
+    for row in rows:
+        try:
+            neighbors=iter(row)
+        except TypeError as exc:
+            raise ValueError("each frame must have an iterable of neighbors") from exc
+        for neighbor in neighbors:
+            try:
+                if isinstance(neighbor,(bool,np.bool_)):
+                    raise TypeError
+                indices.append(operator.index(neighbor))
+            except TypeError as exc:
+                raise ValueError("neighbor indexes must be integers") from exc
+        indptr.append(len(indices))
+    n=len(indptr)-1
+    if any(i<0 or i>=n for i in indices):
+        raise ValueError("neighbor index out of range")
+    indices=np.asarray(indices,dtype=np.intp)
+    return sparse.csr_matrix((np.ones(len(indices),dtype=bool),
+                              indices,indptr),shape=(n,n))
+
+def _daura_sparse(adj,weights,min_size,max_clusters):
+    """Cluster a sparse adjacency matrix without changing the caller's data."""
+    adj=(adj>0).tocsr()
+    adj.setdiag(True)
+    adj.sum_duplicates()
+    adj.eliminate_zeros()
+    adj.sort_indices()
+    n=len(adj.indptr)-1
+    indptr=adj.indptr
+    indices=adj.indices
+    if weights is None:
+        weights=np.ones(n,dtype=np.int64)
+        degrees=np.diff(indptr).astype(np.int64)
+    else:
+        degree_dtype=np.sum(np.empty(0,dtype=weights.dtype)).dtype
+        degrees=np.asarray(adj @ weights.astype(degree_dtype),dtype=degree_dtype)
+    floating=np.issubdtype(degrees.dtype,np.floating)
+    active=np.ones(n,dtype=bool)
+    def heap_entry(i):
+        # Python scalars avoid unsigned-integer overflow when negated.
+        return (-degrees[i].item(),int(i))
+    heap=[heap_entry(i) for i in range(n)]
+    heapq.heapify(heap)
+    clusters=[]
+    cluster_weights=[]
+    touched=np.zeros(n,dtype=bool)
+    while heap:
+        neg_degree,center=heapq.heappop(heap)
+        if not active[center] or neg_degree!=heap_entry(center)[0]:
+            continue
+        if degrees[center]<min_size:
+            break
+        neighbors=indices[indptr[center]:indptr[center+1]]
+        cluster=neighbors[active[neighbors]]
+        clusters.append(cluster)
+        cluster_weights.append(degrees[center])
+        if max_clusters is not None and len(clusters)>=max_clusters:
+            break
+        active[cluster]=False
+        changed=[]
+        for i in cluster:
+            neighbors=indices[indptr[i]:indptr[i+1]]
+            remaining=neighbors[active[neighbors]]
+            new=remaining[~touched[remaining]]
+            touched[new]=True
+            if len(new):
+                changed.append(new)
+            if not floating:
+                degrees[remaining]-=weights[i]
+        if changed:
+            changed=np.concatenate(changed)
+        else:
+            changed=np.empty(0,dtype=indices.dtype)
+        if floating:
+            for i in changed:
+                neighbors=indices[indptr[i]:indptr[i+1]]
+                degrees[i]=np.sum(weights[neighbors[active[neighbors]]])
+        for i in changed:
+            heapq.heappush(heap,heap_entry(i))
+        touched[changed]=False
+        if len(heap)>2*n:
+            heap=[heap_entry(i) for i in np.flatnonzero(active)]
+            heapq.heapify(heap)
+    return ClusteringResult(method="daura",clusters=clusters,weights=cluster_weights)
 
 def max_clique(adj,weights=None,*,min_size=0,max_clusters=None,use_networkit=False):
     """Clustering algorithm used in [Reisser et al, NAR (2020)](https://doi.org/10.1093/nar/gkz1184).
@@ -175,9 +271,17 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
        Parameters
        ----------
 
-       adj : array_like, square matrix
+       adj : array_like, scipy sparse matrix, or iterable of iterables
 
-           adj[i,j] contains 1 (or True) if frames i and j are adjacent, 0 (or False) otherwise.
+           A dense matrix has adj[i,j] equal to 1 (or True) when frames i and
+           j are adjacent, and 0 otherwise. Alternatively, each inner iterable
+           can contain the integer indexes of one frame's neighbors. Sparse
+           matrices and neighbor iterables are converted to CSR internally.
+           Only positive sparse entries represent neighbors. Self-edges are
+           optional. Adjacency must be symmetric, so include both directions
+           of each neighbor pair. A square, symmetric, binary Python list is
+           interpreted as a dense matrix; use `iter(rows)` to pass it as
+           neighbor rows. NumPy arrays are always treated as dense matrices.
 
        weights : array_like, optional
 
@@ -201,6 +305,12 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
        import scipy.spatial.distance as distance
        dist=distance.squareform(distance.pdist(trajectory))
        clustering.daura(dist<0.7)
+
+       # sparse_adj can be a scipy.sparse CSR, CSC, or COO matrix.
+       clustering.daura(sparse_adj,weights=frame_weights)
+
+       # One iterable of neighbor indexes per frame also works.
+       clustering.daura([[1],[0,2],[1]])
        ```
     """
     if max_clusters is not None:
@@ -208,6 +318,26 @@ def daura(adj,weights=None,*,min_size=0,max_clusters=None):
             raise ValueError("max_clusters must be nonnegative")
         if max_clusters==0:
             return ClusteringResult(method="daura",clusters=[],weights=[])
+    if not sparse.issparse(adj) and not isinstance(adj,np.ndarray):
+        dense=None
+        if isinstance(adj,(list,tuple)):
+            try:
+                candidate=np.asarray(adj)
+            except (TypeError,ValueError):
+                candidate=None
+            if (candidate is not None and candidate.ndim==2 and
+                candidate.shape[0]==candidate.shape[1] and
+                candidate.dtype.kind in "biuf" and
+                np.all((candidate==0)|(candidate==1)) and
+                np.array_equal(candidate,candidate.T)):
+                dense=candidate
+        adj=dense if dense is not None else _neighbors_to_csr(adj)
+    if sparse.issparse(adj):
+        if adj.ndim!=2 or adj.shape[0]!=adj.shape[1]:
+            raise ValueError("adj must be a square matrix")
+        if weights is not None:
+            weights=_validate_weights(weights,adj.shape[0])
+        return _daura_sparse(adj,weights,min_size,max_clusters)
     adj=np.asarray(adj)
     if adj.ndim!=2 or adj.shape[0]!=adj.shape[1]:
         raise ValueError("adj must be a square matrix")

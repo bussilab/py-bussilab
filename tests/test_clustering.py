@@ -2,6 +2,7 @@ import unittest
 
 import numpy as np
 import scipy.spatial.distance as distance
+from scipy import sparse
 from bussilab.coretools import TestCase
 
 def dataset1():
@@ -170,6 +171,87 @@ class TestClustering(TestCase):
         self.assertEqual([set(cluster) for cluster in cl.clusters],
                          [{0,2,3},{1}])
         self.assertEqual(cl.weights,[1e16+200,1])
+
+    def test_daura_sparse_matches_dense(self):
+        from bussilab.clustering import daura
+        rng=np.random.default_rng(542)
+        upper=np.triu(rng.random((80,80))<0.08,1)
+        adj=upper|upper.T  # no diagonal entries
+        weights=rng.uniform(0.5,2.0,len(adj))
+        for frame_weights in (None,weights,np.arange(80,dtype=np.int8)):
+            expected=daura(adj,frame_weights,max_clusters=12)
+            for sparse_adj in (sparse.csr_matrix(adj),
+                               sparse.csc_matrix(adj),sparse.coo_matrix(adj)):
+                actual=daura(sparse_adj,frame_weights,max_clusters=12)
+                self.assertEqual([c.tolist() for c in actual.clusters],
+                                 [c.tolist() for c in expected.clusters])
+                np.testing.assert_allclose(actual.weights,expected.weights)
+                np.testing.assert_array_equal(sparse_adj.toarray(),adj)
+
+    def test_daura_sparse_edge_cases(self):
+        from bussilab.clustering import daura
+        adj=np.eye(5,dtype=bool)
+        for i,j in ((0,1),(0,2),(2,3)):
+            adj[i,j]=adj[j,i]=True
+        weighted=daura(sparse.csr_matrix(adj),
+                       np.array([1e16,1,100,100,0.5]),max_clusters=2)
+        self.assertEqual([set(cluster) for cluster in weighted.clusters],
+                         [{0,2,3},{1}])
+        self.assertEqual(weighted.weights,[1e16+200,1])
+
+        # Explicitly stored zeros are not edges; the diagonal is implicit.
+        with_zeros=sparse.csr_matrix((np.array([0,1,1]),
+                                     (np.array([0,0,1]),np.array([0,1,0]))),
+                                    shape=(3,3))
+        result=daura(with_zeros)
+        self.assertEqual([c.tolist() for c in result.clusters],[[0,1],[2]])
+        self.assertEqual(with_zeros.nnz,3)
+
+        unsigned=daura(sparse.csr_matrix((2,2)),
+                       weights=np.array([2**63,1],dtype=np.uint64))
+        self.assertEqual([c.tolist() for c in unsigned.clusters],[[0],[1]])
+        self.assertEqual(unsigned.weights,[2**63,1])
+
+        many=sparse.eye(10000,format="csr",dtype=bool)
+        result=daura(many,max_clusters=3)
+        self.assertEqual([c.tolist() for c in result.clusters],[[0],[1],[2]])
+        self.assertEqual(daura(sparse.csr_matrix((0,0))).clusters,[])
+        with self.assertRaises(ValueError):
+            daura(sparse.csr_matrix((2,3)))
+        with self.assertRaises(ValueError):
+            daura(sparse.eye(2,format="csr"),weights=[1])
+
+    def test_daura_neighbor_iterables(self):
+        from bussilab.clustering import daura
+        rows=[[2,1,2],[0],[3,0],[2],[]]
+        adjacency=sparse.csr_matrix([
+            [0,1,1,0,0], [1,0,0,0,0], [1,0,0,1,0],
+            [0,0,1,0,0], [0,0,0,0,0]])
+        expected=daura(adjacency)
+        actual=daura(rows)
+        self.assertEqual([c.tolist() for c in actual.clusters],
+                         [c.tolist() for c in expected.clusters])
+        self.assertEqual(actual.weights,expected.weights)
+        self.assertEqual(rows,[[2,1,2],[0],[3,0],[2],[]])
+
+        # Both the outer and inner iterables may be consumed only once.
+        generated=(iter(row) for row in rows)
+        weighted=daura(generated,weights=[2,1,3,4,5],max_clusters=2)
+        reference=daura(adjacency,weights=[2,1,3,4,5],max_clusters=2)
+        self.assertEqual([c.tolist() for c in weighted.clusters],
+                         [c.tolist() for c in reference.clusters])
+        self.assertEqual(weighted.weights,reference.weights)
+
+        dense=[[1,0],[0,1]]
+        self.assertEqual([c.tolist() for c in daura(dense).clusters],[[0],[1]])
+        self.assertEqual([c.tolist() for c in daura(iter(dense)).clusters],[[0,1]])
+
+    def test_daura_invalid_neighbor_iterables(self):
+        from bussilab.clustering import daura
+        for rows in ([[2],[]], [[-1],[]], [[1.0],[]], [[True],[]],
+                     [[1],None]):
+            with self.assertRaises(ValueError):
+                daura(rows)
 
     def test_zero_max_clusters(self):
         from bussilab.clustering import daura, max_clique, qt
@@ -448,7 +530,7 @@ class TestClustering(TestCase):
         for i in range(len(cl.clusters)):
             self.assertEqual(set(ref[i]),set(cl.clusters[i]))
 
-    def test_qt8(self):
+    def test_qt9(self):
         from bussilab.clustering import qt
         # this is to test that [1] grows with [2] rather than with [0] since [2] has
         # more weight than [0].
