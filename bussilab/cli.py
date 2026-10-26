@@ -2,9 +2,8 @@
 Tools to implement the command line interface
 =============================================
 
-This module is used internally to implement the command line interface.
-In addition, it can be used to run the commands that are available
-in the command line interface without the need to leave python:
+This module defines the command-line parser and its subcommands. The same
+commands can be run from Python with `cli()`:
 
 ```python
 from bussilab.cli import cli
@@ -13,15 +12,53 @@ cli("wham -b bias") # provide the command line as a string
 cli(["wham", "-b", "bias"]) # alternatively use a list
 ```
 
-The documentation of all the commands can be found in the
-[cli_documentation](cli_documentation.html) submodule.
+For command usage and options, see
+[cli_documentation](cli_documentation.html) or run `bussilab COMMAND -h`.
+The `command`, `arg`, `group`, and `endgroup` decorators register additional
+commands. Commands registered after this module is imported become available
+on the next `cli()` call.
 
-Notice however that these commands typically have alternative python
-implementations that allow you to work directly on data structures
-and are thus more flexible.
-For instance, `bussilab.wham.wham(bias)`, where `bias` is a numpy array,
-is often more convenient than `bussilab.cli.cli("wham -b bias")`,
-where `bias` is a file.
+The underlying modules also provide Python functions that work directly with
+data structures. For example, `bussilab.wham.wham(bias)` accepts a NumPy array,
+while the `wham` command reads a file.
+
+## Changelog
+
+- **v0.0.52**
+  - Added `notify --no-unfurl`, `--markdown-file`, and support for multiple
+    paths with `--file`.
+  - Made invalid command-line arguments exit with argparse's status code
+    instead of printing a Python traceback; `cli()` still raises `TypeError`
+    for parser errors by default when called from Python.
+  - Preserved two-dimensional WHAM input from single-row and single-column
+    files. Added clear errors for `--use-frame-weight` without a bias column
+    and `--traj-weight` without values.
+  - Made commands registered after import available to subsequent `cli()`
+    calls by rebuilding the cached parser when needed.
+  - Expanded command usage notes and clarified the generated CLI documentation.
+- **v0.0.49**
+  - Corrected numeric parsing of `wham --threshold` and the Jupyter `--port`
+    options; fixed help and output for `required` and other command examples.
+- **v0.0.42**
+  - Added notification replies, reactions, quiet mode, footer control, and
+    Screen log attachments with an optional line limit.
+- **v0.0.41**
+  - Added `jrun --lab` and improved Jupyter Screen socket names and usage notes.
+  - Added cron quick-start options for resuming steps and event numbers, and
+    allowed the period to come from the cron configuration.
+- **v0.0.35**
+  - Used `shlex.split()` for string arguments passed to `cli()`, preserving
+    quoted values.
+- **v0.0.34**
+  - Added `cron --unique`, Jupyter Screen log support, and improved default
+    Screen socket names.
+- **v0.0.32**
+  - Added file uploads to `notify`.
+- **v0.0.12**
+  - Added the `required` command for pip, conda, and MacPorts dependencies.
+- **v0.0.2**
+  - Introduced the command registration helpers, Python `cli()` entry point,
+    generated command documentation, and the initial subcommands.
 
 """
 
@@ -71,6 +108,8 @@ class _ExtendedParser():
         self.subparsers_help = subparsers_help
         self.subparsers_doc = subparsers_doc
 
+_eparser: Optional[_ExtendedParser] = None
+
 def _create_eparser(prog: Optional[str] = None) -> _ExtendedParser:
     """Create a `parser` object."""
     parser = argparse.ArgumentParser(prog=prog, description="command line tool")
@@ -98,8 +137,9 @@ def _create_eparser(prog: Optional[str] = None) -> _ExtendedParser:
 def command(name: str, help: Optional[str] = None, description: Optional[str] = None, **kwargs):
     """Decorator that registers a function as a subcommand.
 
-       This decorator should be written **before** the other decorators
+       Write this decorator **above** the other decorators
        `bussilab.cli.arg`, `bussilab.cli.group`, and `bussilab.cli.endgroup`.
+       Newly registered commands are available on the next `cli()` call.
 
        Parameters
        ----------
@@ -133,8 +173,10 @@ def command(name: str, help: Optional[str] = None, description: Optional[str] = 
     if description is None:
         description = help
     def add_command(func):
+        global _eparser
         func = _Argument(func)
         _commands.append((name, help, description, func, kwargs))
+        _eparser = None
         return func
     return add_command
 
@@ -142,7 +184,7 @@ def arg(*name, **kwargs):
     """ Decorator that adds an argument to a command line tool.
 
         Parameters are passed to the `parser.add_argument()` function.
-        It should be written **after** the `bussilab.cli.command` decorator.
+        Write it **below** the `bussilab.cli.command` decorator.
     """
     def call(p):
         p[-1].add_argument(*name, **kwargs)
@@ -159,7 +201,7 @@ def group(title: Union[str, Callable, None] = None,
           required: Optional[bool] = None):
     """ Decorator that adds a group of arguments for a command line tool.
 
-        It should be written **after** the `bussilab.cli.command` decorator.
+        Write it **below** the `bussilab.cli.command` decorator.
         It should be followed by a number of `bussilab.cli.arg` decorators and by a closing
         `bussilab.cli.endgroup` decorator.
 
@@ -256,8 +298,9 @@ def cli(arguments: Union[str, List[str]] = "",
        ) -> Optional[int]:
     """Executes a command line tool from python.
 
-       This is the main function of this module and allows to launch all the subcommands available
-       in the command line interface directly from python.
+       Run a registered subcommand from Python using the same arguments as the
+       `bussilab` executable. A string is split with `shlex.split()`; a list
+       preserves each argument exactly.
 
        Parameters
        ----------
@@ -265,8 +308,9 @@ def cli(arguments: Union[str, List[str]] = "",
            Command line arguments. If a string is passed, it is first split using
            shlex.split()
 
-       prog : str
-           Name of the calling program. It is used to build help texts. **Mostly for internal use**.
+       prog : str or None
+           Name used in help and error messages. The default uses an empty name;
+           None uses `sys.argv[0]`. **Mostly for internal use**.
 
        use_argcomplete : bool
            If True, the `autocomplete` function of `argcomplete` module is called on the parser,
@@ -275,18 +319,19 @@ def cli(arguments: Union[str, List[str]] = "",
            **Mostly for internal use**.
 
        throws_on_parser_errors : bool
-           If True, in case of command line error it throws a TypeError
-           exception. **Mostly for internal use**.
+           If True, convert nonzero parser exits to `TypeError`. If False,
+           return the parser's exit code. The executable uses False so invalid
+           arguments exit with argparse's status code. **Mostly for internal use**.
 
        Returns
        -------
        None or int
-           If an error happens while parsing, it throws a TypeError exception,
-           unless throws_on_parser_errors is set to false, in which ase it
-           returns the corresponding error code.
-           If an error happens while executing the requested command, an exception is thrown.
-           If everything goes well, it returns None.
+           Returns None after a successful command or a help request. With
+           `throws_on_parser_errors=False`, returns the parser's nonzero exit
+           code for invalid arguments. Exceptions raised by a command propagate.
     """
+
+    global _eparser
 
     # allow passing a single string
     if isinstance(arguments, str):
@@ -295,6 +340,8 @@ def cli(arguments: Union[str, List[str]] = "",
     func = None
 
     if prog == "":
+        if _eparser is None:
+            _eparser = _create_eparser("")
         eparser = _eparser
     else:
         eparser = _create_eparser(prog)
@@ -359,7 +406,8 @@ def _main_(prog: Optional[str] = None):
 
     # process command line arguments:
     # prog==None implies argv[0]
-    sys.exit(cli(prog=prog, arguments=sys.argv[1:], use_argcomplete=True))
+    sys.exit(cli(prog=prog, arguments=sys.argv[1:], use_argcomplete=True,
+                 throws_on_parser_errors=False))
 
 ################################################################################
 
@@ -370,6 +418,7 @@ def _main_(prog: Optional[str] = None):
 
 @command("list", help="List available python modules.")
 def _list_submodules():
+    """Print the available Python submodules and their short descriptions."""
     from . import list_submodules, describe_submodule
     print("List of available python modules:")
     print()
@@ -386,6 +435,7 @@ def _list_submodules():
      dest="check_import", help="check if all the submodules can be imported")
 @endgroup
 def _check(check_import: bool = False):
+    """Import every submodule with `--import` to check installed dependencies."""
     if check_import:
         from . import import_submodules
         print("Importing all submodules:")
@@ -397,23 +447,36 @@ def _check(check_import: bool = False):
 @command("wham", help="Perform binless WHAM",
          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 @arg("-b", "--bias", help="File containing bias potential", required=True)
-@arg("-o", "--out", help="Output file with weights")
-@arg("--use-frame-weight", action="store_true")
-@arg("--traj-weight", nargs="*", type=float)
+@arg("-o", "--out", help="Output file with log weights")
+@arg("--use-frame-weight", action="store_true",
+     help="read frame weights from the last bias-file column")
+@arg("--traj-weight", nargs="+", type=float,
+     help="relative weights of the bias columns")
 @arg("-T", "--temperature", type=float, default=1.0,
      help="system temperature in energy units", dest="T")
 @arg("-m", "--maxiter", type=int, default=1000, help="maximum number of iterations")
 @arg("-t", "--threshold", type=float, default=1e-40, help="threshold for convergence")
 @arg("-v", "--verbose", action="store_true")
 def _wham(**args):
+    """Read a whitespace-delimited bias matrix and run binless WHAM.
+
+       Each row is a frame and each column is a Hamiltonian's bias potential.
+       With `--use-frame-weight`, the last column supplies frame weights and
+       at least one preceding bias column is required. Print log weights to
+       standard output, or write them to `--out` with four decimal places.
+       Iteration count, error, and log partition functions are always printed
+       to standard output. See `bussilab.wham` for the Python API.
+    """
     from . import wham
     import numpy as np
     # load bias file:
-    args["bias"] = np.loadtxt(args["bias"])
+    args["bias"] = np.loadtxt(args["bias"], ndmin=2)
 
     # with --use-frame-weight, last column in bias is interpreted as frame weight
     if "use_frame_weight" in args:
         if args["use_frame_weight"]:
+            if args["bias"].shape[1] < 2:
+                raise ValueError("--use-frame-weight requires at least one bias column and one weight column")
             args["frame_weight"] = args["bias"][:, -1]
             args["bias"] = args["bias"][:, :-1]
         del args["use_frame_weight"]
@@ -489,7 +552,7 @@ def _jrun(**kargs):
 @arg("-d", "--dry-run", action='store_true',
      help="show command instead of executing it")
 @arg("-l", "--list-only", action='store_true',
-     help="only report a list or servers")
+     help="only report a list of servers")
 @arg("--port", help="set port", default=0, type=int)
 @arg("-i", "--index", type=int, help="choose server, by default interactive choice", default=0)
 @arg("--python-exec",
@@ -525,8 +588,7 @@ def _jremote(**kargs):
        export PYTHONPATH=/path/to/bussilab/source
        python -m bussilab jremote giorgione.phys.sissa.it --python-exec "module load python3 python-home ; python3"
        ```
-       Here replace `python` with the name of your python interpreter (might be
-       `python3.7`).
+       Replace `python` with the name of your Python interpreter if needed.
 
     """
     from . import jremote
@@ -617,6 +679,15 @@ def _notify(**kargs):
 @arg("--period", help="period (seconds) default read from cron file or set to 3600", default=None, type=int)
 @arg("--max-times", help="maximum number of calls", default=None, type=int)
 def _cron(**kargs):
+    """Run scheduled steps from a YAML cron configuration.
+
+       Use `--cron-file` to select a file; otherwise the package configuration
+       is used. The `cron` section can be a list of steps or a mapping with
+       `steps` and an optional `period` in seconds. By default, the command
+       starts in a GNU Screen session;
+       `--no-screen` runs it in the current terminal. `--quick-start` runs the
+       first iteration immediately, and `--max-times` limits iterations.
+    """
     from . import cron
     if kargs["keep_ld_library_path"]:
         warnings.warn("--keep-ld-library-path is the default now - this flag might be removed in the future", FutureWarning)
@@ -631,6 +702,7 @@ def _cron(**kargs):
 @endgroup
 @arg("--pyver", help="pyversion (e.g. 38), for macports only", default="")
 def _required(macports: bool = False, conda: bool = False, pyver: str = ""):
+    """Print package requirements for pip, conda, or MacPorts."""
     if conda:
         from . import required_conda
         print(" ".join(required_conda()))

@@ -2,6 +2,41 @@ import unittest
 import bussilab.cli as cli
 
 class Test(unittest.TestCase):
+    def test_invalid_command_exit_code(self):
+        import subprocess
+        import sys
+        result=subprocess.run([sys.executable, "-m", "bussilab", "not_existing_command"],
+                              capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid choice", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_wham_one_dimensional_file(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        import numpy as np
+        from bussilab.wham import wham
+
+        with TemporaryDirectory() as directory:
+            path=Path(directory)/"bias.dat"
+            for bias in (np.array([[1.0], [2.0]]),
+                         np.array([[1.0, 2.0]])):
+                np.savetxt(path, bias)
+                output=StringIO()
+                with redirect_stdout(output):
+                    cli.cli(["wham", "-b", str(path)])
+                log_weights=[float(line) for line in output.getvalue().splitlines()
+                             if not line.startswith("#")]
+                np.testing.assert_allclose(log_weights, wham(bias).logW)
+
+            np.savetxt(path, np.array([[1.0], [2.0]]))
+            with self.assertRaisesRegex(ValueError, "at least one bias column"):
+                cli.cli(["wham", "-b", str(path), "--use-frame-weight"])
+            self.assertEqual(cli.cli(["wham", "-b", str(path), "--traj-weight"],
+                                     throws_on_parser_errors=False), 2)
+
     def test_check(self):
         self.assertIsNone(cli.cli("check"))
         self.assertIsNone(cli.cli("check --import"))
@@ -43,6 +78,8 @@ class Test(unittest.TestCase):
             pass
         with self.assertRaises(NotImplementedError):
             _x()
+        self.assertIsNone(cli.cli("x"))
+        self.assertIsNone(cli.cli("x"))
 
 if __name__ == "__main__":
     unittest.main()
