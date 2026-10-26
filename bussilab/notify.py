@@ -1,7 +1,46 @@
 """
 Module implementing Slack notifications.
 
-This module sends notification through an App installed in the Slack workspace.
+This module sends notifications through an App installed in the Slack workspace.
+
+## Changelog
+
+- **v0.0.52**
+  - Added standard Markdown messages from files and options to disable link
+    and media previews.
+  - Added uploading multiple files in one call. File titles now use the
+    supplied title or each file's basename, and threaded uploads include
+    their message correctly.
+  - Validated Slack message, file, and reaction URLs before the corresponding
+    operation, including checks that each operation receives the right URL
+    type.
+  - Separated rate-limit retries from transient-error retries, bounded total
+    wait time, and improved handling of `Retry-After` and transport errors.
+  - Increased the Screen log limit by using native Markdown blocks and fixed
+    several file-upload edge cases.
+- **v0.0.49**
+  - Delayed the first file-share lookup to allow Slack time to complete an
+    upload.
+- **v0.0.48**
+  - Added jitter and stronger backoff to Slack API and file-share retries.
+- **v0.0.46**
+  - Switched file uploads to Slack's `files_upload_v2` when available,
+    including uploads in reply threads, and fixed returned file links.
+- **v0.0.45**
+  - Improved delays when retrying Slack rate limits and server errors.
+- **v0.0.42**
+  - Added replies, broadcast replies, reactions, reaction deletion, Screen
+    log attachments, and checks for incompatible operations.
+  - Added bounded retries for rate limits and server errors and limits for
+    long messages and titles.
+- **v0.0.32**
+  - Added uploading and deleting Slack files.
+- **v0.0.18**
+  - Added compatibility with Slack SDK 3 while retaining Slack client 2.
+- **v0.0.2**
+  - Introduced Slack notifications with configuration-based authentication,
+    message updates and deletion, and optional footers.
+
 Some settings are needed first for authentication. It is recommended to add a
 file named `.bussilabrc` to your home directory with the following content:
 ```bash
