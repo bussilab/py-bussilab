@@ -329,13 +329,27 @@ class TestRNA2D(unittest.TestCase):
             Molecule(self.seq, pf_smooth=1)
 
     def test_thermodynamic_properties(self):
-        molecule = Molecule(self.seq, temperature=300.0)
+        molecule = Molecule(
+            sequence=self.seq, temperature=300.0, no_lonely_pair=True,
+            pf_smooth=True, NaCl=0.5, parameters="turner2004",
+        )
+        self.assertEqual(molecule.sequence, self.seq)
         self.assertEqual(molecule.temperature, 300.0)
         self.assertEqual(molecule.boltzmann_constant, _KB)
-        with self.assertRaises(AttributeError):
-            molecule.temperature = 310.15
-        with self.assertRaises(AttributeError):
-            molecule.boltzmann_constant = 1.0
+        self.assertTrue(molecule.no_lonely_pair)
+        self.assertTrue(molecule.pf_smooth)
+        self.assertEqual(molecule.NaCl, 0.5)
+        self.assertEqual(molecule.parameters, "turner2004")
+        for name in ("sequence", "temperature", "boltzmann_constant",
+                     "no_lonely_pair", "pf_smooth", "NaCl", "parameters"):
+            with self.subTest(name=name), self.assertRaises(AttributeError):
+                setattr(molecule, name, None)
+
+        with self.assertWarnsRegex(FutureWarning, "seq is deprecated"):
+            legacy = Molecule(seq=self.seq)
+        self.assertEqual(legacy.sequence, self.seq)
+        with self.assertRaises(TypeError):
+            Molecule(sequence=self.seq, seq=self.seq)
 
     def test_base_pair_bias_validation(self):
         valid = Molecule(
@@ -744,7 +758,7 @@ class TestRNA2D(unittest.TestCase):
             pf_smooth=False,
         )
         kwargs = molecule.to_kwargs()
-        self.assertEqual(kwargs["seq"], self.seq)
+        self.assertEqual(kwargs["sequence"], self.seq)
         self.assertEqual(kwargs["base_pair_biases"], ((0, 8, -0.4), (1, 7, 0.2)))
         self.assertEqual(kwargs["state_positions"], ((0, 1), (7, 8)))
         self.assertEqual(kwargs["force_unpaired"], (4,))

@@ -48,7 +48,10 @@ required when constructing a :class:`Molecule`.
     tables and normalized log weights, plus `mean_bp_distance()` and
     free-energy derivatives with respect to one-body and state biases.
   - Exposed the resolved temperature and Boltzmann constant as read-only
-    `Molecule.temperature` and `Molecule.boltzmann_constant` properties.
+    `Molecule.temperature` and `Molecule.boltzmann_constant` properties, along
+    with `sequence`, `no_lonely_pair`, `pf_smooth`, `NaCl`, and `parameters`.
+    Renamed the constructor's `seq` argument to `sequence`; `seq` remains a
+    deprecated keyword alias.
   - Added `Molecule.to_kwargs()` to inspect and reuse resolved constructor
     settings.
   - Removed the `samples` and `suboptimal_delta` options from
@@ -1921,14 +1924,14 @@ class Molecule:
     respect to penalties and state biases, Boltzmann sampling, suboptimal
     enumeration and coverage, and joint nucleotide-pairing probabilities.
     Structure energies and state biases are expressed in kcal/mol; temperatures are
-    supplied in kelvin. The resolved temperature and Boltzmann constant are
-    available as read-only ``temperature`` (K) and ``boltzmann_constant``
-    (kcal/mol/K) properties.
+    supplied in kelvin. The sequence and resolved model settings are available
+    as read-only properties.
 
     Parameters
     ----------
-    seq : str
-        RNA sequence.
+    sequence : str
+        RNA sequence. The former ``seq`` keyword is accepted with a
+        deprecation warning.
 
     lambdas1d : array-like, optional
         Per-nucleotide pairing penalties (kcal/mol). Positive values penalize
@@ -2038,8 +2041,9 @@ class Molecule:
 
     def __init__(
         self,
-        seq: str,
+        sequence: str = None,
         *,
+        seq=None,
         lambdas1d=None,
         base_pair_biases=None,
         temperature=None,
@@ -2053,6 +2057,17 @@ class Molecule:
         NaCl=None,
         parameters=None,
     ):
+        if seq is not None:
+            if sequence is not None:
+                raise TypeError("specify either sequence or seq, not both")
+            warnings.warn(
+                "seq is deprecated; use sequence",
+                FutureWarning,
+                stacklevel=2,
+            )
+            sequence = seq
+        if sequence is None:
+            raise TypeError("sequence is required")
         (
             temperature,
             no_lonely_pair,
@@ -2067,11 +2082,11 @@ class Molecule:
             parameters,
         )
 
-        sequence = str(seq).upper()
+        sequence = str(sequence).upper()
         if not sequence:
-            raise ValueError("seq cannot be empty")
+            raise ValueError("sequence cannot be empty")
         if any(base not in "ACGU" for base in sequence):
-            raise ValueError("seq must contain only A, C, G, and U")
+            raise ValueError("sequence must contain only A, C, G, and U")
         prepared_base_pair_biases = _prepare_base_pair_biases(
             sequence,
             base_pair_biases,
@@ -2384,6 +2399,11 @@ class Molecule:
         self._force_unpaired = tuple(base_force_unpaired)
 
     @property
+    def sequence(self):
+        """RNA sequence used by this molecule."""
+        return self._seq
+
+    @property
     def temperature(self):
         """Temperature used by this molecule, in kelvin."""
         return self._temperature
@@ -2392,6 +2412,26 @@ class Molecule:
     def boltzmann_constant(self):
         """Boltzmann constant used by this module, in kcal/(mol K)."""
         return _KB
+
+    @property
+    def no_lonely_pair(self):
+        """Whether ViennaRNA's no-lonely-pair model option is enabled."""
+        return self._no_lonely_pair
+
+    @property
+    def pf_smooth(self):
+        """Whether ViennaRNA smooths partition-function energies."""
+        return self._pf_smooth
+
+    @property
+    def NaCl(self):
+        """Sodium concentration in M, or None for ViennaRNA's default."""
+        return self._salt
+
+    @property
+    def parameters(self):
+        """Thermodynamic parameter-set name used by this molecule."""
+        return self._parameters
 
     def to_kwargs(self):
         """Return independent keyword arguments for an equivalent molecule.
@@ -2410,7 +2450,7 @@ class Molecule:
         else:
             state_positions = state_biases = None
         return dict(
-            seq=self._seq,
+            sequence=self._seq,
             lambdas1d=self._lambdas1d.copy(),
             base_pair_biases=self._base_pair_biases,
             temperature=self._temperature,
