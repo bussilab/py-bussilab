@@ -153,6 +153,12 @@ class Test(unittest.TestCase):
             bussilab.describe_submodule("not_existing_module")
 
         self.assertIsInstance(bussilab.list_submodules(),list)
+        self.assertEqual(len(dir(bussilab)), len(set(dir(bussilab))))
+        self.assertEqual(bussilab._process_macports(
+            ["numpy", "pyyaml", "slack-sdk>=3.19.0"]),
+            ["py-numpy", "py-yaml", "py-slack-sdk"])
+        self.assertEqual(bussilab.describe_submodule("coretools"),
+                         "General purpose tools.")
 
     def test_cd(self):
         import bussilab

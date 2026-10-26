@@ -1,17 +1,15 @@
-"""A package collecting a heterogeneous set of tools.
+"""Scientific and utility tools collected in one Python package.
 
-This package collects a number of tools that are useful enough
-to be distributed but too small to deserve being published as
-separate packages.
+Most features live in submodules, which are imported only when requested.
+Use `list_submodules()` to see what is available, or run `bussilab list`.
+Command usage is documented in [cli_documentation](cli_documentation.html).
 Source code is on [GitHub](https://github.com/bussilab/py-bussilab).
-Submodules are listed at the end of the current page.
-Command-line tools are described at [this page](cli_documentation.html).
-A test pdf manual is available [here](../bussilab.pdf).
-This is the documentation for version __version__.
+A [PDF manual](../bussilab.pdf) is also available.
+This documentation describes version __version__.
 
 # Install
 
-This package is only compatible with Python >=3.8 (no compatibility with Python 2!).
+This package supports Python 3.8 through 3.15.
 The recommended way to install this package depends on how you prefer to manage your
 python dependencies.
 
@@ -19,9 +17,9 @@ _pip_.
 If you manage your dependencies with pip and install packages in your home, use:
 ```bash
 pip install --user bussilab
-# make sure the user installed packages can be imported, or add this to your python path
+# if the user site is not on sys.path, add it to PYTHONPATH
 export PYTHONPATH="$(python -c 'import site; print(site.USER_SITE)'):$PYTHONPATH"
-# make sure the bussilab script is in your execution the path, or add this to your shell path
+# if the user scripts directory is not on PATH, add it
 export PATH="$(python -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
 ```
 Required packages will be downloaded and installed automatically in your home.
@@ -54,9 +52,9 @@ You can do it as follows:
 sudo port install py_macports_pynd_-pip py_macports_pynd_-setuptools
 # install a bare version of the package, without dependencies
 pip-_macports_py_ install --user --no-deps bussilab
-# make sure the user installed packages can be imported, or add this to your python path
+# if the user site is not on sys.path, add it to PYTHONPATH
 export PYTHONPATH="$(python_macports_py_ -c 'import site; print(site.USER_SITE)'):$PYTHONPATH"
-# make sure the bussilab script is your execution the path, or add this to your shell path
+# if the user scripts directory is not on PATH, add it
 export PATH="$(python_macports_py_ -c 'import site; print(site.USER_BASE + "/bin")'):$PATH"
 # install the dependencies
 sudo port install $(bussilab required --macports --pyver _macports_pynd_)
@@ -72,7 +70,7 @@ A different python version should work as well.
 
 ### Checking the installation
 
-Once the package is installed you should be able to import the module from the python interpreter:[^pythonpath]
+Once the package is installed, check that Python can import it and its submodules:[^pythonpath]
 ```python
 import bussilab
 # this command can be used to check if all dependencies are in place:
@@ -85,7 +83,7 @@ the package you will have to make sure that the directory returned by the comman
 `python -c 'import site; print(site.USER_SITE)'` is included in your python search path.
 If not, you can add it to the environment variable `PYTHONPATH`.
 
-You should also have access to an executable script that can be used from the command line:[^path]
+You can check the command-line entry point as well:[^path]
 ```bash
 bussilab -h
 # this command can be used to check if all dependencies are in place:
@@ -117,20 +115,19 @@ If you are using macports, the command would be
 
 ### Python
 
-The `bussilab` module itself only contains some basic infrastructure.
-Most of the features are implemented in the submodules listed at the end of
-this page.
-Submodules should be explicitly imported using, e.g.:
+The `bussilab` package itself contains lightweight infrastructure. Import
+submodules as needed:
 ```python
 from bussilab import wham
-```
-Check their documentation to see how to use them.
+import numpy as np
 
-You can directly use the submodules without importing them explicitly:
-```python
-import bussilab as bl
-bl.wham.wham()
+bias = np.array([[1.0, 2.0], [2.0, 1.0]])
+result = wham.wham(bias)
+print(result.logW)
 ```
+Submodules can also be accessed as attributes of `bussilab`; they are imported
+on first access. See each submodule's documentation for its Python API.
+`rna2d.Molecule` additionally requires the optional ViennaRNA Python package.
 
 ### Examples
 
@@ -141,11 +138,11 @@ that can be used as a source of inspiration.
 
 In addition, the `bussilab` script allows to access some functionality
 directly from the command line, without entering python.
-For instance, you can execute the wham subcommand typing
+For example, to see the WHAM command's required arguments, run:
 ```bash
-bussilab wham
+bussilab wham -h
 ```
-Check their documentation in the [cli_documentation](cli_documentation.html) submodule.
+See [cli_documentation](cli_documentation.html) for all subcommands.
 
 # Advanced stuff
 
@@ -158,14 +155,13 @@ You might want to ignore dependencies completely:
 ```bash
 pip install --no-deps bussilab
 ```
-If you proceed this way, you will still be able to import `bussilab` module and
-to execute the `bussilab` script, but some of the submodules might not be importable.
-The following command will report which submodules can be used then:
+You can still import the `bussilab` package and run the CLI, but submodules
+whose dependencies are missing may not import. Check them with:
 ```bash
 bussilab check --import
 ```
-The result will depend on which of the required packages are already installed on
-your system.
+This command reports imports that succeed or fail, then raises an error if any
+submodule fails to import.
 
 ### Building documentation
 
@@ -209,7 +205,8 @@ You can run the tests using `pytest`:
 pip install pytest
 pytest
 ```
-All tests should succeed. Notice that the tests will import the `bussilab` module.
+Tests for optional features may be skipped when their dependencies are absent.
+Notice that the tests will import the `bussilab` module.
 Thus, if you want the version modified by you to be tested (and not another version
 that you might have installed with pip already) you should properly set
 the `PYTHONPATH` variable as explained above.
@@ -219,7 +216,7 @@ Static types can be checked using `mypy`:
 pip install mypy
 mypy bussilab
 ```
-This check should succeed.
+Run this optional check when changing type annotations.
 
 Other static checks can be done with `pyflakes`:
 ```bash
@@ -228,7 +225,7 @@ pyflakes bussilab
 ```
 This check should succeed.
 
-Correct code formatting can be checked using `pylint`:
+Additional static errors can be checked using `pylint`:
 ```bash
 pip install pylint
 pylint -E bussilab
@@ -275,10 +272,10 @@ _required_ = [
 
 _macports_py_ = "3.9"
 
-def _process_macports(macports: List[str]) -> List[str]:
+def _process_macports(requirements: List[str]) -> List[str]:
     import re
     l = []
-    for d in _required_:
+    for d in requirements:
         d = re.sub(">.*$", "", d)  # remove versions
         d = re.sub("^pyyaml$", "yaml", d)  # fix yaml
         l.append("py-" + d)
@@ -305,7 +302,9 @@ __doc__ = _process_doc(__doc__)
 def list_submodules(*, _hidden: bool = False) -> List[str]:
     """Return a list of all the available submodules.
 
-       It can be used to quickly show which submodules are available for importing.
+       The names come from Python files in the package directory. By default,
+       modules whose names start with an underscore are omitted; `_hidden=True`
+       includes them. Listing modules does not import them.
 
        Returns
        -------
@@ -334,7 +333,7 @@ def list_submodules(*, _hidden: bool = False) -> List[str]:
     return submodules
 
 def import_submodules() -> None:
-    """Import all the available submodules.
+    """Import all the available submodules, including hidden ones.
 
        The main `bussilab` module does not explicitly import
        the available submodules so as not to slow down the behavior
@@ -342,14 +341,16 @@ def import_submodules() -> None:
        even if not all the dependencies of the other modules are installed.
        Use this function to import all the submodules (might take a few seconds).
 
-       Mostly for testing that the packages required by the available
-       submodules are installed, but it can also be used
-       to preload all the submodules (and required packages) making them load faster later.
+       Prints the result of each import. Import failures are collected and
+       reported after all modules have been tried. This is useful for checking
+       dependencies or preloading submodules.
 
        Raises
        ------
 
-       If one or more submodules cannot be imported it will raise an `Exception`.
+       Exception
+           If one or more submodules raises `ImportError` during import.
+           Other exceptions propagate immediately.
     """
     import importlib
     import os
@@ -367,7 +368,7 @@ def import_submodules() -> None:
         raise Exception(msg)
 
 def describe_submodule(module: str) -> str:
-    """Return a short description of a submodule without importing it.
+    """Return the first line of a submodule's source docstring without importing it.
 
        Parameters
        ----------
@@ -380,9 +381,9 @@ def describe_submodule(module: str) -> str:
        -------
 
        str
-           The docstring of the module. If the docstring is not present,
-           returns an empty string. If an empy string is passed as `module`,
-           the docstring of the main package is returned.
+           The first line of the module docstring, or an empty string if it has
+           no docstring. For `module=""`, return the first line of the package
+           docstring.
 
        Raises
        ------
@@ -413,6 +414,11 @@ def describe_submodule(module: str) -> str:
     return d.partition('\n')[0]
 
 def required_macports(pyver="") -> str:
+    """Return space-separated MacPorts dependencies.
+
+       `pyver` is the two-digit Python version suffix, such as `"39"`.
+       When omitted, generic `py-` port names are returned.
+    """
     import re
     req = re.sub("py-", "py" + pyver + '-', ' '.join(_macports_required_))
     if pyver=="36" or pyver=="37":
@@ -420,9 +426,11 @@ def required_macports(pyver="") -> str:
     return req
 
 def required_conda() -> List[str]:
+    """Return package dependencies as a list for conda environments."""
     return list(_required_)
 
 def required_pip() -> str:
+    """Return space-separated package dependencies for pip."""
     return str(' '.join(_required_))
 
 # See PEP 562.
@@ -437,4 +445,4 @@ def __getattr__(name):
 
 def __dir__():
     # If later on we support __all__, globals() should be replaced by __all__.
-    return sorted(list(globals()) + list_submodules(_hidden=True))
+    return sorted(set(globals()) | set(list_submodules(_hidden=True)))
