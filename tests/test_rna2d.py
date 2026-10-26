@@ -729,6 +729,45 @@ class TestRNA2D(unittest.TestCase):
                 state_biases=(np.zeros((2, 2)), np.zeros(4)),
             )
 
+    def test_to_kwargs(self):
+        biases = (np.array([[0.0, 0.2], [-0.1, 0.3]]),
+                  np.array([[0.1, -0.2], [0.4, 0.0]]))
+        molecule = Molecule(
+            self.seq,
+            lambdas1d=np.arange(len(self.seq)) / 10,
+            base_pair_biases=iter([(0, 8, -0.4), (1, 7, 0.2)]),
+            force_unpaired=(4,),
+            state_positions=((0, 1), (7, 8)),
+            state_biases=biases,
+            temperature=300.0,
+            no_lonely_pair=False,
+            pf_smooth=False,
+        )
+        kwargs = molecule.to_kwargs()
+        self.assertEqual(kwargs["seq"], self.seq)
+        self.assertEqual(kwargs["base_pair_biases"], ((0, 8, -0.4), (1, 7, 0.2)))
+        self.assertEqual(kwargs["state_positions"], ((0, 1), (7, 8)))
+        self.assertEqual(kwargs["force_unpaired"], (4,))
+        self.assertEqual(kwargs["temperature"], 300.0)
+
+        recreated = Molecule(**kwargs)
+        self.assertIsNot(recreated._dp_molecules[0], molecule._dp_molecules[0])
+        np.testing.assert_allclose(
+            recreated.base_pairing_probability(), molecule.base_pairing_probability()
+        )
+        kwargs["lambdas1d"][0] = 99.0
+        kwargs["state_biases"][0][0, 0] = 99.0
+        self.assertNotEqual(molecule._lambdas1d[0], 99.0)
+        self.assertNotEqual(molecule._state_bias_sets[0][0, 0], 99.0)
+        self.assertNotEqual(recreated._lambdas1d[0], 99.0)
+
+        flat = Molecule(self.seq, state_positions=iter((0, 8)))
+        self.assertEqual(flat.to_kwargs()["state_positions"], (0, 8))
+        np.testing.assert_array_equal(
+            Molecule(**flat.to_kwargs())._state_bias_sets[0], np.zeros((2, 2))
+        )
+        self.assertIsNone(Molecule(self.seq).to_kwargs()["state_positions"])
+
     def test_additional_input_validation(self):
         invalid = (
             ({"force_paired": 1}, "iterable"),

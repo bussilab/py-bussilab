@@ -26,6 +26,8 @@ required when constructing a :class:`Molecule`.
 ## Changelog
 
 - **v0.0.52**
+  - Added `Molecule.to_kwargs()` to inspect and reuse resolved constructor
+    settings.
   - Added `centroid()`, `mea()`, `positional_entropy()`, and
     `ensemble_defect()` for the complete ensemble, including state mixtures.
   - `evaluate()` and `ensemble_defect()` accept zero-based NumPy pair tables;
@@ -2388,6 +2390,38 @@ class Molecule:
     def boltzmann_constant(self):
         """Boltzmann constant used by this module, in kcal/(mol K)."""
         return _KB
+
+    def to_kwargs(self):
+        """Return independent keyword arguments for an equivalent molecule.
+
+        The dictionary includes the sequence, all current biases, constraints,
+        and resolved thermodynamic settings. Its arrays can be changed without
+        changing this molecule. Pass it to ``Molecule(**molecule.to_kwargs())``
+        to construct a new model.
+        """
+        if self._has_state_biases:
+            state_positions = self._state_position_sets
+            state_biases = tuple(bias.copy() for bias in self._state_bias_sets)
+            if not self._state_sets_were_nested:
+                state_positions = state_positions[0]
+                state_biases = state_biases[0]
+        else:
+            state_positions = state_biases = None
+        return dict(
+            seq=self._seq,
+            lambdas1d=self._lambdas1d.copy(),
+            base_pair_biases=self._base_pair_biases,
+            temperature=self._temperature,
+            force_paired=self._force_paired,
+            force_unpaired=self._force_unpaired,
+            state_positions=state_positions,
+            state_biases=state_biases,
+            reduce_state_space=self._reduce_state_space,
+            no_lonely_pair=self._no_lonely_pair,
+            pf_smooth=self._pf_smooth,
+            NaCl=self._salt,
+            parameters=self._parameters,
+        )
 
     def _condition_unpaired(self, position):
         """
