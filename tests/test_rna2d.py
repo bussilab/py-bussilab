@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 import numpy as np
 import subprocess
 import sys
@@ -187,11 +188,33 @@ class TestRNA2D(unittest.TestCase):
                         rna2d._dotbracket_to_pairtable(structures[0]),
                         expected[0],
                     )
+                    for structure, table in zip(structures, tables):
+                        converted, forbidden = rna2d._pairtable_to_dotbracket(
+                            table, "GGGCCC"
+                        )
+                        self.assertEqual(converted, structure)
+                        self.assertIsInstance(forbidden, (bool, np.bool_))
+                        self.assertEqual(
+                            rna2d._pairtable_to_dotbracket(
+                                table, "GGGCCC", check_pairs=False,
+                            ),
+                            (structure, False),
+                        )
 
                     for invalid in ("((...)", ").....", "[....]", "à....."):
                         with self.subTest(invalid=invalid):
                             with self.assertRaises(ValueError):
                                 rna2d._dotbracket_to_pairtable(invalid)
+
+                    for invalid_table in (
+                        np.array([5, -1, -1, -1, -1, 1]),
+                        np.array([4, 5, -1, -1, 0, 1]),
+                    ):
+                        with self.subTest(invalid_table=invalid_table):
+                            with self.assertRaises(ValueError):
+                                rna2d._pairtable_to_dotbracket(
+                                    invalid_table, "GGGCCC"
+                                )
 
                     with self.assertRaises(ValueError):
                         rna2d._structures_to_pairtables([".....", "......"])
@@ -1058,6 +1081,9 @@ class TestRNA2D(unittest.TestCase):
                     ),
                     forbidden,
                 )
+                self.assertFalse(rna2d._validate_dotbracket_structure(
+                    structure, sequence, check_pairs=False,
+                ))
 
         for structure in ("((......", "......))", "(..x...)", "é......."):
             with self.subTest(structure=structure), self.assertRaises(
@@ -1113,6 +1139,168 @@ class TestRNA2D(unittest.TestCase):
             mixture.mean_bp_distance(),
             np.sum(probability * (1.0 - probability)),
         )
+
+    def test_ensemble_summaries_match_viennarna(self):
+        molecule = Molecule(self.seq)
+        molecule.base_pairing_probability()
+        fc = molecule._dp_molecules[0]._fc
+        target = "(((...)))"
+
+        structure, distance = molecule.centroid()
+        reference_structure, reference_distance = fc.centroid()
+        self.assertEqual(structure, reference_structure)
+        self.assertAlmostEqual(distance, reference_distance)
+
+        for gamma in (0.0, 1.0, 2.0):
+            structure, score = molecule.mea(gamma)
+            reference_structure, _ = fc.MEA(gamma)
+            self.assertEqual(structure, reference_structure)
+            self.assertGreaterEqual(score, 0.0)
+
+        np.testing.assert_allclose(
+            molecule.positional_entropy(),
+            fc.positional_entropy()[1:],
+            atol=1e-12,
+        )
+        self.assertAlmostEqual(
+            molecule.ensemble_defect(target),
+            fc.ensemble_defect(target),
+        )
+
+    def test_ensemble_summaries_use_full_state_mixture(self):
+        molecule = Molecule(
+            self.seq,
+            state_positions=(0, 4),
+            state_biases=np.array([[0.0, 0.4], [-0.3, 0.2]]),
+        )
+        _, component_weights = molecule._component_probabilities()
+        probability = sum(
+            weight * component.base_pairing_probability()
+            for weight, component in zip(
+                component_weights, molecule._dp_molecules
+            )
+        )
+        np.testing.assert_allclose(
+            molecule.base_pairing_probability(), probability,
+        )
+        unpaired = 1.0 - probability.sum(axis=1)
+        target = "(((...)))"
+        partners = np.asarray(RNA.ptable(target))[1:] - 1
+        expected_defect = 1.0 - sum(
+            unpaired[i] if partner < 0 else probability[i, partner]
+            for i, partner in enumerate(partners)
+        ) / len(self.seq)
+        self.assertAlmostEqual(
+            molecule.ensemble_defect(target), expected_defect,
+        )
+
+        entropy = np.zeros(len(self.seq))
+        for i in range(len(self.seq)):
+            outcomes = np.concatenate((probability[i], [unpaired[i]]))
+            outcomes = outcomes[outcomes > 0.0]
+            entropy[i] = -np.sum(outcomes * np.log2(outcomes))
+        np.testing.assert_allclose(molecule.positional_entropy(), entropy)
+
+        def pairs(structure):
+            table = RNA.ptable(structure)
+            return [(i - 1, j - 1) for i, j in enumerate(table)
+                    if i > 0 and j > i]
+
+        all_structures = list(_enumerate_secondary_structures(self.seq))
+        centroid, distance = molecule.centroid()
+        expected_distance = lambda structure: (
+            np.sum(np.triu(probability, 1)) + sum(
+                1.0 - 2.0 * probability[i, j]
+                for i, j in pairs(structure)
+            )
+        )
+        self.assertAlmostEqual(distance, expected_distance(centroid))
+        self.assertLessEqual(
+            distance,
+            min(expected_distance(s) for s in all_structures) + 1e-10,
+        )
+
+        gamma = 1.5
+        mea, score = molecule.mea(gamma)
+        expected_score = lambda structure: (
+            sum(unpaired[i] for i, c in enumerate(structure) if c == ".")
+            + 2.0 * gamma * sum(
+                probability[i, j] for i, j in pairs(structure)
+            )
+        )
+        self.assertAlmostEqual(score, expected_score(mea), places=5)
+        self.assertGreaterEqual(
+            score + 1e-5,
+            max(expected_score(s) for s in all_structures),
+        )
+
+    def test_ensemble_summary_constraints_and_validation(self):
+        # ViennaRNA's centroid also leaves position 0 unpaired here, despite
+        # its hard constraint: no individual partner has probability > 0.5.
+        molecule = Molecule("GGCUUAUUGAUA", force_paired=(0,))
+        molecule.base_pairing_probability()
+        reference, _ = molecule._dp_molecules[0]._fc.centroid()
+        self.assertEqual(molecule.centroid()[0], reference)
+        self.assertEqual(reference[0], ".")
+        self.assertEqual(molecule.evaluate(reference), float("inf"))
+
+        for gamma in (-1, float("nan"), float("inf"), True, "bad"):
+            with self.subTest(gamma=gamma), self.assertRaises(ValueError):
+                molecule.mea(gamma)
+        for target in ("short", "((....", "invalid......", 1):
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                molecule.ensemble_defect(target)
+
+    def test_evaluate_and_defect_accept_numpy_pairtables(self):
+        molecule = Molecule(self.seq)
+        structures = ["(((...)))", ".........", "((.....))"]
+        tables, _ = rna2d.sample_to_numpy(structures, deduplicate=False)
+
+        for structure, table in zip(structures, tables):
+            self.assertAlmostEqual(
+                molecule.evaluate(table), molecule.evaluate(structure),
+            )
+            self.assertAlmostEqual(
+                molecule.ensemble_defect(table),
+                molecule.ensemble_defect(structure),
+            )
+        with mock.patch.object(
+            rna2d, "_validate_dotbracket_structure",
+            side_effect=AssertionError("revalidated converted pair table"),
+        ):
+            molecule.evaluate(tables[0])
+            molecule.ensemble_defect(tables[0])
+
+        noncanonical = Molecule("GAAAA")
+        noncanonical_table = np.array([4, -1, -1, -1, 0])
+        self.assertEqual(noncanonical.evaluate(noncanonical_table), np.inf)
+        self.assertAlmostEqual(
+            noncanonical.ensemble_defect(noncanonical_table),
+            noncanonical.ensemble_defect("(...)"),
+        )
+        np.testing.assert_allclose(
+            molecule.evaluate(tables), molecule.evaluate(structures),
+        )
+        np.testing.assert_allclose(
+            molecule.evaluate([(table, 0.0) for table in tables]),
+            molecule.evaluate(structures),
+        )
+
+        invalid = [
+            tables[0].astype(float),
+            tables[0][:-1],
+            np.full(len(self.seq), -2, dtype=int),
+            np.full(len(self.seq), len(self.seq), dtype=int),
+            np.array([0] + [-1] * (len(self.seq) - 1)),
+            np.array([8] + [-1] * (len(self.seq) - 1)),
+            np.array([6, 7, -1, -1, -1, -1, 0, 1, -1]),
+        ]
+        for table in invalid:
+            with self.subTest(table=table):
+                with self.assertRaises(ValueError):
+                    molecule.evaluate(table)
+                with self.assertRaises(ValueError):
+                    molecule.ensemble_defect(table)
 
     def test_partition_function_vanilla(self):
         self._run_in_vanilla_mode(self.test_partition_function)

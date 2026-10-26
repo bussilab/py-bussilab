@@ -9,8 +9,9 @@ sub-centikcal precision, arbitrary coupled biases on selected paired/unpaired
 states, and transparent combination of the resulting conditioned ensembles.
 The same interface then provides MFE structures, structure evaluation,
 partition functions, base-pair probabilities, ensemble diversity, exact
-free-energy derivatives, Boltzmann sampling, suboptimal ensembles, and joint
-pairing probabilities.
+free-energy derivatives, centroid and MEA structures, positional entropy,
+ensemble defect, Boltzmann sampling, suboptimal ensembles, and joint pairing
+probabilities.
 
 The wrapper also manages thermodynamic parameter sets, caches calculations,
 recovers from partition-function scaling failures, and defaults to disabling
@@ -25,6 +26,10 @@ required when constructing a :class:`Molecule`.
 ## Changelog
 
 - **v0.0.52**
+  - Added `centroid()`, `mea()`, `positional_entropy()`, and
+    `ensemble_defect()` for the complete ensemble, including state mixtures.
+  - `evaluate()` and `ensemble_defect()` accept zero-based NumPy pair tables;
+    `evaluate()` also accepts a two-dimensional batch of tables.
   - Added `Molecule` hard constraints (`force_paired`, `force_unpaired`) and
     coupled paired/unpaired-state biases (`state_positions`, `state_biases`),
     including multiple state sets and the `reduce_state_space` option.
@@ -189,7 +194,7 @@ if _HAS_NUMBA:
     )
 
 
-def _validate_encoded_dotbracket_structure(structure, sequence):
+def _validate_encoded_dotbracket_structure(structure, sequence, check_pairs):
     """Return 0 for valid, 1 for unmatched, 2 for invalid, 3 for forbidden."""
     stack = np.empty(len(structure), dtype=np.int32)
     stack_size = 0
@@ -204,18 +209,19 @@ def _validate_encoded_dotbracket_structure(structure, sequence):
                 return 1
             stack_size -= 1
             i = stack[stack_size]
-            left = sequence[i]
-            right = sequence[j]
-            # Keep this byte-level test in sync with _ALLOWED_PAIRS.
-            if j - i < _MIN_BASE_PAIR_SEPARATION or not (
-                (left == 65 and right == 85) or  # AU
-                (left == 85 and right == 65) or  # UA
-                (left == 67 and right == 71) or  # CG
-                (left == 71 and right == 67) or  # GC
-                (left == 71 and right == 85) or  # GU
-                (left == 85 and right == 71)     # UG
-            ):
-                forbidden = True
+            if check_pairs:
+                left = sequence[i]
+                right = sequence[j]
+                # Keep this byte-level test in sync with _ALLOWED_PAIRS.
+                if j - i < _MIN_BASE_PAIR_SEPARATION or not (
+                    (left == 65 and right == 85) or  # AU
+                    (left == 85 and right == 65) or  # UA
+                    (left == 67 and right == 71) or  # CG
+                    (left == 71 and right == 67) or  # GC
+                    (left == 71 and right == 85) or  # GU
+                    (left == 85 and right == 71)     # UG
+                ):
+                    forbidden = True
         elif symbol != 46:  # "."
             return 2
     if stack_size:
@@ -276,6 +282,113 @@ def _dotbracket_to_pairtable(structure):
     if not _HAS_NUMBA:
         return _dotbracket_to_pairtable_python(structure)
     return _structures_to_pairtables((structure,))[0]
+
+
+def _encoded_pairtable_to_dotbracket(table, sequence, check_pairs):
+    """Return ASCII dot-bracket bytes, error code, and forbidden-pair flag."""
+    length = len(table)
+    encoded = np.full(length, 46, dtype=np.uint8)  # "."
+    stack = np.empty(length, dtype=np.int32)
+    stack_size = 0
+    has_forbidden_pair = False
+    for i in range(length):
+        partner = int(table[i])
+        if partner == -1:
+            continue
+        if partner < -1 or partner >= length:
+            return encoded, 1, False
+        if partner == i or int(table[partner]) != i:
+            return encoded, 2, False
+        if partner > i:
+            stack[stack_size] = partner
+            stack_size += 1
+            encoded[i] = 40  # "("
+            if check_pairs:
+                left = sequence[i]
+                right = sequence[partner]
+                # Keep this byte-level test in sync with _ALLOWED_PAIRS.
+                if partner - i < _MIN_BASE_PAIR_SEPARATION or not (
+                    (left == 65 and right == 85) or  # AU
+                    (left == 85 and right == 65) or  # UA
+                    (left == 67 and right == 71) or  # CG
+                    (left == 71 and right == 67) or  # GC
+                    (left == 71 and right == 85) or  # GU
+                    (left == 85 and right == 71)     # UG
+                ):
+                    has_forbidden_pair = True
+        else:
+            if stack_size == 0 or stack[stack_size - 1] != i:
+                return encoded, 3, False
+            stack_size -= 1
+            encoded[i] = 41  # ")"
+    return encoded, 0, has_forbidden_pair
+
+
+if _HAS_NUMBA:
+    _encoded_pairtable_to_dotbracket = _numba_njit(
+        _encoded_pairtable_to_dotbracket
+    )
+
+
+def _pairtable_to_dotbracket_python(table, sequence, check_pairs):
+    """Python fallback for a validated-shape NumPy pair table."""
+    length = len(table)
+    structure = ["."] * length
+    closing = []
+    has_forbidden_pair = False
+    for i, value in enumerate(table):
+        partner = int(value)
+        if partner == -1:
+            continue
+        if partner < -1 or partner >= length:
+            raise ValueError("pair table contains an invalid partner index")
+        if partner == i or int(table[partner]) != i:
+            raise ValueError("pair table must contain reciprocal pairs")
+        if partner > i:
+            closing.append(partner)
+            structure[i] = "("
+            if check_pairs and (
+                partner - i < _MIN_BASE_PAIR_SEPARATION
+                or sequence[i] + sequence[partner] not in _ALLOWED_PAIRS
+            ):
+                has_forbidden_pair = True
+        else:
+            if not closing or closing.pop() != i:
+                raise ValueError("pair table must not contain crossing pairs")
+            structure[i] = ")"
+    return "".join(structure), has_forbidden_pair
+
+
+def _pairtable_to_dotbracket(table, sequence, *, check_pairs=True):
+    """Validate a zero-based NumPy pair table and return text and grammar status."""
+    if (
+        not isinstance(table, np.ndarray)
+        or table.ndim != 1
+        or table.dtype.kind not in "iu"
+        or len(table) != len(sequence)
+    ):
+        raise ValueError(
+            "pair table must be a one-dimensional integer NumPy array "
+            "of sequence length"
+        )
+    # An unsigned table has no -1 sentinel. Reject its out-of-range values
+    # before conversion to a signed scalar in the Numba parser.
+    if table.dtype.kind == "u" and np.any(table >= len(sequence)):
+        raise ValueError("pair table contains an invalid partner index")
+    if not _HAS_NUMBA:
+        return _pairtable_to_dotbracket_python(table, sequence, check_pairs)
+
+    encoded_sequence = np.frombuffer(sequence.encode("ascii"), dtype=np.uint8)
+    encoded, error, has_forbidden_pair = _encoded_pairtable_to_dotbracket(
+        table, encoded_sequence, check_pairs
+    )
+    if error == 1:
+        raise ValueError("pair table contains an invalid partner index")
+    if error == 2:
+        raise ValueError("pair table must contain reciprocal pairs")
+    if error == 3:
+        raise ValueError("pair table must not contain crossing pairs")
+    return encoded.tobytes().decode("ascii"), has_forbidden_pair
 
 
 def _structures_to_pairtables(structures):
@@ -1032,7 +1145,7 @@ def _validate_hard_constraint_positions(positions, length, name):
         raise ValueError(f"{name} must not contain duplicates")
     return tuple(int(position) for position in positions)
 
-def _validate_dotbracket_structure(structure, sequence):
+def _validate_dotbracket_structure(structure, sequence, *, check_pairs=True):
     """Validate syntax; return whether a pair is outside the folding grammar."""
     if _HAS_NUMBA:
         try:
@@ -1047,7 +1160,7 @@ def _validate_dotbracket_structure(structure, sequence):
             sequence.encode("ascii"), dtype=np.uint8
         )
         status = _validate_encoded_dotbracket_structure(
-            encoded_structure, encoded_sequence
+            encoded_structure, encoded_sequence, check_pairs
         )
         if status == 1:
             raise ValueError("structure contains unmatched parentheses")
@@ -1066,7 +1179,7 @@ def _validate_dotbracket_structure(structure, sequence):
             if not stack:
                 raise ValueError("structure contains unmatched parentheses")
             i = stack.pop()
-            if (
+            if check_pairs and (
                 j - i < _MIN_BASE_PAIR_SEPARATION
                 or sequence[i] + sequence[j] not in _ALLOWED_PAIRS
             ):
@@ -1228,6 +1341,22 @@ class _DPMolecule:
                 self._seq,
                 self._make_md_params(compute_bpp=compute_bpp),
             )
+
+    def _mea_from_probabilities(self, probability, gamma):
+        """Run ViennaRNA's MEA optimizer on complete-ensemble probabilities."""
+        i, j = np.nonzero(np.triu(probability, 1))
+        pair_list = [
+            RNA.ep(
+                int(left + 1), int(right + 1),
+                float(probability[left, right]), RNA.PLIST_TYPE_BASEPAIR,
+            )
+            for left, right in zip(i, j)
+        ]
+        pair_list.append(RNA.ep(0, 0, 0.0))
+        structure, score = RNA.MEA_from_plist(
+            pair_list, self._seq, gamma, self._make_md_params()
+        )
+        return structure, float(score)
 
     def _ensure_fc_rounded(self):
         """
@@ -1783,10 +1912,11 @@ class Molecule:
 
     Calculations are performed lazily and cached. The class supports MFE
     prediction, evaluation of a supplied dot-bracket structure, ensemble free
-    energies, base-pair probabilities and diversity, derivatives with respect
-    to penalties and state biases, Boltzmann sampling, suboptimal enumeration
-    and coverage, and joint nucleotide-pairing probabilities. Structure
-    energies and state biases are expressed in kcal/mol; temperatures are
+    energies, base-pair probabilities and diversity, centroid and MEA
+    structures, positional entropy and ensemble defect, derivatives with
+    respect to penalties and state biases, Boltzmann sampling, suboptimal
+    enumeration and coverage, and joint nucleotide-pairing probabilities.
+    Structure energies and state biases are expressed in kcal/mol; temperatures are
     supplied in kelvin. The resolved temperature and Boltzmann constant are
     available as read-only ``temperature`` (K) and ``boltzmann_constant``
     (kcal/mol/K) properties.
@@ -1893,6 +2023,10 @@ class Molecule:
     Hard constraints specify only whether a nucleotide is paired; they do not
     specify its partner. ``evaluate`` assigns infinite energy to structures
     that violate them.
+    As in ViennaRNA, ``centroid`` and ``mea`` summarize marginal pairing
+    probabilities without enforcing ``force_paired`` on their output. A
+    returned structure may therefore violate that constraint when a required
+    nucleotide's probability is spread over multiple partners.
     If no valid structure exists, ``mfe`` raises ``RuntimeError``. Structures
     are pseudoknot-free, as in ViennaRNA's standard single-strand folding
     grammar.
@@ -2402,15 +2536,16 @@ class Molecule:
 
         Parameters
         ----------
-        structure : str or iterable
-            A dot-bracket structure or an iterable whose elements are structure
-            strings or ``(structure, value)`` pairs. This directly accepts the
-            results of :meth:`suboptimal_structures`, ``sample()``, and
-            ``sample(weights=True)``. Values paired with structures are ignored.
-            Consequently, suboptimal structures generated by one ``Molecule``
-            may be passed directly to another ``Molecule`` with the same
-            sequence to rescore them under different one-body, base-pair, or
-            state biases. NumPy arrays must be one-dimensional.
+        structure : str, ndarray, or iterable
+            A dot-bracket structure, a zero-based NumPy pair table with ``-1``
+            for unpaired nucleotides, or an iterable of structures. A
+            two-dimensional integer array supplies a batch of pair tables.
+            Iterable elements may also be ``(structure, value)`` pairs, whose
+            values are ignored. This accepts the results of
+            :meth:`suboptimal_structures`, ``sample()``, ``sample(weights=True)``,
+            :func:`sample_to_numpy`, and :func:`suboptimal_to_numpy`.
+            Structures generated by one ``Molecule`` may be rescored under
+            another molecule's biases when the sequences match.
 
         Returns
         -------
@@ -2422,6 +2557,19 @@ class Molecule:
             minimum loop length, or structures violating hard constraints,
             return infinity. Malformed structures raise ``ValueError``.
         """
+        has_forbidden_pair = None
+        if isinstance(structure, np.ndarray) and structure.dtype.kind in "iu":
+            if structure.ndim == 1:
+                structure, has_forbidden_pair = _pairtable_to_dotbracket(
+                    structure, self._seq
+                )
+            elif structure.ndim == 2:
+                return np.asarray([
+                    self.evaluate(row) for row in structure
+                ])
+            else:
+                raise ValueError("pair table arrays must have one or two dimensions")
+
         if not isinstance(structure, str):
             if isinstance(structure, np.ndarray) and structure.ndim != 1:
                 raise ValueError("structure arrays must be one-dimensional")
@@ -2436,15 +2584,18 @@ class Molecule:
             for item in items:
                 if isinstance(item, str):
                     structures.append(item)
+                elif isinstance(item, np.ndarray):
+                    structures.append(item)
                 elif (
                     hasattr(item, "__len__")
                     and len(item) == 2
-                    and isinstance(item[0], str)
+                    and (isinstance(item[0], str)
+                         or isinstance(item[0], np.ndarray))
                 ):
                     structures.append(item[0])
                 else:
                     raise ValueError(
-                        "each item must be a structure string or a "
+                        "each item must be a structure string, pair table, or a "
                         "(structure, value) pair"
                     )
             return np.asarray([
@@ -2456,9 +2607,10 @@ class Molecule:
             raise ValueError(
                 "structure must contain one symbol per nucleotide"
             )
-        has_forbidden_pair = _validate_dotbracket_structure(
-            structure, self._seq
-        )
+        if has_forbidden_pair is None:
+            has_forbidden_pair = _validate_dotbracket_structure(
+                structure, self._seq
+            )
 
         component_index = 0
         for position in self._explicit_state_positions:
@@ -2526,6 +2678,132 @@ class Molecule:
         """
         probability = self.base_pairing_probability()
         return float(np.sum(probability * (1.0 - probability)))
+
+    def positional_entropy(self):
+        """Return the partner-choice entropy of each nucleotide in bits.
+
+        For nucleotide ``i``, the outcomes are pairing with each possible
+        partner ``j`` and remaining unpaired. The probabilities come from the
+        complete ensemble, including all state-mixture components. Thus the
+        result includes uncertainty between components as well as within
+        them; it is not the entropy of the full structure distribution.
+
+        Returns
+        -------
+        ndarray
+            One entropy value per nucleotide.
+        """
+        probability = self.base_pairing_probability()
+        unpaired = np.clip(1.0 - np.sum(probability, axis=1), 0.0, 1.0)
+        log_probability = np.zeros_like(probability)
+        np.log2(probability, out=log_probability, where=probability > 0.0)
+        log_unpaired = np.zeros_like(unpaired)
+        np.log2(unpaired, out=log_unpaired, where=unpaired > 0.0)
+        return -np.sum(probability * log_probability, axis=1) - (
+            unpaired * log_unpaired
+        )
+
+    def ensemble_defect(self, structure):
+        """Return the expected fraction of incorrectly paired nucleotides.
+
+        A nucleotide is correct when it has the same partner as in the target
+        structure, or is unpaired in both. The expectation uses the complete
+        ensemble, including state mixtures. The target is a dot-bracket
+        structure of the same length as the sequence; it need not satisfy the
+        molecule's hard constraints or contain only canonical pairs.
+
+        Parameters
+        ----------
+        structure : str or ndarray
+            Target structure in dot-bracket notation or as a zero-based NumPy
+            pair table with ``-1`` for unpaired nucleotides.
+
+        Returns
+        -------
+        float
+            Ensemble defect divided by sequence length, in [0, 1].
+        """
+        if isinstance(structure, np.ndarray):
+            _pairtable_to_dotbracket(
+                structure, self._seq, check_pairs=False
+            )
+            partners = structure
+        else:
+            if not isinstance(structure, str) or len(structure) != len(self._seq):
+                raise ValueError(
+                    "structure must be a dot-bracket string of sequence length"
+                )
+            _validate_dotbracket_structure(
+                structure, self._seq, check_pairs=False
+            )
+            partners = np.asarray(RNA.ptable(structure))[1:] - 1
+        probability = self.base_pairing_probability()
+        unpaired = np.clip(1.0 - np.sum(probability, axis=1), 0.0, 1.0)
+        correct = math.fsum(
+            unpaired[i] if partner == -1 else probability[i, partner]
+            for i, partner in enumerate(partners)
+        )
+        return float(np.clip(1.0 - correct / len(self._seq), 0.0, 1.0))
+
+    def centroid(self):
+        """Return the centroid structure and its mean base-pair distance.
+
+        The centroid contains every pair whose probability in the complete
+        ensemble exceeds 0.5. Like ViennaRNA's centroid, it is a summary of
+        pairing probabilities and can violate ``force_paired`` when no one
+        partner of a required nucleotide has probability above 0.5.
+
+        Returns
+        -------
+        (str, float)
+            Dot-bracket structure and expected base-pair distance from a
+            random structure in the ensemble.
+        """
+        probability = self.base_pairing_probability()
+        i, j = np.nonzero(np.triu(probability > 0.5, 1))
+        structure = ["."] * len(self._seq)
+        for left, right in zip(i, j):
+            structure[left] = "("
+            structure[right] = ")"
+        distance = np.sum(np.triu(probability, 1)) + np.sum(
+            1.0 - 2.0 * probability[i, j]
+        )
+        return "".join(structure), float(distance)
+
+    def mea(self, gamma=1.0):
+        """Return a maximum expected accuracy structure and its score.
+
+        The score is ``2 * gamma * sum(p_ij)`` over selected pairs plus the
+        unpaired probabilities at unpaired positions. ViennaRNA's MEA
+        optimizer receives the complete ensemble's base-pair probabilities,
+        including all state-mixture components. As with ViennaRNA's default
+        MEA, the returned summary structure need not satisfy
+        ``force_paired``.
+
+        Parameters
+        ----------
+        gamma : float, default=1.0
+            Nonnegative relative weight of correctly predicted base pairs.
+
+        Returns
+        -------
+        (str, float)
+            Dot-bracket structure and maximum expected accuracy score.
+        """
+        if isinstance(gamma, (bool, np.bool_)):
+            raise ValueError("gamma must be a finite nonnegative number")
+        try:
+            gamma = float(gamma)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "gamma must be a finite nonnegative number"
+            ) from error
+        if not math.isfinite(gamma) or gamma < 0.0:
+            raise ValueError("gamma must be a finite nonnegative number")
+
+        return self._dp_molecules[0]._mea_from_probabilities(
+            self.base_pairing_probability(), gamma
+        )
 
     def total_free_energy(self):
         """
