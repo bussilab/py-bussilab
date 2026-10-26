@@ -2767,10 +2767,7 @@ class Molecule:
                 raise ValueError(
                     "structure must be a dot-bracket string of sequence length"
                 )
-            _validate_dotbracket_structure(
-                structure, self._seq, check_pairs=False
-            )
-            partners = np.asarray(RNA.ptable(structure))[1:] - 1
+            partners = _dotbracket_to_pairtable(structure)
         probability = self.base_pairing_probability()
         unpaired = np.clip(1.0 - np.sum(probability, axis=1), 0.0, 1.0)
         correct = math.fsum(
