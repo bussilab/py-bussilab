@@ -26,15 +26,15 @@ required when constructing a :class:`Molecule`.
 ## Changelog
 
 - **v0.0.52**
-  - Added `Molecule.to_kwargs()` to inspect and reuse resolved constructor
-    settings.
+  - Added exact state mixtures with `state_positions` and `state_biases`,
+    allowing coupled paired/unpaired-state energy biases. Multiple disjoint
+    state sets and `reduce_state_space` are supported; ensemble results combine
+    all state components.
+  - Added `Molecule` hard constraints (`force_paired`, `force_unpaired`).
   - Added `centroid()`, `mea()`, `positional_entropy()`, and
     `ensemble_defect()` for the complete ensemble, including state mixtures.
   - `evaluate()` and `ensemble_defect()` accept zero-based NumPy pair tables;
     `evaluate()` also accepts a two-dimensional batch of tables.
-  - Added `Molecule` hard constraints (`force_paired`, `force_unpaired`) and
-    coupled paired/unpaired-state biases (`state_positions`, `state_biases`),
-    including multiple state sets and the `reduce_state_space` option.
   - Added sparse exact-pair `base_pair_biases` and
     `d_free_energy_d_base_pair_biases()`; continuous biases retain their
     sub-0.01 kcal/mol precision with unpatched ViennaRNA. Impossible pairs may
@@ -49,6 +49,8 @@ required when constructing a :class:`Molecule`.
     free-energy derivatives with respect to one-body and state biases.
   - Exposed the resolved temperature and Boltzmann constant as read-only
     `Molecule.temperature` and `Molecule.boltzmann_constant` properties.
+  - Added `Molecule.to_kwargs()` to inspect and reuse resolved constructor
+    settings.
   - Removed the `samples` and `suboptimal_delta` options from
     `pairing_correlation_matrix()`; it now always returns the exact
     partition-function result.
