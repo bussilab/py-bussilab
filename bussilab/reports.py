@@ -1,6 +1,7 @@
 import subprocess
 import re
 import secrets
+import shlex
 from typing import Optional, List
 
 from . import coretools
@@ -14,15 +15,24 @@ def _parse_cpu(line: List[str]):
     #  hi : time spent servicing hardware interrupts
     #  si : time spent servicing software interrupts
     #  st : time stolen from this vm by the hypervisor
-    field = ["us", "sy", "ni", "id", "wa", "hi", "si", "st"]
-    result = {}
-    for i in range(1,len(line)):
-        for f in field:
-            if re.match("^" + f + ".*",line[i]):
-                result[f] = float(line[i-1])
+    # top may omit whitespace after commas and use decimal commas.
+    text = " ".join(line)
+    result = {
+        key: float(value.replace(",", "."))
+        for value, key in re.findall(
+            r"(\d+(?:[.,]\d+)?)\s*(us|sy|ni|id|wa|hi|si|st)\b", text)
+    }
+    missing = {"id", "us", "ni"} - result.keys()
+    if missing:
+        raise ValueError("missing CPU fields: " + ", ".join(sorted(missing)))
     return result
 
 def workstations(wks: Optional[List] = None, short: bool = True):
+    """Report CPU, disk and automatically detected NVIDIA GPU usage over SSH.
+
+    The legacy ``nvidia`` workstation setting is ignored. Machines without
+    ``nvidia-smi`` omit GPU status; a failed GPU query produces a warning.
+    """
     msg = ""
 
     if not wks:
@@ -38,7 +48,6 @@ def workstations(wks: Optional[List] = None, short: bool = True):
             url = w
             disk = "/scratch"
             tmpdisk = "/var"
-            nvidia = 'True'
         elif isinstance(w, dict):
             url = w['url']
             try:
@@ -53,22 +62,19 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                 tmpdisk = w['tmpdisk']
             except KeyError:
                 tmpdisk = "/var"
-            try:
-                nvidia = w['nvidia']
-            except KeyError:
-                nvidia = 'True'
         else:
             raise TypeError()
 
         # this is required to allow discarding possible initial login messages
         token=secrets.token_hex()
-        cmd = "echo " + token + ";"
+        cmd = "export LC_ALL=C; echo " + token + ";"
         cmd += "top -n 1 -b | head -n 3 | tail -n 1;"
-        cmd += "df -h " + disk + " | tail -n 1;"
-        cmd += "df -h " + tmpdisk + " | tail -n 1;"
-
-        if nvidia != "False":
-            cmd += "nvidia-smi  | grep Default"
+        cmd += "df -Ph " + shlex.quote(disk) + " | tail -n 1;"
+        cmd += "df -Ph " + shlex.quote(tmpdisk) + " | tail -n 1;"
+        # GPU probing is optional; its failure must not discard CPU/disk data.
+        cmd += ("if command -v nvidia-smi >/dev/null 2>&1; then "
+                "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits"
+                " || echo __BUSSILAB_GPU_ERROR__; fi")
 
         args = ['ssh',url, cmd]
         msg += name
@@ -79,10 +85,13 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                universal_newlines=True,
                timeout = 60,
                check = True).stdout.split('\n')
-            for i in range(len(out)):
-                if out[i]==token:
-                   break
-            out=out[i+1:]
+            try:
+                start = out.index(token)
+            except ValueError as exc:
+                raise ValueError("missing report start marker") from exc
+            out = out[start+1:]
+            if len(out) < 3:
+                raise ValueError("incomplete CPU/disk output")
             cpu_fields = _parse_cpu(out[0].split())
             msg += " CPU"
             if cpu_fields["id"] > 75:
@@ -93,14 +102,14 @@ def workstations(wks: Optional[List] = None, short: bool = True):
                 msg += " :running:"
             if cpu_fields["id"] + cpu_fields["us"] + cpu_fields["ni"] < 80:
                 msg += "(:warning: id+us+ni<80)"
-            if nvidia != 'False':
+            gpu_lines = [line.strip() for line in out[3:] if line.strip()]
+            if gpu_lines:
                 msg += " GPU"
-                for j in range(3,len(out)-1):
-                    gpu_fields = out[j].split()
-                    gpu_usage = 0.0
-                    for i in range(1,len(gpu_fields)):
-                        if re.match("^Default",gpu_fields[i]):
-                            gpu_usage = float(gpu_fields[i-1].strip("%"))
+                for line in gpu_lines:
+                    if line == "__BUSSILAB_GPU_ERROR__" or line == "N/A" or line == "[N/A]":
+                        msg += " :warning:"
+                        continue
+                    gpu_usage = float(line)
                     if gpu_usage < 25:
                         msg += " :sleeping:"
                     elif gpu_usage < 50:
@@ -132,10 +141,15 @@ def workstations(wks: Optional[List] = None, short: bool = True):
             msg += "\n"
             msg += "Timeout"
             msg += "\n\n"
-        except Exception:
+        except (subprocess.CalledProcessError, OSError) as exc:
             msg += " :skull_and_crossbones:"
             msg += "\n"
-            msg += "Error connecting"
+            msg += "Error connecting: " + str(exc)
+            if isinstance(exc, subprocess.CalledProcessError) and exc.stderr:
+                msg += "\n" + exc.stderr.strip()
             msg += "\n\n"
+        except (ValueError, IndexError, KeyError) as exc:
+            msg += " :skull_and_crossbones:\n"
+            msg += "Error parsing report: " + str(exc) + "\n\n"
     return msg
 
