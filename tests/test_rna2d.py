@@ -3052,6 +3052,30 @@ class TestRNA2D(unittest.TestCase):
 
         self.assertAlmostEqual(mol.suboptimal_coverage(5.0), 1.0, places=6)
 
+    def test_suboptimal_coverage_vienna_patch_compatibility(self):
+        # One negative pairing penalty gave coverage 1.46546 with the former
+        # sign-based fallback on unpatched ViennaRNA.
+        sequence = "CGACGUACCGUUUUGCAAAGGCGUGGCGGCCCCCAUGAACAUUGACCGUCACUGUUUCCACGUAUGUUCU"
+        lambdas = np.zeros(len(sequence))
+        lambdas[12] = -2.0
+
+        def check():
+            mol = Molecule(sequence, lambdas1d=lambdas)
+            structures = mol.suboptimal_structures(3.0)
+            self.assertEqual(len(structures), 430)
+            self.assertEqual(len({structure for structure, _ in structures}), 430)
+            for structure, energy in structures:
+                self.assertAlmostEqual(energy, mol.evaluate(structure), places=5)
+            self.assertAlmostEqual(
+                mol.suboptimal_coverage(3.0), 0.67538248, places=5
+            )
+
+        with self.subTest(mode="vanilla"):
+            self._run_in_vanilla_mode(check)
+        if rna2d._SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
+            with self.subTest(mode="patched"):
+                check()
+
     def test_pairing_correlation_matrix_restores_unconstrained_pf(self):
         mol = Molecule("GCGCGCGC")
         before = mol.base_pairing_probability()

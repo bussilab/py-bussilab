@@ -25,6 +25,9 @@ required when constructing a :class:`Molecule`.
 
 ## Changelog
 
+- **v0.0.53**
+  - Fixed suboptimal enumeration and coverage with soft constraints on
+    unpatched ViennaRNA by using base-pair constraints in the fallback.
 - **v0.0.52**
   - Added exact state mixtures with `state_positions` and `state_biases`,
     allowing coupled paired/unpaired-state energy biases. Multiple disjoint
@@ -1039,16 +1042,14 @@ def _apply_constraint(fc, sequence, lambdas, kT):
     # Stay well below the largest representable double.
     budget = _PARTITION_OVERFLOW_SAFETY_FRACTION * kT * math.log(sys.float_info.max)
 
-    # Vanilla ViennaRNA has a bug that makes subopt with negative sc_add_up problematic.
-    # Avoid negative sc_add_up values by excluding positive lambdas from the 1D scheme.
-    # Technically, this is only needed for using subopt. However, to keep the code simpler
-    # we apply the rule in general for build fold compounds.
+    # Vanilla ViennaRNA has a bug in subopt backtracking with unpaired soft
+    # constraints, regardless of their sign. Represent every nonzero pairing
+    # penalty as a base-pair constraint when that bug is present.
 
     if not _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
         budget = 0.0
 
-    # All negative lambdas use the safe 1D representation.
-    use_1d = lambdas < 0.0
+    use_1d = (lambdas < 0.0) & _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS
 
     # Among positive lambdas, use as many as possible in 1D.
     # Sorting ascending maximizes their number under the budget.
@@ -1061,8 +1062,8 @@ def _apply_constraint(fc, sequence, lambdas, kT):
     positive_1d = positive_indices[cumulative <= budget]
     use_1d[positive_1d] = True
 
-    # Everything else positive is represented directly as pair energies.
-    use_2d = (lambdas > 0.0) & ~use_1d
+    # Everything else nonzero is represented directly as pair energies.
+    use_2d = (lambdas != 0.0) & ~use_1d
 
     shift = 0.0
 
