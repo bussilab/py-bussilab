@@ -78,7 +78,11 @@ class TestGenerateRSS(unittest.TestCase):
                          "https://example.com/bussilab/example.html#changelog")
         self.assertEqual(items[0].findtext("guid"), "bussilab.example:v0.0.52")
         self.assertEqual(items[0].find("guid").get("isPermaLink"), "false")
-        html = items[0].findtext("description")
+        description = items[0].findtext("description")
+        self.assertEqual(description,
+                         "• Fixed x &lt; y &amp; improved stability. Continued description.\n"
+                         "• Another change.")
+        html = items[0].findtext("{http://purl.org/rss/1.0/modules/content/}encoded")
         self.assertIn("<ul>", html)
         self.assertIn("<code>x &lt; y</code> &amp;", html)
         self.assertNotIn("Usage instructions", items[1].findtext("description"))
@@ -107,6 +111,14 @@ class TestGenerateRSS(unittest.TestCase):
         self.assertEqual(rss.changelog_entries('"""No changelog."""'), [])
         with self.assertRaisesRegex(ValueError, "Duplicate"):
             rss.changelog_entries(SOURCE.replace("v0.0.51", "v0.0.52"))
+
+    def test_plain_text_nested_lists_and_links(self):
+        plain = rss.PlainText()
+        plain.feed('<ul><li>Parent<ul><li>Nested <code>x &lt; y</code></li></ul>'
+                   '</li><li>See <a href="https://example.com">details</a>.</li></ul>')
+        self.assertEqual(plain.text(),
+                         "• Parent\n  • Nested x < y\n"
+                         "• See https://example.com details.")
 
 
 if __name__ == "__main__":

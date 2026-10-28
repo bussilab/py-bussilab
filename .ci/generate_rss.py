@@ -6,6 +6,8 @@ Requires feedgen and Markdown (documentation dependencies only).
 import argparse
 import ast
 from datetime import datetime, timezone
+from html import escape
+from html.parser import HTMLParser
 from pathlib import Path
 import re
 import subprocess
@@ -18,6 +20,41 @@ import markdown
 ROOT = Path(__file__).resolve().parents[1]
 BASE_URL = "https://bussilab.github.io/doc-py-bussilab/bussilab"
 RELEASE = re.compile(r"^- \*\*(v[0-9]+\.[0-9]+\.[0-9]+)\*\*\s*$")
+
+
+class PlainText(HTMLParser):
+    """Keep literal list bullets and line breaks for readers that strip HTML."""
+
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+        self.depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("ul", "ol"):
+            self.depth += 1
+        elif tag == "li":
+            self.parts.append("\n" + "  " * max(0, self.depth - 1) + "• ")
+        elif tag in ("p", "br", "pre"):
+            self.parts.append("\n")
+        elif tag == "a":
+            # Retain destinations as text even when a reader removes markup.
+            href = dict(attrs).get("href")
+            if href:
+                self.parts.append(href + " ")
+
+    def handle_endtag(self, tag):
+        if tag in ("ul", "ol"):
+            self.depth -= 1
+        if tag in ("li", "p", "pre"):
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        self.parts.append(re.sub(r"\s+", " ", data))
+
+    def text(self):
+        return "\n".join(line.rstrip() for line in "".join(self.parts).splitlines()
+                         if line.strip()).strip()
 
 
 def tag_dates(root):
@@ -108,7 +145,13 @@ def generate(root, output, base_url=BASE_URL):
             entry.title(module + " " + tag)
             entry.link(href=link)
             entry.pubDate(dates[tag])
-            entry.description(markdown.markdown(body, extensions=["fenced_code", "tables"]))
+            html = markdown.markdown(body, extensions=["fenced_code", "tables"])
+            plain = PlainText()
+            plain.feed(html)
+            # RSS descriptions may be interpreted as HTML. Escape literal code
+            # such as "x < y" while keeping bullets and newlines as actual text.
+            entry.description(escape(plain.text(), quote=False))
+            entry.content(html, type="CDATA")
         feed.rss_file(str(output / (feed_name + ".xml")), pretty=True)
         print("{}: {} released entries".format(module, len(published)))
 
