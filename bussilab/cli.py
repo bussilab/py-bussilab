@@ -25,6 +25,8 @@ while the `wham` command reads a file.
 ## Changelog
 
 - **v0.0.53**
+  - Improve Jupyter discovery, URL handling, selection errors and SSH tunnel
+    startup and cleanup; report Jupyter and browser launch failures.
   - Deprecated `pip_upgrade_all` in favor of rebuilding environments from
     pinned requirements; retained the command with a visible warning.
 - **v0.0.52**
@@ -562,7 +564,7 @@ def _jrun(**kargs):
      help="remote python executable (e.g. module load python3 python-home; python)",
      default="python")
 @arg("--server-url", help="URL on server (default: choose interactively)", default="")
-@arg("--open-cmd", help="open command (detected automatically by default)", default="")
+@arg("--open-cmd", help="browser command and options (detected automatically by default)", default="")
 def _jremote(**kargs):
     """
        This is a tool to connect to a remote running jupyter server.
@@ -574,6 +576,13 @@ def _jremote(**kargs):
        A list of jupyter servers running on the selected machines will be
        shown, and one of them can be picked typing its progressive number.
        In case there is a single server running, it will be opened by default.
+
+       The browser opens after the local SSH listener is ready. Keep this
+       terminal open while using Jupyter; press `CTRL+c` to close the tunnel.
+       Use `--server-url` to supply a loopback HTTP(S) URL directly, including
+       its path and any authentication token. `--open-cmd` accepts a browser
+       command with options. A dry run can still use SSH to discover servers;
+       combine `--dry-run --list-only` to avoid making a connection.
 
        Notice that if the name of the python executable on the server is
        different from plain `python` you can override it with
