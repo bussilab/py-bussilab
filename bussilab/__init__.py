@@ -144,6 +144,13 @@ bussilab wham -h
 ```
 See [cli_documentation](cli_documentation.html) for all subcommands.
 
+### Changes
+
+Each submodule has its own release history. To receive updates when a release
+includes changes to a submodule you use, subscribe to its RSS feed.
+Feeds are available at `feeds/MODULE.xml` for modules with a changelog;
+for example, subscribe to the [WHAM RSS feed](feeds/wham.xml) for WHAM updates.
+
 # Advanced stuff
 
 Notice that instructions below assume you are using pip.
@@ -175,10 +182,6 @@ Documentation will be visible at `doc/bussilab/index.html`.
 This is normally not necessary, since
 the pre-built documentation of the latest version can be found at [this link](https://bussilab.github.io/doc-py-bussilab),
 but can be useful to test changes to the documentation before pushing them to GitHub.
-
-RSS feeds for module changelogs are available at `feeds/MODULE.xml`, for
-example the [WHAM RSS feed](feeds/wham.xml). Replace `MODULE` with the name
-of a module that has a changelog.
 
 ### Implementing your modifications
 
