@@ -43,14 +43,22 @@ jobs:
       run: |
         pip install viennarna
     - name: Test with pytest
-      env:
-        BUSSILAB_TEST_NOTIFY_TOKEN: ${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}
-        BUSSILAB_TEST_NOTIFY_CHANNEL: ${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}
       run: |
         bussilab check --import
         pip install pytest pytest-cov
         pytest -v
         NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab --cov-report=term --cov-report=xml:coverage.xml
+    - name: Test live Slack integration
+      if: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14' }}
+      env:
+        BUSSILAB_TEST_NOTIFY_TOKEN: ${{ secrets.BUSSILAB_TEST_NOTIFY_TOKEN }}
+        BUSSILAB_TEST_NOTIFY_CHANNEL: ${{ secrets.BUSSILAB_TEST_NOTIFY_CHANNEL }}
+      run: |
+        if [ -n "$BUSSILAB_TEST_NOTIFY_TOKEN" ] && [ -n "$BUSSILAB_TEST_NOTIFY_CHANNEL" ]; then
+          pytest -v tests/test_notify.py::TestNotify
+        else
+          echo "Skipping live Slack integration: credentials are unavailable."
+        fi
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v7
       with:

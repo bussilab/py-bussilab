@@ -640,7 +640,10 @@ class TestNotifyUnit(unittest.TestCase):
 
 
 # only run tests if env vars are configured
-if 'BUSSILAB_TEST_NOTIFY_TOKEN' in os.environ:
+# CI supplies these only to the single live-integration step. Mocked tests
+# above run on every Python/OS combination without Slack credentials.
+if (os.environ.get('BUSSILAB_TEST_NOTIFY_TOKEN') and
+        os.environ.get('BUSSILAB_TEST_NOTIFY_CHANNEL')):
     token=os.environ["BUSSILAB_TEST_NOTIFY_TOKEN"]
     channel=os.environ["BUSSILAB_TEST_NOTIFY_CHANNEL"]
     class TestNotify(unittest.TestCase):
