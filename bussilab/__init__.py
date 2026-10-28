@@ -176,6 +176,10 @@ This is normally not necessary, since
 the pre-built documentation of the latest version can be found at [this link](https://bussilab.github.io/doc-py-bussilab),
 but can be useful to test changes to the documentation before pushing them to GitHub.
 
+RSS feeds for module changelogs are available at `feeds/MODULE.xml`, for
+example the [WHAM RSS feed](feeds/wham.xml). Replace `MODULE` with the name
+of a module that has a changelog.
+
 ### Implementing your modifications
 
 If you want to modify the Python source code you should download it from GitHub:
