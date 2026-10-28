@@ -1,9 +1,28 @@
 """
-Module implementing a small tool for installing and updating packages with pip.
+Helpers for invoking pip with the current Python interpreter.
+
+For shared or version-pinned environments, build and validate a new environment
+and publish it under a new version or date, keeping the previous one available
+for rollback. Upgrading an existing environment does not preserve its pins.
+
+## Changelog
+
+- **v0.0.53**
+  - Deprecated `upgrade_all()` and the `pip_upgrade_all` command in favor of
+    rebuilding environments from pinned requirements.
+  - Replaced `pkg_resources` package discovery with `importlib.metadata`.
+- **v0.0.35**
+  - Added `upgrade_self()` for upgrading bussilab, used by cron's self-update
+    step. Added optional subprocess timeouts to all pip helpers.
+- **v0.0.2**
+  - Introduced `install()` and `upgrade_all()`, invoking pip with the current
+    Python interpreter and supporting upgrades and user installations.
 """
 
 import subprocess
 import sys
+from importlib import metadata
+import warnings
 
 from typing import List, Union, Optional
 
@@ -44,26 +63,37 @@ def install(packages: Union[str, List[str]], *,
 
 def upgrade_all(user: bool = False,*,
                 timeout: Optional[int] = None):
-    """Upgrade all installed packages using pip.
+    """Upgrade all discovered packages using pip (deprecated).
 
-       Warning: it assumes all available packages are installed with pip.
+       This modifies the environment in place, without preserving version pins
+       or providing validation or rollback. Build a new environment from pinned
+       requirements instead. This function remains available for compatibility.
+       It assumes all discovered packages are managed by pip; with `user=True`,
+       packages visible outside the user location can also be installed there.
 
        Parameters
        ----------
 
        user : bool, optional
-           if True, install/upgrade packages in with `--user` option.
+           if True, install/upgrade packages with the `--user` option.
     """
-    try:
-        import pkg_resources
-    except ModuleNotFoundError:
-        raise ModuleNotFoundError(
-            "pkg_resources not found, you should install setuptools"
-            )
-    packages = [dist.project_name for dist in pkg_resources.working_set]  # pylint: disable=not-an-iterable
-    install(packages, user=user, upgrade=True, timeout=timeout)
+    warnings.warn(
+        "upgrade_all() and bussilab pip_upgrade_all are deprecated. "
+        "Build and validate a new environment from pinned requirements instead "
+        "of upgrading all packages in place.",
+        FutureWarning, stacklevel=2)
+    packages = sorted({dist.metadata["Name"] for dist in metadata.distributions()
+                       if dist.metadata["Name"]})
+    if packages:
+        install(packages, user=user, upgrade=True, timeout=timeout)
 
 def upgrade_self(*,
                  user: bool = False,
                  timeout: Optional[int] = None):
+    """Upgrade bussilab in place using pip, potentially updating dependencies.
+
+    Intended for environments deliberately maintained in place, including
+    cron's explicit `selfupdate` step. For shared or pinned environments,
+    publish a new environment instead.
+    """
     install("bussilab", user=user, timeout=timeout, upgrade=True)

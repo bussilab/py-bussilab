@@ -9,6 +9,11 @@ event and step index, and remaining steps still run. Child output is inherited
 by cron, including its Screen log when enabled. Detached Screen jobs retain
 their existing lifecycle.
 
+The explicit `selfupdate` step upgrades bussilab and may update dependencies in
+the running environment before restarting. Use it only for environments
+deliberately maintained in place. For shared or version-pinned environments,
+build and validate a new environment, then restart the scheduler there.
+
 ## Changelog
 
 - **v0.0.53**

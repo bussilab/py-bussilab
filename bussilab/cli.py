@@ -24,6 +24,9 @@ while the `wham` command reads a file.
 
 ## Changelog
 
+- **v0.0.53**
+  - Deprecated `pip_upgrade_all` in favor of rebuilding environments from
+    pinned requirements; retained the command with a visible warning.
 - **v0.0.52**
   - Added `notify --no-unfurl`, `--markdown-file`, and support for multiple
     paths with `--file`.
@@ -594,20 +597,20 @@ def _jremote(**kargs):
     from . import jremote
     jremote.remote(**kargs)
 
-@command("pip_upgrade_all", help="Upgrade all packages with pip",
+@command("pip_upgrade_all", help="Deprecated: upgrade all packages in place with pip",
          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 @arg("--user", action='store_true',
      help="install/upgrade in user location")
 def _pip_upgrade_all(**kargs):
     """
-       This is a tool to upgrade all your packages with pip.
-       It is a convenient way to upgrade all the packages without
-       the need to list them explicitly.
+       Deprecated: upgrade all discovered packages in place with pip.
 
-       Warning: this uses pip, so it might not work as expected
-       if you are working in conda.
+       Build and validate a new environment from pinned requirements instead,
+       keeping the previous environment available for rollback. This command
+       remains available for compatibility. It does not preserve version pins
+       and assumes all discovered packages are managed by pip.
 
-       The typical usage would be
+       Legacy usage:
        ```bash
        bussilab pip_upgrade_all
        ```
