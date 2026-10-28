@@ -3,6 +3,7 @@ from unittest import mock
 import numpy as np
 import subprocess
 import sys
+import importlib.util
 
 try:
     import RNA
@@ -3075,6 +3076,193 @@ class TestRNA2D(unittest.TestCase):
         if rna2d._SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
             with self.subTest(mode="patched"):
                 check()
+
+    @unittest.skipUnless(importlib.util.find_spec("matplotlib"), "Matplotlib not available")
+    def test_plot_arcs(self):
+        from matplotlib.figure import Figure
+
+        top = Molecule("GGGAAACCC")
+        bottom = Molecule("GGGAAACCC", lambdas1d=np.full(9, 0.2))
+        figure = Figure()
+        axes = figure.subplots(2, 1)
+        with mock.patch.object(Molecule, "mfe", side_effect=AssertionError("MFE calculated")):
+            result, plotted_axes = rna2d.plot_arcs(
+                top, bottom, panels=("bpp", "paired_probability"), axes=axes
+            )
+        self.assertIs(result, figure)
+        self.assertEqual(plotted_axes, tuple(axes))
+        np.testing.assert_allclose(axes[1].get_ylim(), (-1.2, 1.2))
+        self.assertGreater(max(axes[1].lines[0].get_ydata()), 0)
+        self.assertLess(min(axes[1].lines[1].get_ydata()), 0)
+
+        with mock.patch.object(Molecule, "mea", side_effect=AssertionError("MEA calculated")):
+            default_figure, default_axes = rna2d.plot_arcs(top)
+        self.assertEqual(
+            [axis.get_title(loc="left") for axis in default_axes],
+            ["MFE", "Paired probability", "BPP", "Positional entropy"],
+        )
+        self.assertLess(default_axes[0].get_position().x0, default_axes[1].get_position().x0)
+        self.assertGreater(default_axes[0].get_position().y0, default_axes[2].get_position().y0)
+        default_figure.canvas.draw()
+        self.assertAlmostEqual(default_axes[0].get_position().y0, default_axes[1].get_position().y0)
+        self.assertAlmostEqual(default_axes[2].get_position().y0, default_axes[3].get_position().y0)
+        self.assertAlmostEqual(default_axes[0].get_position().x0, default_axes[2].get_position().x0)
+        self.assertAlmostEqual(default_axes[1].get_position().x0, default_axes[3].get_position().x0)
+        self.assertIn(f"E={top.mfe()[1]:.2f}", default_axes[0].texts[0].get_text())
+        self.assertIn(f"F={top.total_free_energy():.2f}", default_axes[2].texts[0].get_text())
+        self.assertIn(f"D={top.mean_bp_distance():.2f}", default_axes[2].texts[0].get_text())
+        self.assertIn("mean=", default_axes[1].texts[0].get_text())
+        self.assertIn("bits", default_axes[3].texts[0].get_text())
+        np.testing.assert_allclose(default_axes[3].lines[0].get_ydata(), top.positional_entropy())
+        np.testing.assert_array_equal(default_axes[2].get_xticks(), np.arange(1, 10))
+
+        long_axis = Figure().subplots()
+        long_matrix = np.zeros((40, 40))
+        rna2d.plot_arcs(long_matrix, ax=long_axis)
+        self.assertLessEqual(len(long_axis.get_xticks()), 11)
+        np.testing.assert_array_equal(
+            long_axis.get_xticks(), [1, 5, 10, 15, 20, 25, 30, 35, 40]
+        )
+
+        single_axis = Figure().subplots()
+        _, plotted_axes = rna2d.plot_arcs("(((...)))", ax=single_axis)
+        self.assertEqual(plotted_axes, (single_axis,))
+        self.assertEqual(len(single_axis.collections), 1)
+        segment = single_axis.collections[0].get_segments()[0]
+        self.assertAlmostEqual(
+            (segment[:, 0].max() - segment[:, 0].min()) / 2,
+            segment[:, 1].max(), places=2,
+        )
+        self.assertEqual(single_axis.get_aspect(), 1.0)
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        FigureCanvasAgg(single_axis.figure)
+        single_axis.figure.canvas.draw()
+        transformed = single_axis.transData.transform([[1, 0], [2, 0], [1, 1]])
+        self.assertAlmostEqual(
+            transformed[1, 0] - transformed[0, 0],
+            transformed[2, 1] - transformed[0, 1],
+        )
+
+        bpp_axis = Figure().subplots()
+        _, plotted_axes = rna2d.plot_arcs(
+            top.base_pairing_probability(), ax=bpp_axis
+        )
+        self.assertEqual(plotted_axes, (bpp_axis,))
+        self.assertGreater(len(bpp_axis.collections), 0)
+        split_bpp = np.zeros((4, 4))
+        split_bpp[0, 2] = split_bpp[2, 0] = 0.25
+        split_bpp[0, 3] = split_bpp[3, 0] = 0.25
+        concentrated_bpp = np.zeros((4, 4))
+        concentrated_bpp[0, 3] = concentrated_bpp[3, 0] = 0.5
+        _, matrix_axes = rna2d.plot_arcs(split_bpp)
+        self.assertEqual(
+            [axis.get_title(loc="left") for axis in matrix_axes],
+            ["BPP", "Paired probability", "Positional entropy"],
+        )
+        _, split_axes = rna2d.plot_arcs(split_bpp, panels=("paired_probability", "positional_entropy"))
+        _, concentrated_axes = rna2d.plot_arcs(concentrated_bpp, panels=("paired_probability", "positional_entropy"))
+        self.assertAlmostEqual(split_axes[0].lines[0].get_ydata()[0], concentrated_axes[0].lines[0].get_ydata()[0])
+        self.assertGreater(split_axes[1].lines[0].get_ydata()[0], concentrated_axes[1].lines[0].get_ydata()[0])
+        _, comparison_axes = rna2d.plot_arcs(split_bpp, concentrated_bpp, panels=("positional_entropy",))
+        self.assertGreater(comparison_axes[0].lines[0].get_ydata()[0], 0)
+        self.assertLess(comparison_axes[0].lines[1].get_ydata()[0], 0)
+
+        grid_figure, grid_axes = rna2d.plot_arcs(
+            top, bottom, panels=("mfe", "centroid", "bpp", "paired_probability"),
+            ncols=2,
+        )
+        self.assertEqual(len(grid_axes), 4)
+        self.assertLess(grid_axes[0].get_position().x0, grid_axes[1].get_position().x0)
+        self.assertGreater(grid_axes[0].get_position().y0, grid_axes[2].get_position().y0)
+        self.assertEqual(sum(axis.get_visible() for axis in grid_figure.axes), 5)
+        grid_figure.canvas.draw()
+        for upper, lower in ((grid_axes[0], grid_axes[2]),
+                             (grid_axes[1], grid_axes[3])):
+            self.assertAlmostEqual(upper.get_position().x0, lower.get_position().x0)
+            self.assertAlmostEqual(upper.get_position().x1, lower.get_position().x1)
+
+        three_column_figure, three_column_axes = rna2d.plot_arcs(
+            top, bottom, panels=("mfe", "centroid", "bpp", "paired_probability"),
+            ncols=3,
+        )
+        self.assertEqual(len(three_column_axes), 4)
+        self.assertLess(
+            three_column_axes[1].get_position().x0,
+            three_column_axes[2].get_position().x0,
+        )
+        self.assertEqual(sum(axis.get_visible() for axis in three_column_figure.axes), 5)
+        with self.assertRaisesRegex(ValueError, "supported by the input"):
+            rna2d.plot_arcs(top, panels=("mea",))
+
+    @unittest.skipUnless(importlib.util.find_spec("matplotlib"), "Matplotlib not available")
+    def test_plot_arcs_selected_ensembles(self):
+        from matplotlib.figure import Figure
+
+        paired = "(((...)))"
+        unpaired = "........."
+        suboptimal = [(paired, 0.0), (unpaired, 0.3), (unpaired, 0.3)]
+        _, summary, _ = rna2d._arc_plot_input((suboptimal, 310.15))
+        self.assertEqual(summary["mfe"], unpaired)
+        expected_pair_probability = 1.0 / (
+            1.0 + 2.0 * np.exp(-0.3 / (rna2d._KB * 310.15))
+        )
+        self.assertAlmostEqual(summary["bpp"][0, 8], expected_pair_probability)
+        self.assertEqual(summary["centroid"], unpaired)
+        self.assertAlmostEqual(summary["mfe_energy"], 0.3)
+        self.assertAlmostEqual(
+            summary["free_energy"],
+            -rna2d._KB * 310.15 * np.log(
+                1.0 + 2.0 * np.exp(-0.3 / (rna2d._KB * 310.15))
+            ),
+        )
+        _, selected_axes = rna2d.plot_arcs((suboptimal, 310.15))
+        self.assertEqual(len(selected_axes), 4)
+        self.assertIn("E=0.30", selected_axes[0].texts[0].get_text())
+        self.assertIn("Fsel=", selected_axes[2].texts[0].get_text())
+        self.assertIn("D=", selected_axes[2].texts[0].get_text())
+        self.assertIn("mean=", selected_axes[1].texts[0].get_text())
+        self.assertIn("bits", selected_axes[3].texts[0].get_text())
+        tables, logweights = rna2d.suboptimal_to_numpy(suboptimal, 310.15)
+        _, numpy_summary, _ = rna2d._arc_plot_input((tables, logweights))
+        self.assertAlmostEqual(numpy_summary["bpp"][0, 8], expected_pair_probability)
+
+        full_bpp = np.zeros((9, 9))
+        full_bpp[0, 8] = full_bpp[8, 0] = 0.8
+        axis = Figure().subplots()
+        _, plot_axes = rna2d.plot_arcs(full_bpp, (suboptimal, 310.15), ax=axis)
+        self.assertEqual(plot_axes, (axis,))
+        self.assertEqual(len(axis.collections), 2)
+        self.assertGreater(axis.collections[0].get_segments()[0][:, 1].max(), 0)
+        self.assertLess(axis.collections[1].get_segments()[0][:, 1].min(), 0)
+        _, mixed_axes = rna2d.plot_arcs(
+            Molecule("GGGAAACCC"), (suboptimal, 310.15),
+            panels=("bpp", "paired_probability"),
+        )
+        self.assertEqual(len(mixed_axes), 2)
+        _, temperature_axes = rna2d.plot_arcs(
+            (suboptimal, 280.0), (suboptimal, 330.0), panels=("bpp",),
+        )
+        self.assertEqual(len(temperature_axes), 1)
+        self.assertNotAlmostEqual(
+            rna2d._arc_plot_input((suboptimal, 280.0))[1]["bpp"][0, 8],
+            rna2d._arc_plot_input((suboptimal, 330.0))[1]["bpp"][0, 8],
+        )
+
+        sampled = [(unpaired, np.log(0.2)), (paired, np.log(0.8))]
+        _, weighted_summary, _ = rna2d._arc_plot_input((sampled, "sample"))
+        self.assertEqual(weighted_summary["mfe"], paired)
+        self.assertAlmostEqual(weighted_summary["bpp"][0, 8], 0.8)
+        _, sampled_axes = rna2d.plot_arcs((sampled, "sample"))
+        self.assertIn("mode P=", sampled_axes[0].texts[0].get_text())
+        self.assertNotIn("F=", sampled_axes[2].texts[0].get_text())
+        states, logweights = rna2d.sample_to_numpy([unpaired, paired, unpaired])
+        _, selected_summary, _ = rna2d._arc_plot_input(
+            (states[1:], logweights[1:])
+        )
+        self.assertEqual(selected_summary["mfe"], paired)
+        self.assertAlmostEqual(selected_summary["bpp"][0, 8], 1.0)
+        with self.assertRaisesRegex(ValueError, "wrap suboptimal output"):
+            rna2d.plot_arcs(suboptimal)
 
     def test_pairing_correlation_matrix_restores_unconstrained_pf(self):
         mol = Molecule("GCGCGCGC")

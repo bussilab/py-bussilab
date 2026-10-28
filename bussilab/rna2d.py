@@ -28,6 +28,12 @@ required when constructing a :class:`Molecule`.
 - **v0.0.53**
   - Fixed suboptimal enumeration and coverage with soft constraints on
     unpatched ViennaRNA by using base-pair constraints in the fallback.
+  - Added optional Matplotlib arc plots for structures, base-pair probabilities,
+    per-nucleotide pairing probabilities, and positional entropy, including
+    selected suboptimal or sampled ensembles and comparisons with the
+    full-ensemble BPP. The default four-panel layout reports energy, ensemble
+    diversity, mean paired probability, and mean positional entropy where
+    available.
 - **v0.0.52**
   - Added exact state mixtures with `state_positions` and `state_biases`,
     allowing coupled paired/unpaired-state energy biases. Multiple disjoint
@@ -3285,3 +3291,504 @@ class Molecule:
             probabilities.
         """
         return self._pairing_correlation_matrix_pf()
+
+
+_ARC_PROBABILITY_BOUNDS = (0.0, 0.25, 0.5, 0.75, 1.0)
+_ARC_PROBABILITY_COLORS = ("#D8D8D8", "#E8C84A", "#1565C0", "#4CAF50")
+_ARC_PANEL_NAMES = ("mfe", "centroid", "bpp", "paired_probability", "positional_entropy")
+
+
+def _arc_positional_entropy(probability):
+    """Partner-choice entropy in bits, including the unpaired outcome."""
+    unpaired = np.clip(1.0 - np.sum(probability, axis=1), 0.0, 1.0)
+    log_probability = np.zeros_like(probability)
+    np.log2(probability, out=log_probability, where=probability > 0.0)
+    log_unpaired = np.zeros_like(unpaired)
+    np.log2(unpaired, out=log_unpaired, where=unpaired > 0.0)
+    return -np.sum(probability * log_probability, axis=1) - unpaired * log_unpaired
+
+
+def _arc_pairs_from_structure(structure):
+    stack = []
+    pairs = []
+    for index, symbol in enumerate(structure):
+        if symbol == "(":
+            stack.append(index)
+        elif symbol == ")":
+            if not stack:
+                raise ValueError("unbalanced dot-bracket structure")
+            pairs.append((stack.pop(), index))
+        elif symbol != ".":
+            raise ValueError("structure must use dot-bracket notation")
+    if stack:
+        raise ValueError("unbalanced dot-bracket structure")
+    return pairs
+
+
+def _arc_ensemble_data(states, logweights, *, energies=None, temperature=None):
+    """Summarize selected pair tables using their relative populations."""
+    states = np.asarray(states)
+    if states.ndim != 2 or not states.shape[0] or states.dtype.kind not in "iu":
+        raise ValueError("ensemble states must be a nonempty 2D integer pair-table array")
+    logweights = np.asarray(logweights, dtype=float)
+    if logweights.shape != (len(states),):
+        raise ValueError("ensemble log weights must have one value per structure")
+    logweights = _normalize_logweights(logweights)
+    length = states.shape[1]
+    structures = [
+        _pairtable_to_dotbracket(row, "N" * length, check_pairs=False)[0]
+        for row in states
+    ]
+    populations = np.exp(logweights)
+    probability = np.zeros((length, length), dtype=float)
+    rows, left = np.nonzero(states > np.arange(length))
+    right = states[rows, left]
+    np.add.at(probability, (left, right), populations[rows])
+    probability += probability.T
+    combined_logweights = {}
+    for structure, logweight in zip(structures, logweights):
+        combined_logweights[structure] = np.logaddexp(
+            combined_logweights.get(structure, -np.inf), logweight
+        )
+    highest_population = max(combined_logweights, key=combined_logweights.get)
+    i, j = np.nonzero(np.triu(probability > 0.5, 1))
+    centroid = ["."] * length
+    for left, right in zip(i, j):
+        centroid[left] = "("
+        centroid[right] = ")"
+    result = {
+        "mfe": highest_population,
+        "mfe_population": float(np.exp(combined_logweights[highest_population])),
+        "centroid": "".join(centroid),
+        "bpp": probability,
+    }
+    if energies is not None:
+        energies = np.asarray(energies, dtype=float)
+        result["mfe_energy"] = float(min(
+            energy for structure, energy in zip(structures, energies)
+            if structure == highest_population
+        ))
+        result["free_energy"] = float(
+            -_KB * temperature * np.logaddexp.reduce(-energies / (_KB * temperature))
+        )
+    return result
+
+
+def _arc_plot_input(value):
+    if isinstance(value, Molecule):
+        return "molecule", value, len(value.sequence)
+    if isinstance(value, str):
+        _arc_pairs_from_structure(value)
+        return "structure", value, len(value)
+    if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], (int, float, np.number)) and not isinstance(value[1], (bool, np.bool_)):
+        suboptimal, temperature = value
+        suboptimal = list(suboptimal)
+        states, logweights = suboptimal_to_numpy(suboptimal, temperature)
+        data = _arc_ensemble_data(
+            states, logweights,
+            energies=[item[1] for item in suboptimal], temperature=temperature,
+        )
+        return "ensemble", data, len(data["bpp"])
+    if isinstance(value, tuple) and len(value) == 2 and isinstance(value[1], str) and value[1] == "sample":
+        states, logweights = sample_to_numpy(value[0])
+        data = _arc_ensemble_data(states, logweights)
+        return "ensemble", data, len(data["bpp"])
+    if (isinstance(value, (list, tuple)) and len(value) == 2
+            and isinstance(value[0], np.ndarray) and value[0].ndim == 2):
+        data = _arc_ensemble_data(*value)
+        return "ensemble", data, len(data["bpp"])
+    if isinstance(value, np.ndarray) and value.ndim == 2 and value.dtype.kind in "iu":
+        if (value.shape[0] != value.shape[1]
+                or np.any(value < 0) or np.any(value > 1)
+                or not np.array_equal(value, value.T)):
+            data = _arc_ensemble_data(value, np.zeros(len(value)))
+            return "ensemble", data, len(data["bpp"])
+    if isinstance(value, (list, tuple, np.ndarray)) and len(value):
+        first = value[0]
+        if isinstance(first, str):
+            states, logweights = sample_to_numpy(value)
+            data = _arc_ensemble_data(states, logweights)
+            return "ensemble", data, len(data["bpp"])
+        if hasattr(first, "__len__") and len(first) == 2 and isinstance(first[0], str):
+            raise ValueError(
+                "wrap suboptimal output as (result, temperature), or weighted "
+                "samples as (result, 'sample')"
+            )
+    matrix = np.asarray(value, dtype=float)
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
+        raise ValueError("base-pair probabilities must be a square matrix")
+    if not np.all(np.isfinite(matrix)) or np.any(matrix < -1e-8) or np.any(matrix > 1.0 + 1e-8):
+        raise ValueError("base-pair probabilities must be finite and in [0, 1]")
+    if not np.allclose(matrix, matrix.T, atol=1e-7):
+        raise ValueError("base-pair probability matrix must be symmetric")
+    if np.any(np.sum(matrix, axis=1) > 1.0 + 1e-6):
+        raise ValueError("base-pair probabilities cannot sum above one")
+    return "bpp", matrix, len(matrix)
+
+
+def plot_arcs(
+    top, bottom=None, *, panels=None, ax=None, axes=None, sequence=None,
+    show_sequence=False, min_probability=0.05, probability_colors=None,
+    figsize=None, labels=None, ncols=2,
+):
+    """Plot RNA structures and pairing probabilities with Matplotlib.
+
+    ``top`` and ``bottom`` may each be a :class:`Molecule`, a symmetric
+    base-pair probability matrix, a dot-bracket structure, or a selected
+    structure ensemble. Ensembles may be unweighted ``mol.sample(100)`` output,
+    ``(mol.suboptimal_structures(delta), mol.temperature)`` with temperature
+    in kelvin, ``(mol.sample(100, weights=True), "sample")``, or the
+    ``(states, logweights)`` pair returned by the NumPy conversion helpers.
+    The literal ``"sample"`` marks the second form as weighted samples:
+    its pairs contain log weights, whereas suboptimal pairs contain energies.
+    A 2D integer array of pair tables is also accepted with equal weights.
+    Selected structures are renormalized; repeated structures are combined
+    when choosing the highest-population structure for the MFE panel.
+    For example, ``plot_arcs(molecule.base_pairing_probability(),
+    (filtered, molecule.temperature))`` compares the full BPP above a selected
+    suboptimal ensemble. NumPy pair tables and log weights can be sliced
+    together before plotting to select structures by hand.
+    The first input is drawn above the nucleotide axis and the second below it;
+    they may have different input types but must have equal lengths. A single
+    molecule or selected ensemble produces MFE and BPP on the left, and 1D
+    paired probability and positional entropy on the right. Select and reorder
+    panels with ``panels``; ``centroid`` remains available. Positional entropy
+    is the Shannon entropy (in bits) of each nucleotide's pairing partner,
+    including the unpaired state. Matrix inputs default to BPP, paired
+    probability, and positional entropy panels.
+    BPP arcs below
+    ``min_probability`` (default 0.05) are omitted. The four default colors and
+    probability bands follow the MERGE-RNA adenine-riboswitch arc plot; pass
+    ``probability_colors`` to replace the four colors.
+
+    Panel annotations report the MFE energy ``E`` when energies are available,
+    the full ``Molecule`` free energy ``F`` or selected-suboptimal free energy
+    ``Fsel``, mean base-pair distance ``D``, mean paired probability, and mean
+    positional entropy. Energies are in kcal/mol. Sampled and NumPy-converted ensembles
+    lack an absolute energy reference, so their MFE panel instead shows the
+    selected structure's population and their BPP panel omits free energy.
+
+    ``ax`` selects an existing axis for a single panel. ``axes`` selects one
+    axis per panel. With neither argument, a new figure is created; pass
+    ``ax=plt.gca()`` to draw on Matplotlib's current axis. Set ``ncols`` to 1,
+    2, or 3 to arrange newly created panels; two columns are the default. With
+    two columns, an unpaired final panel spans both. ``show_sequence=True``
+    adds nucleotide letters below the last row, using the molecule's sequence
+    or an explicit ``sequence``.
+    ``labels=(top_label, bottom_label)`` annotates the two sides. Matplotlib is an
+    optional dependency and is imported only by this function. The x axis has
+    a tick at every nucleotide for sequences of up to 15 bases; longer
+    sequences use fewer integer ticks.
+
+    Returns
+    -------
+    (figure, tuple of axes)
+        The figure and one axis for each requested panel.
+    """
+    from matplotlib import pyplot as plt
+    from matplotlib.collections import LineCollection
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.ticker import FuncFormatter
+
+    top_kind, top_value, length = _arc_plot_input(top)
+    if bottom is None:
+        bottom_kind, bottom_value = None, None
+    else:
+        bottom_kind, bottom_value, bottom_length = _arc_plot_input(bottom)
+        if bottom_length != length:
+            raise ValueError("top and bottom must have the same length")
+        if top_kind == bottom_kind == "molecule" and top_value.sequence != bottom_value.sequence:
+            raise ValueError("top and bottom molecules must have the same sequence")
+
+    panel_options = {
+        "molecule": _ARC_PANEL_NAMES,
+        "ensemble": _ARC_PANEL_NAMES,
+        "bpp": ("bpp", "paired_probability", "positional_entropy"),
+        "structure": ("structure",),
+    }
+    allowed = tuple(
+        panel for panel in panel_options[top_kind]
+        if bottom_kind is None or panel in panel_options[bottom_kind]
+    )
+
+    if panels is None:
+        if ax is not None:
+            panels = ("bpp",) if "bpp" in allowed else ("structure",)
+        elif "mfe" in allowed:
+            panels = ("mfe", "paired_probability", "bpp", "positional_entropy")
+        elif "bpp" in allowed:
+            panels = ("bpp", "paired_probability", "positional_entropy")
+        else:
+            panels = ("structure",)
+    elif isinstance(panels, str):
+        panels = (panels,)
+    else:
+        panels = tuple(panels)
+    if not panels or len(set(panels)) != len(panels) or any(panel not in allowed for panel in panels):
+        raise ValueError("panels must be distinct and supported by the input")
+    if ax is not None and axes is not None:
+        raise ValueError("specify either ax or axes")
+    if ax is not None and len(panels) != 1:
+        raise ValueError("ax requires exactly one panel; use axes for multiple panels")
+    if ncols not in (1, 2, 3):
+        raise ValueError("ncols must be 1, 2, or 3")
+    if not np.isfinite(min_probability) or not 0.0 <= min_probability <= 1.0:
+        raise ValueError("min_probability must be in [0, 1]")
+    if probability_colors is None:
+        probability_colors = _ARC_PROBABILITY_COLORS
+    if len(probability_colors) != 4:
+        raise ValueError("probability_colors must contain four colors")
+    if labels is not None and len(labels) != 2:
+        raise ValueError("labels must contain top and bottom labels")
+
+    if sequence is None:
+        if top_kind == "molecule":
+            sequence = top_value.sequence
+        elif bottom_kind == "molecule":
+            sequence = bottom_value.sequence
+    if sequence is not None and len(sequence) != length:
+        raise ValueError("sequence length does not match the plotted data")
+    if show_sequence and sequence is None:
+        raise ValueError("sequence is required when show_sequence=True")
+
+    if ax is not None:
+        plot_axes = (ax,)
+    elif axes is not None:
+        plot_axes = tuple(np.ravel(np.asarray(axes, dtype=object)))
+        if len(plot_axes) != len(panels):
+            raise ValueError("axes must contain one axis per panel")
+    elif len(panels) == 1 and figsize is None:
+        _, made_axis = plt.subplots(layout="compressed")
+        plot_axes = (made_axis,)
+    else:
+        columns = min(ncols, len(panels))
+        rows = (len(panels) + columns - 1) // columns
+        panel_width = max(3.6, min(8.0, length / 20.0))
+        row_heights = []
+        for row in range(rows):
+            row_panels = panels[row * columns:(row + 1) * columns]
+            arc_width = panel_width * (
+                2 if columns == 2 and len(row_panels) == 1 else 1
+            )
+            row_heights.append(max(
+                2.2 if panel in ("paired_probability", "positional_entropy") else
+                arc_width * (0.94 if bottom is not None else 0.65)
+                for panel in row_panels
+            ))
+        if figsize is None:
+            figsize = (
+                panel_width * columns,
+                sum(row_heights) + 0.12 * rows
+                + ((1.65 if bottom is not None else 0.75) if "bpp" in panels else 0.0),
+            )
+        if columns == 2 and len(panels) % 2:
+            figure = plt.figure(figsize=figsize, layout="compressed")
+            grid = figure.add_gridspec(rows, 2, height_ratios=row_heights)
+            made_axes = []
+            for index in range(len(panels)):
+                slot = grid[index // 2, :] if index == len(panels) - 1 else grid[index // 2, index % 2]
+                made_axes.append(figure.add_subplot(
+                    slot, sharex=made_axes[0] if made_axes else None
+                ))
+            plot_axes = tuple(made_axes)
+        else:
+            _, made_axes = plt.subplots(
+                rows, columns, sharex=True, figsize=figsize,
+                layout="compressed", gridspec_kw={"height_ratios": row_heights},
+            )
+            made_axes = tuple(np.ravel(np.asarray(made_axes, dtype=object)))
+            plot_axes = made_axes[:len(panels)]
+            for unused_axis in made_axes[len(panels):]:
+                unused_axis.set_visible(False)
+        figure = plot_axes[0].figure
+        figure.get_layout_engine().set(h_pad=0.02, w_pad=0.02, hspace=0.02, wspace=0.02)
+    figure = plot_axes[0].figure
+    if any(axis.figure is not figure for axis in plot_axes):
+        raise ValueError("all axes must belong to the same figure")
+
+    if length <= 15:
+        x_ticks = np.arange(1, length + 1)
+    else:
+        target_step = max(5.0, length / 10.0)
+        magnitude = 10 ** int(np.floor(np.log10(target_step)))
+        step = next(
+            candidate * magnitude for candidate in (1, 2, 5, 10)
+            if candidate * magnitude >= target_step
+        )
+        x_ticks = np.concatenate(([1], np.arange(step, length + 1, step)))
+
+    colormap = ListedColormap(probability_colors)
+    norm = BoundaryNorm(_ARC_PROBABILITY_BOUNDS, colormap.N)
+    theta = np.linspace(0.0, np.pi, 48)
+
+    def data_for(value, kind, panel):
+        if kind == "molecule":
+            if panel == "mfe":
+                return value.mfe()[0]
+            if panel == "centroid":
+                return value.centroid()[0]
+            return value.base_pairing_probability()
+        if kind == "ensemble":
+            return value["bpp"] if panel in ("paired_probability", "positional_entropy") else value[panel]
+        return value
+
+    def metrics_for(value, kind, panel, data):
+        if panel == "mfe":
+            if kind == "molecule":
+                return (f"E={value.mfe()[1]:.2f} kcal/mol",)
+            if kind == "ensemble":
+                if "mfe_energy" in value:
+                    return (f"E={value['mfe_energy']:.2f} kcal/mol",)
+                return (f"mode P={value['mfe_population']:.2f}",)
+        if panel == "bpp":
+            parts = []
+            if kind == "molecule":
+                parts.append(f"F={value.total_free_energy():.2f}")
+            elif kind == "ensemble" and "free_energy" in value:
+                parts.append(f"Fsel={value['free_energy']:.2f}")
+            parts.append(f"D={np.sum(data * (1.0 - data)):.2f}")
+            return ("  ".join(parts),)
+        if panel == "paired_probability":
+            mean_paired = float(np.mean(np.sum(data, axis=1))) if len(data) else 0.0
+            return (f"mean={mean_paired:.2f}",)
+        if panel == "positional_entropy":
+            entropy = _arc_positional_entropy(data)
+            return (f"mean={np.mean(entropy):.2f} bits",)
+        return ()
+
+    def draw_arcs(axis, value, panel, sign):
+        if panel in ("mfe", "centroid", "structure"):
+            pair_values = [(i, j, 1.0) for i, j in _arc_pairs_from_structure(value)]
+            colors = "#274c77" if sign > 0 else "#a34a28"
+        else:
+            i, j = np.nonzero(np.triu((value > 0.0) & (value >= min_probability), 1))
+            pair_values = [(int(a), int(b), float(value[a, b])) for a, b in zip(i, j)]
+            pair_values.sort(key=lambda item: item[2])
+            colors = [colormap(norm(probability)) for _, _, probability in pair_values]
+        paths = []
+        for i, j, _ in pair_values:
+            radius = (j - i) / 2.0
+            paths.append(np.column_stack((
+                (i + j) / 2.0 + 1.0 - radius * np.cos(theta),
+                sign * radius * np.sin(theta),
+            )))
+        if paths:
+            axis.add_collection(LineCollection(paths, colors=colors, linewidths=1.1))
+        return max(((j - i) / 2.0 for i, j, _ in pair_values), default=0.0)
+
+    for panel, axis in zip(panels, plot_axes):
+        upper = data_for(top_value, top_kind, panel)
+        lower = data_for(bottom_value, bottom_kind, panel) if bottom_kind else None
+        if panel in ("paired_probability", "positional_entropy"):
+            axis.yaxis.tick_right()
+            positions = np.arange(1, length + 1)
+            top_profile = (
+                np.clip(np.sum(upper, axis=1), 0.0, 1.0)
+                if panel == "paired_probability" else _arc_positional_entropy(upper)
+            )
+            axis.fill_between(positions, 0, top_profile, color="#274c77", alpha=0.28)
+            axis.plot(positions, top_profile, color="#274c77", lw=1.3)
+            if lower is not None:
+                bottom_profile = (
+                    np.clip(np.sum(lower, axis=1), 0.0, 1.0)
+                    if panel == "paired_probability" else _arc_positional_entropy(lower)
+                )
+                axis.fill_between(positions, 0, -bottom_profile, color="#a34a28", alpha=0.28)
+                axis.plot(positions, -bottom_profile, color="#a34a28", lw=1.3)
+            scale = (1.0 if panel == "paired_probability" else
+                     max(1.0, np.ceil(2.0 * max(
+                         float(np.max(top_profile)),
+                         float(np.max(bottom_profile)) if lower is not None else 0.0,
+                     )) / 2.0))
+            axis.set_ylim(-1.2 * scale if lower is not None else -0.05 * scale, 1.2 * scale)
+            axis.set_yticks([-scale, 0, scale] if lower is not None else [0, 0.5 * scale, scale])
+            if lower is not None:
+                axis.set_yticklabels([f"{scale:g}", "0", f"{scale:g}"])
+            elif panel == "positional_entropy":
+                axis.set_yticklabels(["0", f"{scale / 2:g}", f"{scale:g}"])
+        else:
+            height = draw_arcs(axis, upper, panel, +1)
+            if lower is not None:
+                height = max(height, draw_arcs(axis, lower, panel, -1))
+            height = max(height, 1.0)
+            axis.set_ylim(-1.1 * height if lower is not None else -0.08 * height, 1.1 * height, auto=True)
+            axis.set_yticks([])
+            axis.set_aspect("equal", adjustable="datalim")
+        axis.axhline(0.0, color="#555555", lw=0.6)
+        axis.set_xlim(0.5, length + 0.5)
+        if panel not in ("paired_probability", "positional_entropy"):
+            axis.set_autoscalex_on(True)
+        axis.set_xticks(x_ticks)
+        axis.tick_params(axis="x", labelbottom=False, labelsize=13)
+        axis.tick_params(axis="y", labelsize=13)
+        axis.set_facecolor("#fcfcfc")
+        axis.set_title(
+            {"paired_probability": "Paired probability",
+             "positional_entropy": "Positional entropy"}.get(panel, panel.upper()),
+            loc="left", x=0.02, y=0.87, va="top", fontsize=15,
+            bbox={"facecolor": "#fcfcfc", "edgecolor": "none", "pad": 1.0},
+        )
+        for value, kind, panel_data, side in (
+            (top_value, top_kind, upper, "top"),
+            (bottom_value, bottom_kind, lower, "bottom"),
+        ):
+            if kind is None:
+                continue
+            metrics = metrics_for(value, kind, panel, panel_data)
+            if metrics:
+                marker = "↑ " if bottom_kind is not None and side == "top" else (
+                    "↓ " if side == "bottom" else ""
+                )
+                axis.text(
+                    0.98, 0.98 if side == "top" else 0.02,
+                    "\n".join(marker + metric for metric in metrics),
+                    transform=axis.transAxes, ha="right",
+                    va="top" if side == "top" else "bottom", fontsize=12,
+                    bbox={"facecolor": "#fcfcfc", "edgecolor": "none", "alpha": 0.9, "pad": 1.0},
+                )
+        for spine in axis.spines.values():
+            spine.set_visible(True)
+            spine.set_color("#d0d0d0")
+            spine.set_linewidth(0.8)
+        if labels is not None:
+            axis.text(0.02, 0.77, str(labels[0]), transform=axis.transAxes,
+                      fontsize=12, va="top", ha="left")
+            if lower is not None:
+                axis.text(0.02, 0.12, str(labels[1]), transform=axis.transAxes,
+                          fontsize=12, va="bottom", ha="left")
+    if "bpp" in panels:
+        colorbar = figure.colorbar(
+            ScalarMappable(norm=norm, cmap=colormap), ax=plot_axes,
+            orientation="horizontal", location="bottom",
+            ticks=(0.125, 0.375, 0.625, 0.875),
+            format=FuncFormatter(lambda value, _: ("0.05–0.25", "0.25–0.50", "0.50–0.75", "0.75–1")[
+                min(3, int(value * 4))
+            ]),
+            shrink=0.7, aspect=40,
+            fraction=0.05, pad=0.18,
+        )
+        colorbar.ax.tick_params(labelsize=12)
+        colorbar.set_label("Base-pair probability", fontsize=14)
+
+    columns = min(ncols, len(panels))
+    if axes is None and ax is None:
+        bottom_indices = tuple(range(((len(panels) - 1) // columns) * columns, len(panels)))
+    else:
+        bottom_indices = tuple(
+            max(i for i in range(len(panels)) if i % columns == column)
+            for column in range(columns)
+        )
+    for index in bottom_indices:
+        final_axis = plot_axes[index]
+        final_axis.tick_params(axis="x", labelbottom=True)
+        final_axis.set_xlabel("Nucleotide position (1-based)", fontsize=14)
+        if show_sequence:
+            for index, base in enumerate(sequence, 1):
+                final_axis.text(
+                    index, -0.17, base, transform=final_axis.get_xaxis_transform(),
+                    ha="center", va="top", family="monospace", fontsize=10,
+                    clip_on=False,
+                )
+            final_axis.xaxis.labelpad = 38
+    return figure, plot_axes
