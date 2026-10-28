@@ -1,8 +1,42 @@
 """
 General purpose tools.
+
+## Changelog
+
+- **v0.0.52**
+  - Removed the unused `file_or_path()` helper.
+  - Fixed `TestCase.assertEqualFile()` to close the first file when opening
+    the second file fails.
+  - Made `config_path()` use `Path.home()` for the default configuration path,
+    allowing home directory lookup when `HOME` is unset.
+  - Documented configuration loading and fixed the `Result` constructor example.
+- **v0.0.45**
+  - Changed `import_numba_jit()` to return `numba.njit` instead of `numba.jit`.
+- **v0.0.41**
+  - Added `import_numba_jit()`, with a warning and an undecorated Python fallback
+    when importing Numba fails.
+- **v0.0.38**
+  - Made `cd(create=True)` create missing parent directories as well.
+- **v0.0.37**
+  - Added the `create` option to `cd()`.
+- **v0.0.35**
+  - Fixed missing-file error messages in `TestCase.assertEqualFile()` for
+    path objects.
+- **v0.0.34**
+  - Added `config_path()` to expose the configuration file path.
+- **v0.0.33**
+  - Added explicit missing-file failure messages to `TestCase.assertEqualFile()`.
+- **v0.0.29**
+  - Made `ensure_np_array()` convert NumPy scalars to zero-dimensional arrays
+    and corrected its return annotation to include `None`.
+- **v0.0.18**
+  - Made `Result.__dir__()` return keys in alphabetical order.
+- **v0.0.7**
+  - Introduced array conversion, file opening, result containers, temporary
+    directory changes, and file-comparison assertions.
+  - Added YAML configuration loading from `~/.bussilabrc` or an explicit path.
 """
 from contextlib import contextmanager
-import gzip
 import os
 import unittest
 import pathlib
@@ -16,16 +50,6 @@ def ensure_np_array(arg) -> Optional[np.ndarray]:
     """Convert arg to np.array if necessary."""
     if arg is not None and not isinstance(arg, np.ndarray):
         return np.array(arg)
-    return arg
-
-def file_or_path(arg, mode: str):
-    """Convert a path to an open file object if necessary."""
-    if isinstance(arg, str):
-        arg = open(arg, mode)
-    if isinstance(arg, bytes):
-        arg = open(str(arg), mode)
-    if re.match(r".*\.gz", arg.name):
-        arg = gzip.open(arg, mode)
     return arg
 
 def import_numba_jit():
@@ -85,7 +109,7 @@ class Result(dict):
 
        class MytoolResult(coretools.Result):
            """Result of a mytool calculation."""
-           def __init__(a, b):
+           def __init__(self, a, b):
                super().__init__()
                self.a = a
                """Documentation for attribute a."""
@@ -190,21 +214,27 @@ class TestCase(unittest.TestCase):
         except FileNotFoundError:
             self.fail("file " +str(file1) + " was not found")
 
-        try:
-            f2=open(file2, "r")
-        except FileNotFoundError:
-            self.fail("file " +str(file2) + " was not found")
-
         with f1:
+            try:
+                f2=open(file2, "r")
+            except FileNotFoundError:
+                self.fail("file " +str(file2) + " was not found")
             with f2:
                 self.assertEqual(f1.read(), f2.read())
 
 def config_path(path: Optional[os.PathLike] = None):
+    """Return the supplied path, or ``~/.bussilabrc`` when omitted."""
     if path is None:
-        path = pathlib.PurePath(os.environ["HOME"]+"/.bussilabrc")
+        path = pathlib.Path.home() / ".bussilabrc"
     return path
 
 def config(path: Optional[os.PathLike] = None):
+    """Read YAML configuration from a path, defaulting to ``~/.bussilabrc``.
+
+    Scalar values are returned as strings, including numbers and booleans.
+    An empty file returns ``None``. File and YAML parsing errors propagate
+    to the caller.
+    """
     with open(config_path(path)) as rc:
         return yaml.load(rc,Loader=yaml.BaseLoader)
 

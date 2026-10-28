@@ -1,4 +1,8 @@
 import unittest
+import os
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import bussilab.coretools as coretools
 
@@ -170,7 +174,7 @@ class Test(unittest.TestCase):
                 with coretools.cd("test_dir",create=True):
                     with open("test_file","w") as f:
                         print("content",file=f)
-                raise test_raise # test if directory is changed back
+                    raise test_raise # test if directory is changed back
             except test_raise:
                 pass
             with open("test_dir/test_file") as f:
@@ -189,7 +193,7 @@ class Test(unittest.TestCase):
                 with coretools.cd("test_dir/subdir",create=True):
                     with open("test_file","w") as f:
                         print("content",file=f)
-                raise test_raise # test if directory is changed back
+                    raise test_raise # test if directory is changed back
             except test_raise:
                 pass
             with open("test_dir/subdir/test_file") as f:
@@ -198,6 +202,56 @@ class Test(unittest.TestCase):
             os.remove("test_dir/subdir/test_file")
             os.rmdir("test_dir/subdir")
             os.rmdir("test_dir")
+
+    def test_config_path(self):
+        path = Path("custom.yml")
+        self.assertIs(coretools.config_path(path), path)
+        self.assertEqual(coretools.config_path("custom.yml"), "custom.yml")
+        with TemporaryDirectory() as home:
+            with patch.dict(os.environ, {"HOME": home}):
+                self.assertEqual(coretools.config_path(), Path(home) / ".bussilabrc")
+            with patch.dict(os.environ):
+                os.environ.pop("HOME", None)
+                self.assertEqual(coretools.config_path(), Path.home() / ".bussilabrc")
+
+    def test_config(self):
+        import yaml
+
+        with TemporaryDirectory() as home:
+            path = Path(home) / ".bussilabrc"
+            path.write_text("number: 12\nflag: true\nempty: null\nsteps:\n  - run\n")
+            expected = {"number": "12", "flag": "true", "empty": "null",
+                        "steps": ["run"]}
+            self.assertEqual(coretools.config(path), expected)
+            with patch.dict(os.environ, {"HOME": home}):
+                self.assertEqual(coretools.config(), expected)
+            path.write_text("")
+            self.assertIsNone(coretools.config(path))
+            path.write_text("steps: [\n")
+            with self.assertRaises(yaml.YAMLError):
+                coretools.config(path)
+            with self.assertRaises(FileNotFoundError):
+                coretools.config(Path(home) / "missing.yml")
+
+    def test_assert_equal_file(self):
+        case = coretools.TestCase()
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "output"
+            reference = Path(str(path) + ".ref")
+            path.write_text("content\n")
+            reference.write_text("content\n")
+            case.assertEqualFile(path)
+            case.assertEqualFile(path, reference)
+            reference.write_text("different\n")
+            with self.assertRaises(AssertionError):
+                case.assertEqualFile(path)
+            with self.assertRaisesRegex(AssertionError, "was not found"):
+                case.assertEqualFile(Path(directory) / "missing")
+            with path.open() as first:
+                with patch("builtins.open", side_effect=[first, FileNotFoundError()]):
+                    with self.assertRaisesRegex(AssertionError, "was not found"):
+                        case.assertEqualFile(path, reference)
+                self.assertTrue(first.closed)
 
 if __name__ == "__main__":
     unittest.main()
