@@ -1,3 +1,53 @@
+"""
+Run independent Python and Bash steps periodically, optionally inside Screen.
+
+A running scheduler reloads its YAML configuration at scheduled events. Read or
+validation failures are logged and the last valid configuration stays active;
+startup requires a valid configuration. A changed period reschedules the next
+event. Individual step errors, nonzero exits and timeouts are logged with the
+event and step index, and remaining steps still run. Child output is inherited
+by cron, including its Screen log when enabled. Detached Screen jobs retain
+their existing lifecycle.
+
+## Changelog
+
+- **v0.0.53**
+  - Retain the last valid configuration after reload failures, with explicit
+    diagnostics; validate configuration structure and positive periods.
+  - Continue independent steps after errors, nonzero exits and timeouts,
+    logging the failing step and traceback.
+  - Fix fractional-second scheduling arithmetic while retaining local-week
+    alignment and existing skip/delay expressions.
+- **v0.0.42**
+  - Use integer event/period division when evaluating skip/delay schedules.
+- **v0.0.41**
+  - Read the period from configuration when not explicitly overridden, and
+    reload it during operation. Support a mapping with ``period`` and ``steps``
+    alongside the original list form; rename ``jobs`` to ``steps``.
+  - Resume at the next step after reboot/self-update, preserving the scheduled
+    event and remaining iteration count. Add quick-start resume options.
+  - Account for fractional seconds when waiting for scheduled events; improve
+    event/step logging and continue after unsupported Screen reboot requests.
+  - Shorten long Screen socket names with a hash suffix.
+- **v0.0.35**
+  - Add self-update and reboot steps using replacement Screen windows,
+    preserving detached mode and checking for Screen 4.1 or newer.
+  - Align scheduling to the local week and allow expressions in skip/delay.
+  - Parse Screen/Python command strings with ``shlex.split()`` and respect
+    iteration limits before waiting for another event.
+- **v0.0.34**
+  - Add Bash steps, skip/delay scheduling and ``unique`` Screen session checks.
+  - Derive default socket names from configuration paths and preserve
+    ``LD_LIBRARY_PATH`` by default when launching through Screen.
+- **v0.0.33**
+  - Add optional ``LD_LIBRARY_PATH`` forwarding to Screen sessions.
+- **v0.0.11**
+  - Add ``max_times`` to limit scheduled iterations and introduce cron tests.
+- **v0.0.2**
+  - Introduce periodic Python scripts from YAML configuration, optional Screen
+    sessions, quick start, subprocess timeouts and configuration reloads.
+"""
+
 import os
 import time
 import sys
@@ -12,6 +62,8 @@ import tempfile
 from . import coretools
 from . import pip
 import hashlib
+import math
+import traceback
 
 _screenrcfile = """
   hardstatus string 'cron server. ctrl-A ctrl-D to detach, ctrl-C to kill  %{= Kd} %{= Kd}%-w%{= Kr}[%{= KW}%n %t%{= Kr}]%{= Kd}%+w %-= %{KG} %H%{KW}|%{KY}%101`%{KW}|%D %M %d %Y%{= Kc} %C%A%{-}'
@@ -29,14 +81,13 @@ def _screen_version(screen_cmd):
 
 def _time_to_next_event(period: int):
     now_full=time.time()
-    # see https://stackoverflow.com/questions/6677332/using-f-with-strftime-in-python-to-get-microseconds
-    mlsec = int(repr(now_full).split('.')[1][:3])*0.001
+    fraction = now_full - math.floor(now_full)
     now=time.localtime(now_full)
     seconds=now.tm_wday*24*3600+now.tm_hour*3600 + now.tm_min*60 + now.tm_sec
     seconds_=seconds
     seconds = seconds%period
     # also returns predicted time for next event
-    return period-seconds-mlsec,seconds_+period-seconds
+    return period-seconds-fraction,seconds_+period-seconds
 
 def _now():
     return '{}'.format(datetime.datetime.now()) + ":"
@@ -65,88 +116,114 @@ def _read_config(cron_file: str):
             config=yaml.load(rc,Loader=yaml.BaseLoader)
     else:
         config=coretools.config()
-    if "cron" in config:
-        if isinstance(config["cron"],dict):
-            return config["cron"]
-        else:
-            return {"steps":config["cron"]}
-    else:
-        return None
+    if not isinstance(config, dict) or "cron" not in config:
+        raise ValueError("configuration must contain a cron section")
+    section = config["cron"]
+    if isinstance(section, list):
+        return {"steps": section}
+    if not isinstance(section, dict):
+        raise ValueError("cron must be a mapping or a list of steps")
+    return section
 
-def _find_period(cron_file: str,period):
-    # period is the argument passed
-    if period is None:
-        # if nothing is passed, we try to read it from config file
-        config=_read_config(cron_file)
-        if "period" in config:
-            return int(config["period"])
-        else:
-            # or set it to a default (once per hour)
-            return 3600
+
+def _positive_integer(value, name):
+    if isinstance(value, bool) or not isinstance(value, (str, int)):
+        raise ValueError(name + " must be a positive integer")
+    try:
+        result = int(value)
+    except ValueError as exc:
+        raise ValueError(name + " must be a positive integer") from exc
+    if result <= 0:
+        raise ValueError(name + " must be a positive integer")
+    return result
+
+
+def _load_config(cron_file, period):
+    config = dict(_read_config(cron_file))
+    if not isinstance(config.get("steps"), list):
+        raise ValueError("cron.steps must be a list")
+    config["period"] = _positive_integer(
+        config.get("period", 3600) if period is None else period, "period")
+    return config
+
+
+def _reload_config(cron_file, period, previous=None):
+    try:
+        return _load_config(cron_file, period)
+    except Exception as exc:
+        source = cron_file or str(coretools.config_path())
+        action = ("keeping the last valid configuration" if previous is not None
+                  else "cannot start without a valid configuration")
+        print(_now(), "ERROR reading cron configuration {!r}: {}: {}; {}".format(
+            source, type(exc).__name__, exc, action), flush=True)
+        if previous is None:
+            raise
+        return previous
+
+
+def _find_period(cron_file: str, period):
+    return _load_config(cron_file, period)["period"]
+
+
+def _run_step(step, period, event, counter, index):
+    if isinstance(step, str):
+        c = {"type": "python", "script": step}
+    elif isinstance(step, dict):
+        c = dict(step)
+        c.setdefault("type", "python")
     else:
-        return period
+        raise ValueError("step must be a script string or a mapping")
+
+    if "delay" in c and "skip" not in c:
+        raise ValueError("delay can only be used with skip")
+    if "skip" in c:
+        # Preserve arithmetic expressions supported by existing cron files.
+        skip = eval(c["skip"])
+        delay = eval(c["delay"]) if "delay" in c else 0
+        if (event // period) % skip != delay % skip:
+            return None
+
+    kind = c["type"]
+    if kind == "python":
+        args = [sys.executable, "-c"]
+    elif kind == "bash":
+        args = ["bash", "--noprofile", "--norc", "-c"]
+    elif kind in ("selfupdate", "reboot"):
+        if kind == "selfupdate":
+            timeout = _time_to_next_event(period)[0] / 2
+            pip.upgrade_self(timeout=timeout)
+        return _reboot(iterations=counter, skip_steps=index+1, event=event)
+    else:
+        raise ValueError("Unknown type " + str(kind))
+
+    args.append(c["script"])
+    timeout = _time_to_next_event(period)[0] / 2
+    print(_now(), "step {} with timeout {:.3f}".format(index, timeout), flush=True)
+    # Keep inherited output and existing Screen/detached-job behavior.
+    subprocess.run(args, timeout=timeout, check=True)
+    return None
+
 
 def _run(cron_file: str,
          period: int,
          event: int,
          counter: int,
-         skip_steps: int = 0):
-    try:
-        print(_now(),"Running now (event={})".format(event))
-        config=_read_config(cron_file)
-        if config:
-            steps=config["steps"]
-            for i in range(skip_steps,len(steps)):
-               if isinstance(steps[i],str):
-                   steps[i]={
-                       "type": "python",
-                       "script": steps[i]
-                   }
-               c=steps[i]
-               if not "type" in c:
-                   c["type"]="python"
-
-               if "delay" in c and not "skip" in c:
-                   raise RuntimeError("delay can only be used with skip")
-
-               if "skip" in c:
-                   skip = eval(c["skip"])
-                   if "delay" in c:
-                       delay=eval(c["delay"])
-                   else:
-                       delay=0
-                   if (event//period)%skip != delay%skip:
-                       continue
-
-               if c["type"] == "python":
-                   args = [sys.executable, "-c"]
-               elif c["type"] == "bash":
-                   args = ["bash", "--noprofile", "--norc", "-c"]
-               elif c["type"] == "selfupdate":
-                   timeout=_time_to_next_event(period)[0]/2
-                   pip.upgrade_self(timeout=timeout)
-                   r = _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
-                   if isinstance(r,_reboot_now):
-                     return r
-                   else:
-                     continue
-               elif c["type"] == "reboot":
-                   r = _reboot(iterations=counter,skip_steps=i+1,event=event) # +1 is to skip current step
-                   if isinstance(r,_reboot_now):
-                     return r
-                   else:
-                     continue
-               else:
-                   raise RuntimeError("Unknown type " + steps[i]["type"])
-
-               args.append(steps[i]["script"])
-               timeout=_time_to_next_event(period)[0]/2
-               print(_now(),"step " + str(i) +" with timeout " + "{:.3f}".format(timeout))
-               subprocess.run(args, timeout=timeout)
-    except Exception as e:
-        print(e)
-        print()
-        print(_now(),"Wait for the next scheduled event")
+         skip_steps: int = 0,
+         *, config=None):
+    print(_now(), "Running now (event={})".format(event), flush=True)
+    if config is None:
+        config = _reload_config(cron_file, period)
+    for index in range(skip_steps, len(config["steps"])):
+        try:
+            result = _run_step(config["steps"][index], period, event, counter, index)
+            if isinstance(result, _reboot_now):
+                return result
+        except Exception as exc:
+            print(_now(), "ERROR event={} step={}: {}: {}; continuing to next step".format(
+                event, index, type(exc).__name__, exc), flush=True)
+            traceback.print_exc(file=sys.stdout)
+            sys.stdout.flush()
+    return None
 
 class _reboot_now():
     pass
@@ -223,12 +300,14 @@ def cron(*,
         print(_now(),"start")
         if max_times is not None:
             print(_now(),"remaining iterations:",max_times)
+        config = _reload_config(cron_file, period)
         counter=0
         if quick_start:
             print(_now(),"quick starting")
             if quick_start_skip_steps>0:
               print(_now(),"skipping",quick_start_skip_steps,"steps")
-            r=_run(cron_file,_find_period(cron_file,period),quick_start_event,counter,quick_start_skip_steps)
+            r=_run(cron_file,config["period"],quick_start_event,counter,
+                   quick_start_skip_steps,config=config)
             if isinstance(r,_reboot_now):
                 print("exit now")
                 return
@@ -241,10 +320,16 @@ def cron(*,
             if max_times is not None:
                 if counter >= max_times:
                     return
-            s=_time_to_next_event(_find_period(cron_file,period))
+            scheduled_period = config["period"]
+            s=_time_to_next_event(scheduled_period)
             print(_now(),"Waiting " +"{:.3f}".format(s[0])+ " seconds for next scheduled event")
             time.sleep(s[0])
-            r=_run(cron_file,_find_period(cron_file,period),s[1],counter)
+            config = _reload_config(cron_file, period, config)
+            if config["period"] != scheduled_period:
+                print(_now(), "period changed; rescheduling with period", config["period"],
+                      flush=True)
+                continue
+            r=_run(cron_file,config["period"],s[1],counter,config=config)
             if isinstance(r,_reboot_now):
                 return
             counter += 1
