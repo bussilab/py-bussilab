@@ -114,16 +114,31 @@ class TestNotifyUnit(unittest.TestCase):
         }
         client.auth_test.return_value = {"url": "https://acme.slack.com/"}
         markdown = "# Report\n\n| Result | Value |\n| --- | --- |\n| A | 1 |"
+        fixed_datetime = Mock()
+        fixed_datetime.now.return_value.isoformat.return_value = (
+            "2026-09-16 12:34:56.789"
+        )
 
         with patch("builtins.open", mock_open(read_data=markdown)) as opened, \
-             patch("bussilab.notify.WebClient", return_value=client):
+             patch("bussilab.notify.WebClient", return_value=client), \
+             patch("bussilab.notify.datetime.datetime", fixed_datetime), \
+             patch("bussilab.notify.socket.gethostname", return_value="host"), \
+             patch("bussilab.notify.os.getcwd", return_value="/work"), \
+             patch.dict("bussilab.notify.os.environ", {"USER": "alice"}):
             notify(markdown_file="report.md", channel="C123", token="token")
 
         opened.assert_called_once_with("report.md", encoding="utf-8")
+        footer = "Sent by alice at host\npwd: /work\n2026-09-16 12:34:56.789"
         client.chat_postMessage.assert_called_once_with(
             channel="C123",
-            text=markdown + "\n",
-            blocks=[{"type": "markdown", "text": markdown}]
+            text=markdown + "\n" + footer + "\n",
+            blocks=[
+                {"type": "markdown", "text": markdown},
+                {"type": "context", "elements": [{
+                    "type": "mrkdwn",
+                    "text": footer
+                }]}
+            ]
         )
 
     def test_markdown_rejects_automatic_formatting_and_file_uploads(self):
@@ -148,7 +163,7 @@ class TestNotifyUnit(unittest.TestCase):
 
         with patch("bussilab.notify.WebClient", return_value=client):
             notify("x" * 12001, type="markdown", channel="C123",
-                   token="token")
+                   token="token", footer=False)
 
         arguments = client.chat_postMessage.call_args.kwargs
         markdown = arguments["blocks"][0]["text"]

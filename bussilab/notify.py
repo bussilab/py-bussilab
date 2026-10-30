@@ -5,6 +5,8 @@ This module sends notifications through an App installed in the Slack workspace.
 
 ## Changelog
 
+- **v0.0.53**
+  - Restored the default footer for standard Markdown notifications.
 - **v0.0.52**
   - Added standard Markdown messages from files and options to disable link
     and media previews.
@@ -77,7 +79,7 @@ notify("https://example.com", unfurl=False)
 ```
 
 A file written in standard Markdown can be sent without adding a title or
-footer:
+screen log:
 ```bash
 bussilab notify --markdown-file report.md
 ```
@@ -422,7 +424,8 @@ def notify(message: str = "",
 
            The type of message. Can be "mrkdwn", "plain_text", or
            "markdown". Standard Markdown uses a native Markdown block;
-           `title`, `screenlog`, file uploads, and footers are not supported.
+           `title`, `screenlog`, and file uploads are not supported. The
+           footer is still included unless disabled with `footer=False`.
 
        token: None or str
 
@@ -471,7 +474,6 @@ def notify(message: str = "",
             raise TypeError("screenlog is not supported with standard Markdown")
         if files:
             raise TypeError("file uploads are not supported with standard Markdown")
-        footer=False
 
     if [bool(channel),
         bool(update),
