@@ -133,6 +133,11 @@ jobs:
 
   conda:
 
+    defaults:
+      run:
+        shell: bash -el {0}
+    env:
+      CONDA_BLD_PATH: ${{ runner.temp }}/conda-bld
     strategy:
       fail-fast: false
       matrix:
@@ -142,91 +147,99 @@ jobs:
 
     steps:
     - uses: actions/checkout@v7
-    - name: Install conda
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v4
+      with:
+        miniforge-version: latest
+        activate-environment: build
+        python-version: "3.14"
+        channels: conda-forge
+        channel-priority: strict
+        conda-remove-defaults: true
+    - name: Install conda-build
       run: |
-        curl -LO https://raw.githubusercontent.com/GiovanniBussi/conda-ci/master/conda-ci
-        source ./conda-ci install
-        source ./conda-ci install-conda-build
+        conda install --yes conda-build
     - name: Build
       run: |
-        source activate base
         python make_conda_recipe.py
         export CPU_COUNT=2
-        conda-build -c conda-forge conda
+        conda build --no-anaconda-upload --package-format 2 -c conda-forge conda
         rm -fr bussilab # make sure this is not imported by mistake in tests
-        conda install -c conda-forge tree
-        tree $CONDA_PREFIX/conda-bld/ # check installed files
+        ls -lh "$CONDA_BLD_PATH"/noarch/py-bussilab*.conda
     - name: Test 3.8
       run: |
-        source activate base
-        conda create -n py38 -c conda-forge -c local python=3.8 py-bussilab pytest
-        source activate py38
+        conda create --yes -n py38 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.8 py-bussilab pytest
+        conda activate py38
         pytest -v
     - name: Test 3.9
       run: |
-        source activate base
-        conda create -n py39 -c conda-forge -c local python=3.9 py-bussilab pytest
-        source activate py39
+        conda create --yes -n py39 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.9 py-bussilab pytest
+        conda activate py39
         pytest -v
     - name: Test 3.10
       run: |
-        source activate base
-        conda create -n py310 -c conda-forge -c local python=3.10 py-bussilab pytest
-        source activate py310
+        conda create --yes -n py310 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.10 py-bussilab pytest
+        conda activate py310
         pytest -v
     - name: Test 3.11
       run: |
-        source activate base
-        conda create -n py311 -c conda-forge -c local python=3.11 py-bussilab pytest
-        source activate py311
+        conda create --yes -n py311 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.11 py-bussilab pytest
+        conda activate py311
         pytest -v
     - name: Test 3.12
       run: |
-        source activate base
-        conda create -n py312 -c conda-forge -c local python=3.12 py-bussilab pytest
-        source activate py312
+        conda create --yes -n py312 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.12 py-bussilab pytest
+        conda activate py312
         pytest -v
     - name: Test 3.13
       run: |
-        source activate base
-        conda create -n py313 -c conda-forge -c local python=3.13 py-bussilab pytest
-        source activate py313
+        conda create --yes -n py313 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.13 py-bussilab pytest
+        conda activate py313
         pytest -v
     - name: Test 3.14
       run: |
-        source activate base
-        conda create -n py314 -c conda-forge -c local python=3.14 py-bussilab pytest
-        source activate py314
+        conda create --yes -n py314 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.14 py-bussilab pytest
+        conda activate py314
         pytest -v
     - name: Test 3.15
       run: |
-        source activate base
-        conda create -n py315 -c conda-forge -c local python=3.15 py-bussilab pytest
-        source activate py315
+        conda create --yes -n py315 --override-channels -c "$CONDA_BLD_PATH" -c conda-forge python=3.15 py-bussilab pytest
+        conda activate py315
         pytest -v
-    - name: Check anaconda and conda artifact
+    - name: Save conda package
       if: ${{ matrix.os == 'ubuntu-latest' }}
-      run: |
-        source activate base
-    
-        which anaconda
-    
-        CONDA_BASE="$(conda info --base)"
-        echo "Conda base: $CONDA_BASE"
-        echo "CONDA_PREFIX: ${CONDA_PREFIX:-<unset>}"
-    
-        find "$CONDA_BASE/conda-bld" -name "py-bussilab*.conda" -print
-        ls -lh "$CONDA_BASE"/conda-bld/noarch/py-bussilab*.conda
-    - name: Deploy conda
-      if: ${{ matrix.os == 'ubuntu-latest' && startsWith(github.ref, 'refs/tags/') }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: conda-package
+        path: ${{ env.CONDA_BLD_PATH }}/noarch/py-bussilab*.conda
+        if-no-files-found: error
+
+  publish-conda:
+    needs: conda
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - name: Download tested conda package
+      uses: actions/download-artifact@v8
+      with:
+        name: conda-package
+        path: conda-package
+    - name: Check publication inputs
       env:
         CONDA_UPLOAD_TOKEN: ${{ secrets.CONDA_UPLOAD_TOKEN }}
       run: |
-        source activate base
-        CONDA_BASE="$(conda info --base)"
-    
-        anaconda -t "$CONDA_UPLOAD_TOKEN" upload \
-          -u bussilab \
-          -l main \
-          "$CONDA_BASE"/conda-bld/noarch/py-bussilab*.conda \
-          --force
+        if [ -z "$CONDA_UPLOAD_TOKEN" ]; then
+          echo "::error::CONDA_UPLOAD_TOKEN is required for release publication."
+          exit 1
+        fi
+        ls -lh conda-package/py-bussilab*.conda
+    - name: Deploy conda
+      uses: anaconda/actions/upload-package@v0.3.1
+      with:
+        token: ${{ secrets.CONDA_UPLOAD_TOKEN }}
+        channel: bussilab
+        labels: main
+        packages: conda-package/py-bussilab*.conda
+        force: true
