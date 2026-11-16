@@ -21,6 +21,13 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
         os: [ubuntu-latest, macos-latest]
+        # Ubuntu 26.04 has no setup-python builds for these EOL versions.
+        exclude:
+          - {os: ubuntu-latest, python-version: "3.8"}
+          - {os: ubuntu-latest, python-version: "3.9"}
+        include:
+          - {os: ubuntu-24.04, python-version: "3.8"}
+          - {os: ubuntu-24.04, python-version: "3.9"}
 
     steps:
     - uses: actions/checkout@v7
@@ -49,7 +56,7 @@ jobs:
     - name: Test with pytest
       run: |
         bussilab check --import
-        pip install pytest pytest-cov
+        pip install pytest pytest-cov matplotlib
         pytest -v
         NUMBA_DISABLE_JIT=1 PYTHONPATH=$PWD pytest -v --cov=bussilab --cov-report=term --cov-report=xml:coverage.xml
     - name: Test live Slack integration
@@ -158,7 +165,9 @@ jobs:
         conda-remove-defaults: true
     - name: Install conda-build
       run: |
-        conda install --yes conda-build
+        # conda loads build commands from its base environment.
+        conda install --yes --name base conda-build
+        conda build --version
     - name: Build
       run: |
         python make_conda_recipe.py
