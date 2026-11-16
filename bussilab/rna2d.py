@@ -21,13 +21,19 @@ The :func:`sample_to_numpy` and :func:`suboptimal_to_numpy` helpers convert
 structure collections to NumPy pair tables and normalized log weights.
 
 ViennaRNA's Python package is an optional dependency of ``bussilab`` but is
-required when constructing a :class:`Molecule`.
+required when constructing a :class:`Molecule`. ViennaRNA 2.8.0 supports
+fractional soft constraints and soft-constrained suboptimal enumeration without
+external patches. Capability checks retain the compatibility paths for
+ViennaRNA 2.7.x.
 
 ## Changelog
 
 - **v0.0.53**
+  - Clarified that unpatched ViennaRNA 2.8.0 supports continuous soft
+    constraints and soft-constrained suboptimal enumeration; the compatibility
+    paths remain available for ViennaRNA 2.7.x.
   - Fixed suboptimal enumeration and coverage with soft constraints on
-    unpatched ViennaRNA by using base-pair constraints in the fallback.
+    unpatched ViennaRNA 2.7.x by using base-pair constraints in the fallback.
   - Added optional Matplotlib arc plots for structures, base-pair probabilities,
     per-nucleotide pairing probabilities, and positional entropy, including
     selected suboptimal or sampled ensembles and comparisons with the
@@ -913,6 +919,7 @@ def _test_native_continuous_support():
     return F1-F0>1e-3 and F2-F1>1e-3
 
 def _test_viennarna_sc_add_up_subopt_is_patched():
+    """Probe suboptimal soft-constraint support, native in ViennaRNA 2.8.0."""
     seq = "CGACGUACCGUUUUGCAAAGGCGUGGCGGCCCCCAUGAACAUUGACCGUCACUGUUUCCACGUAUGUUCU"
     baseline = RNA.fold_compound(seq).subopt(130)
     fc = RNA.fold_compound(seq)
@@ -954,8 +961,9 @@ if RNA is not None:
             "ViennaRNA does not support continuous soft constraints; "
             "using Python callback. "
             "Performance with soft constraints that are not multiple of "
-            "0.01 kcal/mol can be significanly improved using a ViennaRNA "
-            "patch available at https://github.com/bussilab/ViennaRNA-patches.",
+            "0.01 kcal/mol can be significantly improved by upgrading to "
+            "ViennaRNA 2.8.0 or later, or by patching ViennaRNA 2.7.x "
+            "(https://github.com/bussilab/ViennaRNA-patches).",
             RuntimeWarning,
     )
 else:
@@ -1048,9 +1056,10 @@ def _apply_constraint(fc, sequence, lambdas, kT):
     # Stay well below the largest representable double.
     budget = _PARTITION_OVERFLOW_SAFETY_FRACTION * kT * math.log(sys.float_info.max)
 
-    # Vanilla ViennaRNA has a bug in subopt backtracking with unpaired soft
-    # constraints, regardless of their sign. Represent every nonzero pairing
-    # penalty as a base-pair constraint when that bug is present.
+    # Some older unpatched ViennaRNA builds (including 2.7.x) have a bug in
+    # subopt backtracking with unpaired soft constraints, regardless of sign.
+    # Represent every nonzero pairing penalty as a base-pair constraint only
+    # when the runtime capability check detects that bug.
 
     if not _SUPPORTS_SUBOPT_SOFT_CONSTRAINTS:
         budget = 0.0
@@ -1405,9 +1414,8 @@ class _DPMolecule:
             if _SUPPORTS_NATIVE_CONTINUOUS:
                 use_lambdas = self._lambdas1d
             else:
-                # when using standard vienna builds without support for continuous lambdas
-                # this fold compound is constructed using rounded lambdas
-                # and residuals are added with a (slow) callback function
+                # Older builds without native continuous support need rounded
+                # constraints plus a residual callback.
                 use_lambdas = self._lambdas1d_rounded
 
             (self._fc_shift,
@@ -2017,12 +2025,14 @@ class Molecule:
     non-empty state sets. Consequently, large numbers of state positions can
     still be expensive even with ``reduce_state_space=True``.
 
-    Standard ViennaRNA builds round soft-constraint energies to the nearest
-    0.01 kcal/mol. This class corrects that rounding: partition functions use a
-    residual callback, sampling uses rejection or importance reweighting, and
-    MFE and suboptimal candidates are widened and rescored. Therefore the
-    requested continuous one-body and exact-base-pair penalties are retained
-    even without a patched ViennaRNA build that supports them natively.
+    ViennaRNA 2.8.0 preserves fractional soft constraints in partition-function
+    calculations and handles soft-constrained suboptimal enumeration without
+    an external patch. This class detects those capabilities at import and uses
+    them when present. In older unpatched releases such as 2.7.x, it retains
+    the residual partition-function callback and the suboptimal-enumeration
+    fallback. MFE and sampling still use rounded candidate energies, with
+    rescoring or reweighting to preserve the requested continuous one-body and
+    exact-base-pair penalties.
 
     For comparing the partition function with a Boltzmann sum of evaluated
     structures, set both ``no_lonely_pair=False`` and ``pf_smooth=False``
