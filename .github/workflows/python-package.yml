@@ -136,8 +136,6 @@ jobs:
     defaults:
       run:
         shell: bash -el {0}
-    env:
-      CONDA_BLD_PATH: ${{ runner.temp }}/conda-bld
     strategy:
       fail-fast: false
       matrix:
@@ -147,6 +145,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v7
+    - name: Set conda build directory
+      run: echo "CONDA_BLD_PATH=$RUNNER_TEMP/conda-bld" >> "$GITHUB_ENV"
     - name: Set up conda
       uses: conda-incubator/setup-miniconda@v4
       with:
